@@ -1,0 +1,20 @@
+[gd_scene format=3 uid="uid://capn403bidskx"]
+
+[ext_resource type="Texture2D" uid="uid://dmpdi1up5l0xq" path="res://Planets/terra_planet.png" id="1_rjrc8"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_rjrc8"]
+radius = 101.17806
+
+[node name="PlanetBase" type="Node2D" unique_id=1970643073]
+
+[node name="PlanetSprite" type="Sprite2D" parent="." unique_id=388647068]
+texture = ExtResource("1_rjrc8")
+
+[node name="PlanetNameLabel" type="Label" parent="." unique_id=1682966049]
+offset_right = 40.0
+offset_bottom = 23.0
+
+[node name="ClickArea" type="Area2D" parent="." unique_id=1319867084]
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="ClickArea" unique_id=37227144]
+shape = SubResource("CircleShape2D_rjrc8")

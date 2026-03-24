@@ -1,0 +1,14 @@
+[gd_scene format=3 uid="uid://giuvbptmldjs"]
+
+[ext_resource type="Texture2D" uid="uid://d0urmllhu0psk" path="res://star.png" id="1_q8pje"]
+
+[node name="StarNode" type="Button" unique_id=1533541352]
+offset_right = 8.0
+offset_bottom = 8.0
+theme_override_font_sizes/font_size = 10
+text = "Star"
+flat = true
+
+[node name="Sprite2D" type="Sprite2D" parent="." unique_id=902024403]
+scale = Vector2(0.002, 0.002)
+texture = ExtResource("1_q8pje")

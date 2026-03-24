@@ -1,0 +1,104 @@
+[gd_scene format=3 uid="uid://dd2mpvnbwpra5"]
+
+[ext_resource type="Script" uid="uid://0t084sfj14bk" path="res://FleetSelection.cs" id="1_6xdos"]
+[ext_resource type="AudioStream" uid="uid://d3ahvamffnu1r" path="res://Ships/Stellar_Cartography.mp3" id="2_le7cs"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_6xdos"]
+bg_color = Color(0, 0, 0, 1)
+border_width_left = 25
+border_width_top = 25
+border_width_right = 25
+border_width_bottom = 25
+border_color = Color(0.91663986, 0.91663986, 0.9166397, 1)
+border_blend = true
+corner_radius_top_left = 100
+corner_radius_top_right = 100
+corner_radius_bottom_right = 100
+corner_radius_bottom_left = 100
+shadow_color = Color(0.86898494, 0.8689849, 0.8689849, 0.6)
+
+[node name="FleetSelection" type="Control" unique_id=1773240441]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_6xdos")
+
+[node name="HBoxContainer" type="HBoxContainer" parent="." unique_id=1416480171]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="LeftPanel" type="PanelContainer" parent="HBoxContainer" unique_id=1837301626]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_styles/panel = SubResource("StyleBoxFlat_6xdos")
+
+[node name="VBoxContainer" type="VBoxContainer" parent="HBoxContainer/LeftPanel" unique_id=1628939627]
+layout_mode = 2
+
+[node name="BackButton" type="Button" parent="HBoxContainer/LeftPanel/VBoxContainer" unique_id=1547795667]
+layout_mode = 2
+size_flags_horizontal = 8
+text = "X"
+
+[node name="PlanetInfoLabel" type="Label" parent="HBoxContainer/LeftPanel/VBoxContainer" unique_id=1399842729]
+layout_mode = 2
+size_flags_horizontal = 4
+
+[node name="PlanetPreview" type="TextureRect" parent="HBoxContainer/LeftPanel/VBoxContainer" unique_id=1512654451]
+custom_minimum_size = Vector2(256, 256)
+layout_mode = 2
+stretch_mode = 5
+
+[node name="ShipDescriptionPreview" type="TextureRect" parent="HBoxContainer/LeftPanel/VBoxContainer" unique_id=1481105888]
+custom_minimum_size = Vector2(500, 500)
+layout_mode = 2
+expand_mode = 1
+stretch_mode = 5
+
+[node name="RightPanel" type="PanelContainer" parent="HBoxContainer" unique_id=1441395119]
+custom_minimum_size = Vector2(450, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_styles/panel = SubResource("StyleBoxFlat_6xdos")
+
+[node name="StyleSelection" type="VBoxContainer" parent="HBoxContainer/RightPanel" unique_id=547630608]
+layout_mode = 2
+
+[node name="LoneWolfButton" type="Button" parent="HBoxContainer/RightPanel/StyleSelection" unique_id=1898734998]
+layout_mode = 2
+text = "Lone Wolf (1 flagship)"
+
+[node name="VanguardButton" type="Button" parent="HBoxContainer/RightPanel/StyleSelection" unique_id=1691672093]
+layout_mode = 2
+text = "Vanguard (Exactly 3 Ships)"
+
+[node name="BudgetButton" type="Button" parent="HBoxContainer/RightPanel/StyleSelection" unique_id=1138898608]
+layout_mode = 2
+text = "Fleet Budget (Variable: 1 to 5 ships)"
+
+[node name="FleetBuilder" type="VBoxContainer" parent="HBoxContainer/RightPanel" unique_id=1374347631]
+visible = false
+layout_mode = 2
+size_flags_horizontal = 4
+
+[node name="SlotContainer" type="HBoxContainer" parent="HBoxContainer/RightPanel/FleetBuilder" unique_id=659430910]
+layout_mode = 2
+
+[node name="ScrollContainer" type="ScrollContainer" parent="HBoxContainer/RightPanel/FleetBuilder" unique_id=1993730750]
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="AvailableShipList" type="VBoxContainer" parent="HBoxContainer/RightPanel/FleetBuilder/ScrollContainer" unique_id=701827624]
+layout_mode = 2
+
+[node name="BackGroundMusic" type="AudioStreamPlayer" parent="." unique_id=835005266]
+stream = ExtResource("2_le7cs")
+autoplay = true

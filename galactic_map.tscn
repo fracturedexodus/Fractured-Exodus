@@ -1,0 +1,120 @@
+[gd_scene format=3 uid="uid://n82c07e5po4n"]
+
+[ext_resource type="Script" uid="uid://cvswq0fg77o43" path="res://GalacticMap.cs" id="1_e1oxo"]
+[ext_resource type="Texture2D" uid="uid://dbq6qkjwatdci" path="res://EidraluneMap_BG.png" id="2_0oxw2"]
+[ext_resource type="AudioStream" uid="uid://diharanfm23q3" path="res://Custodian_s_Legacy.mp3" id="3_tkp1o"]
+[ext_resource type="Script" uid="uid://b3cxpaw43vqb7" path="res://SystemWindow.cs" id="4_w7lh3"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_dxx2x"]
+bg_color = Color(0, 0, 0, 1)
+
+[node name="GalacticMap" type="Control" unique_id=1364732821]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_e1oxo")
+
+[node name="BackgroundArt" type="TextureRect" parent="." unique_id=1540625208]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 2.0
+offset_top = -11.0
+offset_right = 3.0
+offset_bottom = 11.0
+grow_horizontal = 2
+grow_vertical = 2
+texture = ExtResource("2_0oxw2")
+expand_mode = 1
+stretch_mode = 6
+
+[node name="MapMusic" type="AudioStreamPlayer" parent="." unique_id=1238771026]
+stream = ExtResource("3_tkp1o")
+autoplay = true
+
+[node name="MapControls" type="VBoxContainer" parent="." unique_id=1040973345]
+layout_mode = 1
+offset_right = 40.0
+offset_bottom = 40.0
+theme_override_constants/separation = 10
+
+[node name="RandomizeButton" type="Button" parent="MapControls" unique_id=297110428]
+layout_mode = 2
+theme_override_font_sizes/font_size = 34
+text = "Re-Scan Sector"
+
+[node name="MenuButton" type="Button" parent="MapControls" unique_id=944628211]
+layout_mode = 2
+theme_override_font_sizes/font_size = 34
+text = "Abort To Menu"
+
+[node name="SystemWindow" type="Panel" parent="." unique_id=391148612]
+visible = false
+z_index = 30
+z_as_relative = false
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -273.0
+offset_top = -243.0
+offset_right = 112.0
+offset_bottom = -63.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_dxx2x")
+script = ExtResource("4_w7lh3")
+
+[node name="SystemName" type="Label" parent="SystemWindow" unique_id=193152645]
+layout_mode = 0
+offset_left = 18.0
+offset_top = 37.0
+offset_right = 158.0
+offset_bottom = 73.0
+theme_override_font_sizes/font_size = 26
+text = "Star Name:"
+
+[node name="PlanetCount" type="Label" parent="SystemWindow" unique_id=1319286055]
+layout_mode = 0
+offset_left = 21.0
+offset_top = 74.0
+offset_right = 143.0
+offset_bottom = 110.0
+theme_override_font_sizes/font_size = 26
+text = "Planets: 0"
+
+[node name="CloseButton" type="Button" parent="SystemWindow" unique_id=1537854733]
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -32.0
+offset_bottom = 43.0
+grow_horizontal = 0
+text = "X"
+
+[node name="StartSystemButton" type="Button" parent="SystemWindow" unique_id=1882394719]
+layout_mode = 1
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -86.5
+offset_top = -45.0
+offset_right = 88.5
+offset_bottom = -14.0
+grow_horizontal = 2
+grow_vertical = 0
+theme_override_colors/font_outline_color = Color(0.7995101, 0.996756, 0.95277053, 1)
+text = "Enter Starting System"
+
+[connection signal="pressed" from="MapControls/RandomizeButton" to="." method="_on_randomize_button_pressed"]
+[connection signal="pressed" from="MapControls/MenuButton" to="." method="_on_menu_button_pressed"]
+[connection signal="pressed" from="SystemWindow/CloseButton" to="." method="_on_close_button_pressed"]

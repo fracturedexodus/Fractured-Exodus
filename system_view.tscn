@@ -1,0 +1,78 @@
+[gd_scene format=3 uid="uid://dab2ekh6mmdmb"]
+
+[ext_resource type="Script" uid="uid://1ivinqx7y0ky" path="res://SystemView.cs" id="1_aihgg"]
+[ext_resource type="Texture2D" uid="uid://c62s7c7jt40ky" path="res://YellowSUN.png" id="2_b7847"]
+[ext_resource type="AudioStream" uid="uid://bshhtl28bl4ys" path="res://Nebula_Bloom.mp3" id="3_ugi38"]
+
+[node name="SystemView" type="Node2D" unique_id=1165564058]
+script = ExtResource("1_aihgg")
+
+[node name="SystemNameLabel" type="CanvasLayer" parent="." unique_id=1679087783]
+
+[node name="PlanetContainer" type="Node2D" parent="." unique_id=1606883960]
+
+[node name="SunVisual" type="Sprite2D" parent="." unique_id=364862316]
+position = Vector2(368, 250)
+scale = Vector2(0.58047163, 0.6018736)
+texture = ExtResource("2_b7847")
+
+[node name="SunNameLabel" type="Label" parent="." unique_id=483499714]
+offset_left = 929.0
+offset_top = 414.0
+offset_right = 969.0
+offset_bottom = 437.0
+metadata/_edit_use_anchors_ = true
+
+[node name="BackgroundMusic" type="AudioStreamPlayer" parent="." unique_id=922676453]
+stream = ExtResource("3_ugi38")
+autoplay = true
+
+[node name="CloseButton" type="Button" parent="." unique_id=2046707992]
+offset_left = 1733.0
+offset_top = 40.0
+offset_right = 1853.0
+offset_bottom = 71.0
+text = "Return to Map"
+
+[node name="InfoPanel" type="Panel" parent="." unique_id=1219049990]
+visible = false
+offset_right = 360.0
+offset_bottom = 526.0
+
+[node name="VBoxContainer" type="VBoxContainer" parent="InfoPanel" unique_id=1367612595]
+layout_mode = 1
+offset_right = 351.0
+offset_bottom = 473.0
+
+[node name="ClosePanelButton" type="Button" parent="InfoPanel/VBoxContainer" unique_id=636066195]
+layout_mode = 2
+size_flags_horizontal = 8
+size_flags_vertical = 4
+text = "X"
+
+[node name="PlanetNameLabel" type="Label" parent="InfoPanel/VBoxContainer" unique_id=2147040558]
+layout_mode = 2
+
+[node name="PlanetTypeLabel" type="Label" parent="InfoPanel/VBoxContainer" unique_id=1364052169]
+layout_mode = 2
+
+[node name="PlanetPreview" type="TextureRect" parent="InfoPanel/VBoxContainer" unique_id=1637776946]
+custom_minimum_size = Vector2(200, 200)
+layout_mode = 2
+expand_mode = 2
+stretch_mode = 5
+
+[node name="PlanetHabitabilityLabel" type="Label" parent="InfoPanel/VBoxContainer" unique_id=1409949622]
+layout_mode = 2
+autowrap_mode = 3
+
+[node name="PlanetResourceLabel" type="Label" parent="InfoPanel/VBoxContainer" unique_id=1964029858]
+layout_mode = 2
+autowrap_mode = 3
+
+[node name="StartFleetButton" type="Button" parent="InfoPanel/VBoxContainer" unique_id=121607694]
+layout_mode = 2
+text = "Select as Starting Fleet Base"
+
+[connection signal="pressed" from="CloseButton" to="." method="_on_close_button_pressed"]
+[connection signal="pressed" from="InfoPanel/VBoxContainer/ClosePanelButton" to="." method="_on_close_info_pressed"]

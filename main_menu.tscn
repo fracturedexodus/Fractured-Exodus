@@ -1,0 +1,66 @@
+[gd_scene format=3 uid="uid://dcd2cs2auhkxv"]
+
+[ext_resource type="Script" uid="uid://cgj53k7qo8cp2" path="res://MainMenu.cs" id="1_ls7vo"]
+[ext_resource type="Texture2D" uid="uid://c48n60n5i4tjp" path="res://ShatteredExodus_BG.png" id="2_ywgdt"]
+[ext_resource type="AudioStream" uid="uid://crpqmwip0288j" path="res://Custodian_of_the_Shattered_Reach.mp3" id="3_gy31r"]
+[ext_resource type="FontFile" uid="uid://cuic2grb7lr6j" path="res://Orbitron-VariableFont_wght.ttf" id="4_dq1pj"]
+
+[node name="MainMenu" type="Control" unique_id=121732291]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_ls7vo")
+
+[node name="BackgroundArt" type="TextureRect" parent="." unique_id=375169221]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -33.0
+offset_top = -30.0
+offset_right = 48.0
+offset_bottom = 41.0
+grow_horizontal = 2
+grow_vertical = 2
+texture = ExtResource("2_ywgdt")
+expand_mode = 1
+stretch_mode = 6
+
+[node name="MenuMusic" type="AudioStreamPlayer" parent="." unique_id=269231217]
+stream = ExtResource("3_gy31r")
+autoplay = true
+
+[node name="MenuButtons" type="VBoxContainer" parent="." unique_id=1147559899]
+layout_mode = 0
+offset_left = 1445.0
+offset_top = 477.0
+offset_right = 1814.9296
+offset_bottom = 612.0
+
+[node name="LaunchFleet" type="Button" parent="MenuButtons" unique_id=2054043177]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("4_dq1pj")
+theme_override_font_sizes/font_size = 50
+text = "Launch Fleet"
+
+[node name="Abandon_Run" type="Button" parent="MenuButtons" unique_id=2051986787]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("4_dq1pj")
+theme_override_font_sizes/font_size = 50
+text = "Abandon Run"
+
+[node name="GameTitle" type="Label" parent="." unique_id=1814593781]
+layout_mode = 0
+offset_left = 31.0
+offset_top = 7.0
+offset_right = 1136.0
+offset_bottom = 127.0
+theme_override_fonts/font = ExtResource("4_dq1pj")
+theme_override_font_sizes/font_size = 141
+text = "FRACTURED EXODUS"
+
+[connection signal="pressed" from="MenuButtons/LaunchFleet" to="." method="_on_launch_fleet_pressed"]
+[connection signal="pressed" from="MenuButtons/Abandon_Run" to="." method="_on_abandon_run_pressed"]

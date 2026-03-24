@@ -1,0 +1,41 @@
+[gd_scene format=3 uid="uid://eoik5w2w78ud"]
+
+[ext_resource type="Script" uid="uid://5ydkfpv6o2ja" path="res://ShipSimDashboard.cs" id="1_e6hn5"]
+
+[node name="ShipSim_Dashboard" type="Control" unique_id=7401984]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_e6hn5")
+
+[node name="Background" type="ColorRect" parent="." unique_id=1358191179]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.24705882, 0.21568628, 0.21176471, 1)
+
+[node name="ReactorText" type="Label" parent="." unique_id=1261140907]
+layout_mode = 0
+offset_left = 13.0
+offset_top = 444.0
+offset_right = 432.0
+offset_bottom = 489.0
+theme_override_font_sizes/font_size = 32
+text = "Reactor Cores: 100% Stable"
+
+[node name="DrainPowerButton" type="Button" parent="." unique_id=128686203]
+layout_mode = 0
+offset_left = 122.0
+offset_top = 499.0
+offset_right = 282.0
+offset_bottom = 545.0
+text = "Drain Power"
+script = ExtResource("1_e6hn5")
+
+[connection signal="pressed" from="DrainPowerButton" to="." method="_on_drain_power_button_pressed"]
