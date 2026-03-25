@@ -6,34 +6,54 @@ public partial class SystemWindow : Control
 	// UI References
 	private Label _systemNameLabel;
 	private Label _planetCountLabel;
+	private Label _regionLabel; // --- NEW: Reference for the region text ---
 	private Button _startSystemButton;
 
 	// Data storage for the transition
 	private string _currentSystemName = "";
 	private int _currentPlanetCount = 0;
+	private string _currentRegion = ""; // --- NEW: Store the region ---
 
 	public override void _Ready()
 	{
 		_systemNameLabel = GetNode<Label>("SystemName");
 		_planetCountLabel = GetNode<Label>("PlanetCount");
 		_startSystemButton = GetNode<Button>("StartSystemButton");
+		
+		// Use GetNodeOrNull so the game doesn't crash if the node isn't in the editor yet
+		_regionLabel = GetNodeOrNull<Label>("RegionLabel"); 
 
-		_startSystemButton.Pressed += OnStartSystemButtonPressed;
+		if (_startSystemButton != null)
+		{
+			_startSystemButton.Pressed += OnStartSystemButtonPressed;
+		}
 	}
 
-	public void SetupWindow(string systemName, int planetCount)
+	// --- UPDATED: Now requires the 'region' string to be passed in ---
+	public void SetupWindow(string systemName, int planetCount, string region)
 	{
 		_currentSystemName = systemName;
 		_currentPlanetCount = planetCount;
+		_currentRegion = region;
 
 		_systemNameLabel.Text = $"System: {systemName}";
 		_planetCountLabel.Text = $"Planets: {planetCount}";
+
+		if (_regionLabel != null)
+		{
+			// If you created the node, use it!
+			_regionLabel.Text = $"Region: {region}";
+		}
+		else
+		{
+			// Fallback: If no RegionLabel exists yet, just stack it on the System Name!
+			_systemNameLabel.Text = $"System: {systemName}\nRegion: {region}";
+		}
 	}
 
-	// --- UPDATED: Added 'async' to allow for the fade timing ---
 	private async void OnStartSystemButtonPressed()
 	{
-		GD.Print($"Transitioning to: {_currentSystemName}");
+		GD.Print($"Transitioning to: {_currentSystemName} in the {_currentRegion}");
 
 		// 1. Access the Transitioner Autoload
 		var transitioner = GetNode<SceneTransition>("/root/SceneTransition");
@@ -50,7 +70,7 @@ public partial class SystemWindow : Control
 		if (systemViewScene == null)
 		{
 			GD.PrintErr("Error: Could not find system_view.tscn!");
-			animPlayer.PlayBackwards("fade"); // Fade back so the user isn't stuck in the dark
+			animPlayer.PlayBackwards("fade"); 
 			return;
 		}
 

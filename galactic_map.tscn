@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" uid="uid://cvswq0fg77o43" path="res://GalacticMap.cs" id="1_e1oxo"]
 [ext_resource type="Texture2D" uid="uid://dbq6qkjwatdci" path="res://EidraluneMap_BG.png" id="2_0oxw2"]
+[ext_resource type="Texture2D" uid="uid://bvewwcbbx0h2h" path="res://region_mask.png" id="2_pd335"]
 [ext_resource type="AudioStream" uid="uid://diharanfm23q3" path="res://Custodian_s_Legacy.mp3" id="3_tkp1o"]
 [ext_resource type="Script" uid="uid://b3cxpaw43vqb7" path="res://SystemWindow.cs" id="4_w7lh3"]
 
@@ -16,6 +17,7 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_e1oxo")
+RegionMaskTexture = ExtResource("2_pd335")
 
 [node name="BackgroundArt" type="TextureRect" parent="." unique_id=1540625208]
 layout_mode = 1
@@ -65,7 +67,7 @@ anchor_bottom = 0.5
 offset_left = -273.0
 offset_top = -243.0
 offset_right = 112.0
-offset_bottom = -63.0
+offset_bottom = -22.0
 grow_horizontal = 2
 grow_vertical = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_dxx2x")
@@ -88,6 +90,15 @@ offset_right = 143.0
 offset_bottom = 110.0
 theme_override_font_sizes/font_size = 26
 text = "Planets: 0"
+
+[node name="RegionLabel" type="Label" parent="SystemWindow" unique_id=729882851]
+layout_mode = 0
+offset_left = 23.0
+offset_top = 113.0
+offset_right = 116.0
+offset_bottom = 149.0
+theme_override_font_sizes/font_size = 26
+text = "Region:"
 
 [node name="CloseButton" type="Button" parent="SystemWindow" unique_id=1537854733]
 layout_mode = 1

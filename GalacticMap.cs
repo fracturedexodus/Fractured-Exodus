@@ -4,10 +4,14 @@ using System.Collections.Generic;
 
 public partial class GalacticMap : Control
 {
+	// --- NEW: THE REGION IMAGE MASK ---
+	[Export] public Texture2D RegionMaskTexture; 
+	private Image _regionImage;
+
 	// --- SCENE & UI REFERENCES ---
 	private PackedScene starScene = GD.Load<PackedScene>("res://star_node.tscn");
 	private SystemWindow _systemWindow;
-	private GlobalData _globalData; // Reference to our singleton
+	private GlobalData _globalData; 
 
 	// --- LORE DATA ---
 	private List<string> prefixes = new List<string> { 
@@ -19,29 +23,43 @@ public partial class GalacticMap : Control
 		"Shroud", "Wound", "Spiral", "Silence", "Verge", "Relic", "Vault" 
 	};
 
+	// --- COLOR DEFINITIONS FOR YOUR REGIONS ---
+	private Dictionary<string, Color> regionColors = new Dictionary<string, Color>()
+	{
+		{ "Far Silence", Color.FromHtml("#CF1278") },     // Pink
+		{ "Verdant Shroud", new Color(0f, 1f, 0f) },  // Green
+		{ "Core Spindle", new Color(1f, 1f, 1f) },    // White
+		{ "Luminous Verge", new Color(0.5f, 0f, 0.5f)},// Purple
+		{ "Ember Wastes", new Color(1f, 0f, 0f) },    // Red
+		{ "Shattered Reach", new Color(1f, 0.5f, 0f)},// Orange
+		{ "Obsidian Belt", new Color(1f, 1f, 0f) },   // Yellow
+		{ "Echo Spiral", new Color(0f, 0f, 1f) }      // Blue
+	};
+
 	public override void _Ready()
 	{
-		// Link our singletons and UI nodes
 		_globalData = GetNode<GlobalData>("/root/GlobalData");
 		_systemWindow = GetNode<SystemWindow>("SystemWindow");
-		
-		// Hide window initially
 		_systemWindow.Visible = false;
 
-		// --- THE DATA CHECK ---
-		// If we already have stars saved in memory, load them. Otherwise, generate.
-		if (_globalData.CurrentSectorStars != null && _globalData.CurrentSectorStars.Count > 0)
+		// Load the image data into memory so we can read its pixels
+		if (RegionMaskTexture != null)
 		{
-			LoadSectorFromMemory();
+			_regionImage = RegionMaskTexture.GetImage();
 		}
 		else
 		{
-			GenerateAndSaveSector(40);
+			GD.PrintErr("WARNING: No Region Mask Image assigned to GalacticMap!");
 		}
+
+		if (_globalData.CurrentSectorStars != null && _globalData.CurrentSectorStars.Count > 0)
+			LoadSectorFromMemory();
+		else
+			GenerateAndSaveSector(40);
 	}
 
 	// ==========================================
-	// DATA GENERATION & LOADING
+	// DATA GENERATION
 	// ==========================================
 
 	private void GenerateAndSaveSector(int amount)
@@ -52,7 +70,6 @@ public partial class GalacticMap : Control
 
 		for (int i = 0; i < amount; i++)
 		{
-			// 1. Create the Blueprint (Data)
 			StarMapData newStarData = new StarMapData();
 			
 			newStarData.SystemName = prefixes[rng.RandiRange(0, prefixes.Count - 1)] + "-" + 
@@ -65,56 +82,87 @@ public partial class GalacticMap : Control
 			int randomY = rng.RandiRange(150, (int)screenSize.Y - 150);
 			newStarData.MapPosition = new Vector2(randomX, randomY);
 
+			// --- NEW: Ask the Image what region this is! ---
+			newStarData.Region = DetermineRegionFromImage(newStarData.MapPosition, screenSize);
+
 			newStarData.StarScale = rng.RandfRange(0.003f, 0.006f);
 			newStarData.StarColor = new Color(
-				rng.RandfRange(0.7f, 1.0f), 
-				rng.RandfRange(0.7f, 1.0f), 
-				rng.RandfRange(0.7f, 1.0f)
+				rng.RandfRange(0.7f, 1.0f), rng.RandfRange(0.7f, 1.0f), rng.RandfRange(0.7f, 1.0f)
 			);
 
-			// 2. Save it to Global Memory
 			_globalData.CurrentSectorStars.Add(newStarData);
-
-			// 3. Draw it on screen
 			DrawStarNode(newStarData);
 		}
 	}
 
 	private void LoadSectorFromMemory()
 	{
-		// Loop through the saved data and draw each star exactly as it was
 		foreach (StarMapData savedStar in _globalData.CurrentSectorStars)
 		{
 			DrawStarNode(savedStar);
 		}
 	}
 
-	// ==========================================
-	// VISUAL RENDERING
-	// ==========================================
-
 	private void DrawStarNode(StarMapData data)
 	{
 		Button newStar = starScene.Instantiate<Button>();
 		AddChild(newStar); 
 
-		// Apply saved positioning and text
 		newStar.Position = data.MapPosition;
 		newStar.Text = data.SystemName;
-
-		// Button Settings
 		newStar.Alignment = HorizontalAlignment.Center;
 		newStar.CustomMinimumSize = new Vector2(1, 1);
 		newStar.ClipText = false;
 
-		// Apply saved visuals
 		Sprite2D starSprite = newStar.GetNode<Sprite2D>("Sprite2D");
 		starSprite.Scale = new Vector2(data.StarScale, data.StarScale);
 		starSprite.Modulate = data.StarColor;
 		starSprite.Position = new Vector2(newStar.Size.X / 2, 30);
 
-		// Connect the click event using the data blueprint
 		newStar.Pressed += () => _on_star_clicked(data, newStar);
+	}
+
+	// ==========================================
+	// THE IMAGE READING LOGIC
+	// ==========================================
+
+	private string DetermineRegionFromImage(Vector2 starPos, Vector2 screenSize)
+	{
+		if (_regionImage == null) return "Unknown Sector";
+
+		// Map the star's screen position to the image's pixel coordinates
+		float ratioX = starPos.X / screenSize.X;
+		float ratioY = starPos.Y / screenSize.Y;
+		
+		int pixelX = Mathf.FloorToInt(ratioX * _regionImage.GetWidth());
+		int pixelY = Mathf.FloorToInt(ratioY * _regionImage.GetHeight());
+
+		// Make sure we don't accidentally check outside the image bounds
+		pixelX = Mathf.Clamp(pixelX, 0, _regionImage.GetWidth() - 1);
+		pixelY = Mathf.Clamp(pixelY, 0, _regionImage.GetHeight() - 1);
+
+		// Get the color of the pixel at that exact spot
+		Color pixelColor = _regionImage.GetPixel(pixelX, pixelY);
+
+		// Find which of our defined region colors is the closest match
+		string closestRegion = "Unknown Sector";
+		float minDistance = float.MaxValue;
+
+		foreach (var kvp in regionColors)
+		{
+			// Calculate color distance (how close the image pixel is to our defined colors)
+			float dist = Mathf.Pow(pixelColor.R - kvp.Value.R, 2) + 
+						 Mathf.Pow(pixelColor.G - kvp.Value.G, 2) + 
+						 Mathf.Pow(pixelColor.B - kvp.Value.B, 2);
+
+			if (dist < minDistance)
+			{
+				minDistance = dist;
+				closestRegion = kvp.Key;
+			}
+		}
+
+		return closestRegion;
 	}
 
 	// ==========================================
@@ -125,19 +173,14 @@ public partial class GalacticMap : Control
 	{
 		if (!IsInstanceValid(_systemWindow)) return;
 
-		// Save the currently selected system name to global memory
 		_globalData.SavedSystem = data.SystemName; 
-
-		// Pass data to the SystemWindow
-		_systemWindow.SetupWindow(data.SystemName, data.PlanetCount);
+		_systemWindow.SetupWindow(data.SystemName, data.PlanetCount, data.Region);
 		
-		// Position the window
 		Vector2 starPos = clickedStar.Position;
 		Vector2 windowSize = _systemWindow.Size;
 		Vector2 screenSize = GetViewportRect().Size;
 
 		Vector2 targetPosition = new Vector2(starPos.X + 60, starPos.Y - (windowSize.Y / 2));
-
 		targetPosition.X = Mathf.Clamp(targetPosition.X, 0, screenSize.X - windowSize.X);
 		targetPosition.Y = Mathf.Clamp(targetPosition.Y, 0, screenSize.Y - windowSize.Y);
 
@@ -147,10 +190,8 @@ public partial class GalacticMap : Control
 
 	public void _on_randomize_button_pressed()
 	{
-		if (IsInstanceValid(_systemWindow))
-			_systemWindow.Visible = false;
+		if (IsInstanceValid(_systemWindow)) _systemWindow.Visible = false;
 
-		// Clear existing visual nodes
 		foreach (Node child in GetChildren())
 		{
 			if (child is Button && child.Name != "RandomizeButton" && child.Name != "MenuButton")
@@ -159,20 +200,17 @@ public partial class GalacticMap : Control
 			}
 		}
 
-		// Wipe the old sector data from memory and generate a fresh one
 		_globalData.CurrentSectorStars.Clear();
 		GenerateAndSaveSector(40);
 	}
 
 	public void _on_close_button_pressed()
 	{
-		if (IsInstanceValid(_systemWindow))
-			_systemWindow.Visible = false;
+		if (IsInstanceValid(_systemWindow)) _systemWindow.Visible = false;
 	}
 
 	public void _on_menu_button_pressed()
 	{
-		//GetTree().ChangeSceneToFile("res://main_menu.tscn");
 		var transitioner = GetNode<SceneTransition>("/root/SceneTransition");
 		transitioner.ChangeScene("res://main_menu.tscn");
 	}

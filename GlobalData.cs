@@ -35,6 +35,7 @@ public class StarMapData
 	public int PlanetCount { get; set; }
 	public float StarScale { get; set; }
 	public Color StarColor { get; set; }
+	public string Region { get; set; }
 }
 
 // ==========================================
