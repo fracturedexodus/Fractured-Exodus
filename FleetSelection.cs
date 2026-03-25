@@ -262,6 +262,8 @@ public partial class FleetSelection : Control
 
 	public void _on_back_button_pressed()
 	{
-		GetTree().ChangeSceneToFile("res://system_view.tscn");
+		//GetTree().ChangeSceneToFile("res://system_view.tscn");
+		var transitioner = GetNode<SceneTransition>("/root/SceneTransition");
+		transitioner.ChangeScene("res://system_view.tscn");
 	}
 }

@@ -172,6 +172,8 @@ public partial class GalacticMap : Control
 
 	public void _on_menu_button_pressed()
 	{
-		GetTree().ChangeSceneToFile("res://main_menu.tscn");
+		//GetTree().ChangeSceneToFile("res://main_menu.tscn");
+		var transitioner = GetNode<SceneTransition>("/root/SceneTransition");
+		transitioner.ChangeScene("res://main_menu.tscn");
 	}
 }

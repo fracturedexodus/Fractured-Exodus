@@ -14,16 +14,13 @@ public partial class SystemWindow : Control
 
 	public override void _Ready()
 	{
-		// Based on your scene tree: these are direct children of SystemWindow
 		_systemNameLabel = GetNode<Label>("SystemName");
 		_planetCountLabel = GetNode<Label>("PlanetCount");
 		_startSystemButton = GetNode<Button>("StartSystemButton");
 
-		// Wire up the button in code
 		_startSystemButton.Pressed += OnStartSystemButtonPressed;
 	}
 
-	// Called by GalacticMap.cs to pass star data into this window
 	public void SetupWindow(string systemName, int planetCount)
 	{
 		_currentSystemName = systemName;
@@ -33,34 +30,38 @@ public partial class SystemWindow : Control
 		_planetCountLabel.Text = $"Planets: {planetCount}";
 	}
 
-	private void OnStartSystemButtonPressed()
+	// --- UPDATED: Added 'async' to allow for the fade timing ---
+	private async void OnStartSystemButtonPressed()
 	{
 		GD.Print($"Transitioning to: {_currentSystemName}");
 
-		// 1. Load the new system view scene
-		// Make sure this file name matches exactly in your FileSystem (snake_case)
+		// 1. Access the Transitioner Autoload
+		var transitioner = GetNode<SceneTransition>("/root/SceneTransition");
+		var animPlayer = transitioner.GetNode<AnimationPlayer>("AnimationPlayer");
+
+		// 2. Start the Fade to Black
+		animPlayer.Play("fade");
+		await ToSignal(animPlayer, AnimationPlayer.SignalName.AnimationFinished);
+
+		// 3. --- EVERYTHING BELOW HAPPENS WHILE THE SCREEN IS BLACK ---
+
+		// Load and Instantiate the new scene
 		PackedScene systemViewScene = GD.Load<PackedScene>("res://system_view.tscn");
-		
 		if (systemViewScene == null)
 		{
-			GD.PrintErr("Error: Could not find system_view.tscn. Check your file path!");
+			GD.PrintErr("Error: Could not find system_view.tscn!");
+			animPlayer.PlayBackwards("fade"); // Fade back so the user isn't stuck in the dark
 			return;
 		}
 
 		Node newSystemScene = systemViewScene.Instantiate();
-
-		// 2. Add to root first so it can access the Viewport/Screen size
 		GetTree().Root.AddChild(newSystemScene);
-		
-		// 3. Set it as the current active scene
 		GetTree().CurrentScene = newSystemScene;
 
-		// 4. Initialize with our saved data
+		// Initialize with our saved data
 		newSystemScene.Call("InitializeSystem", _currentSystemName, _currentPlanetCount);
 
-		// 5. THE MAP REMOVER
-		// Since SystemWindow is usually a child of GalacticMap, 
-		// finding the Map and freeing it will clean up everything.
+		// Clean up the old map
 		Node galacticMap = GetTree().Root.GetNodeOrNull("GalacticMap");
 		if (galacticMap != null)
 		{
@@ -68,8 +69,10 @@ public partial class SystemWindow : Control
 		}
 		else
 		{
-			// Fallback: If the map isn't named "GalacticMap", just free the window
 			this.QueueFree();
 		}
+
+		// 4. Fade back in to reveal the new system!
+		animPlayer.PlayBackwards("fade");
 	}
 }

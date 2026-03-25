@@ -262,7 +262,9 @@ public partial class SystemView : Node2D
 		GD.Print("=============================\n");
 
 		// 3. Switch scenes
-		GetTree().ChangeSceneToFile("res://fleet_selection.tscn");
+		//GetTree().ChangeSceneToFile("res://fleet_selection.tscn");
+		var transitioner = GetNode<SceneTransition>("/root/SceneTransition");
+		transitioner.ChangeScene("res://fleet_selection.tscn");
 	}
 
 	// --- HELPER METHODS ---
@@ -333,6 +335,8 @@ public partial class SystemView : Node2D
 
 	public void _on_close_button_pressed()
 	{
-		GetTree().ChangeSceneToFile("res://galactic_map.tscn"); 
+		//GetTree().ChangeSceneToFile("res://galactic_map.tscn"); 
+		var transitioner = GetNode<SceneTransition>("/root/SceneTransition");
+		transitioner.ChangeScene("res://galactic_map.tscn");
 	}
 }
