@@ -6,7 +6,6 @@ public partial class BattleMap : Node2D
 {
 	// --- MAP SETTINGS ---
 	[Export] public float HexSize = 65f; 
-	// The grid radius is now massive to accommodate a huge solar system (35 rings out!)
 	private int _maxMapRadius = 35; 
 
 	private PackedScene _hexScene = GD.Load<PackedScene>("res://hex_tile.tscn");
@@ -20,9 +19,9 @@ public partial class BattleMap : Node2D
 	private float _maxZoom = 2.0f;
 
 	// --- RENDER LAYERS ---
-	// Background and UI are CanvasLayers so they stick to your screen while the camera moves!
 	private CanvasLayer _bgLayer = new CanvasLayer { Layer = -1 }; 
 	private Node2D _gridLayer = new Node2D();  
+	private Node2D _highlightLayer = new Node2D(); 
 	private Node2D _entityLayer = new Node2D(); 
 
 	private Dictionary<Vector2I, Node2D> _hexGrid = new Dictionary<Vector2I, Node2D>();
@@ -33,11 +32,18 @@ public partial class BattleMap : Node2D
 		public string Name;
 		public string Type;
 		public string Details;
+		public int MaxMovement;
+		public int CurrentMovement; 
+		public Sprite2D VisualSprite; 
+		public float BaseRotationOffset; 
 	}
 	private Dictionary<Vector2I, MapEntity> _hexContents = new Dictionary<Vector2I, MapEntity>();
 
+	// --- SELECTION STATE ---
+	private Vector2I? _selectedHex = null; 
+
 	// --- UI ELEMENTS ---
-	private Panel _infoPanel;
+	private PanelContainer _infoPanel; 
 	private Label _infoLabel;
 
 	private Vector2I[] _hexDirections = new Vector2I[] {
@@ -51,6 +57,7 @@ public partial class BattleMap : Node2D
 		
 		AddChild(_bgLayer);
 		AddChild(_gridLayer);
+		AddChild(_highlightLayer);
 		AddChild(_entityLayer);
 
 		SetupCamera();
@@ -72,9 +79,7 @@ public partial class BattleMap : Node2D
 
 	public override void _Process(double delta)
 	{
-		// WASD Panning Logic
 		Vector2 panDirection = Vector2.Zero;
-
 		if (Input.IsKeyPressed(Key.W)) panDirection.Y -= 1;
 		if (Input.IsKeyPressed(Key.S)) panDirection.Y += 1;
 		if (Input.IsKeyPressed(Key.A)) panDirection.X -= 1;
@@ -82,9 +87,20 @@ public partial class BattleMap : Node2D
 
 		if (panDirection != Vector2.Zero)
 		{
-			// Normalize ensures diagonal movement isn't faster. 
-			// Dividing by zoom keeps panning speed consistent whether zoomed in or out!
 			_camera.Position += panDirection.Normalized() * _panSpeed * (float)delta * (1.0f / _camera.Zoom.X);
+		}
+		
+		// --- SHIP ROTATION LOGIC ---
+		if (_selectedHex.HasValue && _hexContents.ContainsKey(_selectedHex.Value))
+		{
+			MapEntity selectedShip = _hexContents[_selectedHex.Value];
+			
+			if (IsInstanceValid(selectedShip.VisualSprite))
+			{
+				Vector2 mousePos = GetGlobalMousePosition();
+				float targetAngle = selectedShip.VisualSprite.GlobalPosition.AngleToPoint(mousePos) + selectedShip.BaseRotationOffset;
+				selectedShip.VisualSprite.Rotation = Mathf.LerpAngle(selectedShip.VisualSprite.Rotation, targetAngle, 0.15f);
+			}
 		}
 	}
 
@@ -93,26 +109,65 @@ public partial class BattleMap : Node2D
 		// --- MOUSE WHEEL ZOOMING ---
 		if (@event is InputEventMouseButton mouseButton && mouseButton.IsPressed())
 		{
-			if (mouseButton.ButtonIndex == MouseButton.WheelUp)
-			{
-				_camera.Zoom += new Vector2(_zoomSpeed, _zoomSpeed);
-			}
-			else if (mouseButton.ButtonIndex == MouseButton.WheelDown)
-			{
-				_camera.Zoom -= new Vector2(_zoomSpeed, _zoomSpeed);
-			}
+			if (mouseButton.ButtonIndex == MouseButton.WheelUp) _camera.Zoom += new Vector2(_zoomSpeed, _zoomSpeed);
+			else if (mouseButton.ButtonIndex == MouseButton.WheelDown) _camera.Zoom -= new Vector2(_zoomSpeed, _zoomSpeed);
 
-			// Clamp the zoom so the player can't zoom into infinity or flip the camera
 			_camera.Zoom = new Vector2(
 				Mathf.Clamp(_camera.Zoom.X, _minZoom, _maxZoom),
 				Mathf.Clamp(_camera.Zoom.Y, _minZoom, _maxZoom)
 			);
+			
+			// --- UPDATED SELECTION & MOVEMENT LOGIC (LEFT CLICK) ---
+			if (mouseButton.ButtonIndex == MouseButton.Left)
+			{
+				Vector2I clickedHex = PixelToHex(GetGlobalMousePosition());
+
+				if (_selectedHex.HasValue)
+				{
+					// We already have a ship selected. Are we trying to move it?
+					MapEntity ship = _hexContents[_selectedHex.Value];
+					Dictionary<Vector2I, int> reachable = GetReachableHexes(_selectedHex.Value, ship.CurrentMovement);
+
+					if (reachable.ContainsKey(clickedHex) && clickedHex != _selectedHex.Value)
+					{
+						// Valid move!
+						int movementCost = reachable[clickedHex];
+						MoveShip(_selectedHex.Value, clickedHex, movementCost);
+						
+						// Deselect after moving
+						_selectedHex = null;
+						ClearHighlights();
+					}
+					else if (_hexContents.ContainsKey(clickedHex) && _hexContents[clickedHex].Type == "Player Fleet")
+					{
+						// We clicked a different ship. Select that one instead!
+						_selectedHex = clickedHex;
+						reachable = GetReachableHexes(clickedHex, _hexContents[clickedHex].CurrentMovement);
+						DrawHighlights(clickedHex, reachable.Keys);
+					}
+					else
+					{
+						// We clicked empty space or an invalid hex. Deselect.
+						_selectedHex = null;
+						ClearHighlights();
+					}
+				}
+				else
+				{
+					// No ship is currently selected. Are we clicking one now?
+					if (_hexContents.ContainsKey(clickedHex) && _hexContents[clickedHex].Type == "Player Fleet")
+					{
+						_selectedHex = clickedHex;
+						Dictionary<Vector2I, int> reachable = GetReachableHexes(clickedHex, _hexContents[clickedHex].CurrentMovement);
+						DrawHighlights(clickedHex, reachable.Keys);
+					}
+				}
+			}
 		}
 
 		// --- MOUSE HOVER UI ---
 		if (@event is InputEventMouseMotion)
 		{
-			// GetGlobalMousePosition automatically does the math for Camera pan and zoom!
 			Vector2I hoveredHex = PixelToHex(GetGlobalMousePosition());
 
 			if (_hexContents.ContainsKey(hoveredHex))
@@ -131,15 +186,131 @@ public partial class BattleMap : Node2D
 	}
 
 	// ==========================================
+	// NEW: SHIP MOVEMENT ANIMATION
+	// ==========================================
+	private void MoveShip(Vector2I fromHex, Vector2I toHex, int cost)
+	{
+		MapEntity ship = _hexContents[fromHex];
+		
+		// 1. Update the Data Dictionary
+		_hexContents.Remove(fromHex);
+		_hexContents[toHex] = ship;
+		
+		// 2. Deduct Movement Points and update the UI details string
+		ship.CurrentMovement -= cost;
+		ship.Details = $"Status: Awaiting Orders\nMovement: {ship.CurrentMovement}/{ship.MaxMovement}";
+
+		// 3. Smooth Movement Animation using Godot's Tween
+		Tween tween = CreateTween();
+		Vector2 targetPixelPos = HexToPixel(toHex);
+		
+		// Calculate a dynamic duration so a long move takes slightly more time than a 1-hex move
+		float distance = ship.VisualSprite.Position.DistanceTo(targetPixelPos);
+		float duration = Mathf.Max(0.3f, distance / 500f); 
+
+		tween.TweenProperty(ship.VisualSprite, "position", targetPixelPos, duration)
+			 .SetTrans(Tween.TransitionType.Sine)
+			 .SetEase(Tween.EaseType.InOut);
+	}
+
+	// ==========================================
+	// PATHFINDING & HIGHLIGHTS
+	// ==========================================
+	
+	// --- UPDATED: Now returns a Dictionary so we know exactly how much each hex costs! ---
+	private Dictionary<Vector2I, int> GetReachableHexes(Vector2I startHex, int movementRange)
+	{
+		Dictionary<Vector2I, int> costSoFar = new Dictionary<Vector2I, int>();
+		costSoFar[startHex] = 0;
+
+		Queue<Vector2I> frontier = new Queue<Vector2I>();
+		frontier.Enqueue(startHex);
+
+		while (frontier.Count > 0)
+		{
+			Vector2I current = frontier.Dequeue();
+
+			foreach (Vector2I dir in _hexDirections)
+			{
+				Vector2I next = current + dir;
+
+				if (!_hexGrid.ContainsKey(next)) continue;
+
+				bool isBlocked = false;
+				if (_hexContents.ContainsKey(next))
+				{
+					string type = _hexContents[next].Type;
+					if (type == "Planet" || type == "Base Planet (Player Start)" || type == "Celestial Body" || type == "Player Fleet")
+					{
+						isBlocked = true; // Can't move through planets, stars, or other ships!
+					}
+				}
+
+				if (isBlocked) continue;
+
+				int newCost = costSoFar[current] + 1; 
+
+				if (newCost <= movementRange)
+				{
+					if (!costSoFar.ContainsKey(next) || newCost < costSoFar[next])
+					{
+						costSoFar[next] = newCost;
+						frontier.Enqueue(next);
+					}
+				}
+			}
+		}
+		return costSoFar;
+	}
+
+	private void DrawHighlights(Vector2I selectedShipHex, IEnumerable<Vector2I> reachableHexes)
+	{
+		ClearHighlights(); 
+
+		foreach (Vector2I hex in reachableHexes)
+		{
+			if (hex == selectedShipHex) continue; 
+			CreateHighlightPolygon(hex, new Color(0f, 1f, 0.3f, 0.4f)); 
+		}
+
+		CreateHighlightPolygon(selectedShipHex, new Color(1f, 0.8f, 0f, 0.6f)); 
+	}
+
+	private void ClearHighlights()
+	{
+		foreach (Node child in _highlightLayer.GetChildren())
+		{
+			child.QueueFree();
+		}
+	}
+
+	private void CreateHighlightPolygon(Vector2I hexCoord, Color color)
+	{
+		Polygon2D poly = new Polygon2D();
+		Vector2[] points = new Vector2[6];
+		
+		for (int i = 0; i < 6; i++)
+		{
+			float angle_deg = 60 * i - 30;
+			float angle_rad = Mathf.DegToRad(angle_deg);
+			points[i] = new Vector2(HexSize * Mathf.Cos(angle_rad), HexSize * Mathf.Sin(angle_rad));
+		}
+		
+		poly.Polygon = points;
+		poly.Color = color;
+		poly.Position = HexToPixel(hexCoord);
+		_highlightLayer.AddChild(poly);
+	}
+
+	// ==========================================
 	// UI LOGIC
 	// ==========================================
 	private void SetupHoverUI()
 	{
-		CanvasLayer uiLayer = new CanvasLayer { Layer = 10 }; // Always on top
+		CanvasLayer uiLayer = new CanvasLayer { Layer = 10 }; 
 		AddChild(uiLayer);
 
-		_infoPanel = new Panel();
-		_infoPanel.CustomMinimumSize = new Vector2(250, 110);
+		_infoPanel = new PanelContainer();
 		_infoPanel.Position = new Vector2(20, 20); 
 		
 		StyleBoxFlat style = new StyleBoxFlat();
@@ -151,11 +322,16 @@ public partial class BattleMap : Node2D
 		style.BorderColor = new Color(0.2f, 0.8f, 1f, 1f); 
 		style.CornerRadiusTopLeft = 5;
 		style.CornerRadiusBottomRight = 5;
+		
+		style.ContentMarginLeft = 15;
+		style.ContentMarginRight = 15;
+		style.ContentMarginTop = 15;
+		style.ContentMarginBottom = 15;
+		
 		_infoPanel.AddThemeStyleboxOverride("panel", style);
 
 		_infoLabel = new Label();
-		_infoLabel.Position = new Vector2(15, 15);
-		_infoLabel.CustomMinimumSize = new Vector2(220, 80); 
+		_infoLabel.CustomMinimumSize = new Vector2(250, 0); 
 		_infoLabel.AutowrapMode = TextServer.AutowrapMode.Word;
 		
 		_infoPanel.AddChild(_infoLabel);
@@ -166,10 +342,8 @@ public partial class BattleMap : Node2D
 
 	private Vector2I PixelToHex(Vector2 pt)
 	{
-		// No more mapCenter offset needed! The grid is built around real absolute Zero now.
 		float q = (Mathf.Sqrt(3f) / 3f * pt.X - 1f / 3f * pt.Y) / HexSize;
 		float r = (2f / 3f * pt.Y) / HexSize;
-		
 		return AxialRound(q, r);
 	}
 
@@ -221,7 +395,6 @@ public partial class BattleMap : Node2D
 	// ==========================================
 	private void GenerateGrid()
 	{
-		// Since we have a camera now, we generate a massive static board around (0,0).
 		for (int q = -_maxMapRadius; q <= _maxMapRadius; q++)
 		{
 			int r1 = Mathf.Max(-_maxMapRadius, -q - _maxMapRadius);
@@ -235,7 +408,6 @@ public partial class BattleMap : Node2D
 				Node2D hexTile = _hexScene.Instantiate<Node2D>();
 				hexTile.Position = worldPos;
 				
-				// Optional: Comment these lines out if you want to hide the coordinate text
 				Label coordLabel = hexTile.GetNodeOrNull<Label>("CoordLabel");
 				if (coordLabel != null) coordLabel.Text = $"{q},{r}";
 
@@ -273,12 +445,12 @@ public partial class BattleMap : Node2D
 		Random rng = new Random(_globalData.SavedSystem.GetHashCode()); 
 		
 		Vector2I basePlanetLocation = new Vector2I(2, -1); 
-		int currentOrbitRing = 2; // The first planet spawns 2 hexes away from the sun
+		int currentOrbitRing = 2; 
 
 		foreach (PlanetData pData in currentSystem.Planets)
 		{
 			Vector2I spawnHex = FindEmptyHexInRing(currentOrbitRing, rng);
-			currentOrbitRing += 3; // Planets now spawn 3 hexes apart so there is plenty of room for ships!
+			currentOrbitRing += 3; 
 
 			string pTypeStr = GetPlanetTypeString(pData.TypeIndex);
 			string pTex = GetTexturePathForType(pTypeStr);
@@ -289,7 +461,7 @@ public partial class BattleMap : Node2D
 				Details = $"Biome Class: {pTypeStr.ToUpper()}\nHab: {pData.Habitability}" 
 			};
 
-			SpawnEntityAtHex(spawnHex, pTex, planetEntity, 0.4f);
+			SpawnEntityAtHex(spawnHex, pTex, planetEntity, pData.Scale);
 
 			if (pData.Name == _globalData.SavedPlanet)
 			{
@@ -311,9 +483,18 @@ public partial class BattleMap : Node2D
 					
 					if (_hexGrid.ContainsKey(spawnPos) && !_hexContents.ContainsKey(spawnPos))
 					{
-						MapEntity shipData = new MapEntity { Name = shipName, Type = "Player Fleet", Details = "Status: Online & Awaiting Orders" };
-						string shipTexPath = GetShipTexturePath(shipName);
+						int shipMovement = GetShipBaseMovement(shipName); 
+
+						MapEntity shipData = new MapEntity { 
+							Name = shipName, 
+							Type = "Player Fleet", 
+							Details = $"Status: Awaiting Orders\nMovement: {shipMovement}/{shipMovement}",
+							MaxMovement = shipMovement,
+							CurrentMovement = shipMovement,
+							BaseRotationOffset = GetShipRotationOffset(shipName)
+						};
 						
+						string shipTexPath = GetShipTexturePath(shipName);
 						SpawnEntityAtHex(spawnPos, shipTexPath, shipData, 0.2f); 
 						break; 
 					}
@@ -379,6 +560,7 @@ public partial class BattleMap : Node2D
 
 		_entityLayer.AddChild(entitySprite);
 		
+		entityData.VisualSprite = entitySprite;
 		_hexContents[hexCoord] = entityData;
 	}
 
@@ -421,6 +603,43 @@ public partial class BattleMap : Node2D
 			case "The Aegis Bastion": return "res://Ships/AegisBastionSprite.png";
 			case "The Aether Skimmer": return "res://Ships/AetherSkimmerSprite.png";
 			default: return "res://icon.svg"; 
+		}
+	}
+
+	private int GetShipBaseMovement(string shipName)
+	{
+		switch (shipName)
+		{
+			case "The Aether Skimmer": return 5;
+			case "The Valkyrie Wing": return 4;
+			case "The Genesis Ark": return 3;
+			case "The Panacea Spire": return 3;
+			case "The Relic Harvester": return 3;
+			case "The Neptune Forge": return 2;
+			case "The Aegis Bastion": return 2;
+			default: return 3; 
+		}
+	}
+
+	private float GetShipRotationOffset(string shipName)
+	{
+		switch (shipName)
+		{
+			case "The Genesis Ark":
+			case "The Panacea Spire":
+			case "The Relic Harvester":
+			case "The Valkyrie Wing":
+			case "The Aegis Bastion":
+				return Mathf.Pi / 2f; 
+				
+			case "The Neptune Forge":
+				return Mathf.Pi; 
+
+			case "The Aether Skimmer":
+				return 0f; 
+
+			default:
+				return 0f; 
 		}
 	}
 }
