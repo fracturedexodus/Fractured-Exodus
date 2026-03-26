@@ -7,7 +7,7 @@ public class ShipBlueprint
 	public string ClassType { get; set; }
 	public string TexturePath { get; set; }
 	
-	// --- NEW: Path to the large promo image ---
+	// --- Path to the large promo image ---
 	public string DescriptionImagePath { get; set; } 
 }
 
@@ -19,13 +19,16 @@ public partial class FleetSelection : Control
 	private Label _planetInfoLabel;
 	private TextureRect _planetPreview;
 	private Button _backButton;
-	private TextureRect _shipDescriptionPreview; // NEW: The hover image box
+	private TextureRect _shipDescriptionPreview; 
 
 	// --- RIGHT PANEL UI ---
 	private VBoxContainer _styleSelectionMenu;
 	private VBoxContainer _fleetBuilderMenu;
 	private HBoxContainer _slotContainer;
 	private VBoxContainer _availableShipsList;
+	
+	// --- NEW: THE DEPLOY BUTTON ---
+	private Button _deployButton;
 
 	// --- FLEET LOGIC ---
 	private int _maxSlots = 0;
@@ -41,15 +44,19 @@ public partial class FleetSelection : Control
 		_planetPreview = GetNodeOrNull<TextureRect>("HBoxContainer/LeftPanel/VBoxContainer/PlanetPreview");
 		_backButton = GetNodeOrNull<Button>("HBoxContainer/LeftPanel/VBoxContainer/BackButton");
 		
-		// Link the new Hover Preview Node
 		_shipDescriptionPreview = GetNodeOrNull<TextureRect>("HBoxContainer/LeftPanel/VBoxContainer/ShipDescriptionPreview");
-		if (_shipDescriptionPreview != null) _shipDescriptionPreview.Visible = false; // Hide it by default
+		if (_shipDescriptionPreview != null) _shipDescriptionPreview.Visible = false; 
 
 		// Link Right Panel Nodes
 		_styleSelectionMenu = GetNodeOrNull<VBoxContainer>("HBoxContainer/RightPanel/StyleSelection");
 		_fleetBuilderMenu = GetNodeOrNull<VBoxContainer>("HBoxContainer/RightPanel/FleetBuilder");
 		_slotContainer = GetNodeOrNull<HBoxContainer>("HBoxContainer/RightPanel/FleetBuilder/SlotContainer");
 		_availableShipsList = GetNodeOrNull<VBoxContainer>("HBoxContainer/RightPanel/FleetBuilder/ScrollContainer/AvailableShipList");
+
+		// --- NEW: LINK THE DEPLOY BUTTON ---
+		// Note: Make sure the path matches where you put the button in the Godot Editor!
+		_deployButton = GetNodeOrNull<Button>("HBoxContainer/RightPanel/FleetBuilder/DeployButton");
+		if (_deployButton != null) _deployButton.Pressed += OnDeployButtonPressed;
 
 		// Link Style Buttons
 		Button loneWolfBtn = GetNodeOrNull<Button>("HBoxContainer/RightPanel/StyleSelection/LoneWolfButton");
@@ -175,7 +182,6 @@ public partial class FleetSelection : Control
 				GD.PrintErr($"Could not load texture for {ship.Name} at: {ship.TexturePath}");
 			}
 			
-			// --- NEW: WIRE UP HOVER & CLICK EVENTS ---
 			shipBtn.Pressed += () => AssignShipToNextEmptySlot(ship);
 			shipBtn.MouseEntered += () => OnShipHovered(ship);
 			shipBtn.MouseExited += OnShipHoverExited;
@@ -229,7 +235,6 @@ public partial class FleetSelection : Control
 	// --- DATA ---
 	private void LoadAvailableShips()
 	{
-		// Added DescriptionImagePath to load your awesome promo art!
 		_masterShipList.Add(new ShipBlueprint { 
 			Name = "The Relic Harvester", ClassType = "Tech Salvager", 
 			TexturePath = "res://Ships/RelicHarvesterSprite.png", DescriptionImagePath = "res://Ships/RelicHarvester.png" 
@@ -260,9 +265,40 @@ public partial class FleetSelection : Control
 		});
 	}
 
+	// --- NEW: TRANSITION TO BATTLE MAP ---
+	private void OnDeployButtonPressed()
+	{
+		// 1. Wipe old data from the suitcase
+		_globalData.SelectedPlayerFleet.Clear();
+
+		bool hasShips = false;
+
+		// 2. Add currently assigned ships
+		for (int i = 0; i < _maxSlots; i++)
+		{
+			if (_selectedFleet[i] != null)
+			{
+				_globalData.SelectedPlayerFleet.Add(_selectedFleet[i].Name);
+				hasShips = true;
+			}
+		}
+
+		// (Optional) Prevent deploying an empty fleet
+		if (!hasShips)
+		{
+			GD.Print("Cannot deploy an empty fleet! Please assign at least one ship.");
+			return;
+		}
+
+		GD.Print($"Deploying Fleet: {string.Join(", ", _globalData.SelectedPlayerFleet)}");
+
+		// 3. Launch the new hex map!
+		var transitioner = GetNode<SceneTransition>("/root/SceneTransition");
+		transitioner.ChangeScene("res://exploration_battle.tscn");
+	}
+
 	public void _on_back_button_pressed()
 	{
-		//GetTree().ChangeSceneToFile("res://system_view.tscn");
 		var transitioner = GetNode<SceneTransition>("/root/SceneTransition");
 		transitioner.ChangeScene("res://system_view.tscn");
 	}

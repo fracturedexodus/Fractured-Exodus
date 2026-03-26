@@ -33,6 +33,7 @@ public partial class SystemView : Node2D
 	private int _bgStarCount = 150;
 
 	// --- LORE DATA FOR PLANETS ---
+	// Indices: 0=Terra, 1=Arid, 2=Ocean, 3=Toxic, 4=Frozen, 5=Lava
 	private string[] _planetTypeNames = { "Terra", "Arid", "Ocean", "Toxic", "Frozen", "Lava" };
 
 	private List<string> planetPrefixes = new List<string> { 
@@ -99,7 +100,7 @@ public partial class SystemView : Node2D
 
 		GenerateBackgroundStars();
 
-		// --- NEW: THE RETURN TRIP CHECK ---
+		// --- THE RETURN TRIP CHECK ---
 		// Automatically reload the system if we just came back from the Fleet screen!
 		if (!string.IsNullOrEmpty(_globalData.SavedSystem) && _globalData.ExploredSystems.ContainsKey(_globalData.SavedSystem))
 		{
@@ -133,7 +134,6 @@ public partial class SystemView : Node2D
 		// --- THE MEMORY CHECK ---
 		SystemData currentSystemData;
 
-		// Check our GlobalData dictionary
 		if (_globalData.ExploredSystems.ContainsKey(systemName))
 		{
 			currentSystemData = _globalData.ExploredSystems[systemName];
@@ -153,9 +153,18 @@ public partial class SystemView : Node2D
 		Random rng = new Random();
 		var newSys = new SystemData { SystemName = sysName };
 
+		// --- NEW: FETCH THE REGION SO WE CAN BIAS PLANET SPAWNS ---
+		string currentRegion = "Unknown Sector";
+		if (_globalData.CurrentSectorStars != null)
+		{
+			var starData = _globalData.CurrentSectorStars.Find(s => s.SystemName == sysName);
+			if (starData != null) currentRegion = starData.Region;
+		}
+
 		for (int i = 0; i < count; i++)
 		{
-			int texIndex = rng.Next(_planetTextures.Count);
+			// --- NEW: USE THE REGION TO PICK THE PLANET TYPE ---
+			int texIndex = GetPlanetTypeForRegion(currentRegion, rng);
 			string typeName = _planetTypeNames[texIndex];
 
 			var pData = new PlanetData
@@ -177,11 +186,42 @@ public partial class SystemView : Node2D
 		return newSys;
 	}
 
+	// --- NEW: REGION BASED PLANET WEIGHTS ---
+	// 0=Terra, 1=Arid, 2=Ocean, 3=Toxic, 4=Frozen, 5=Lava
+	private int GetPlanetTypeForRegion(string region, Random rng)
+	{
+		int roll = rng.Next(100);
+
+		switch (region)
+		{
+			case "Ember Wastes":
+				if (roll < 60) return 5; // 60% chance of Lava
+				if (roll < 85) return 1; // 25% chance of Arid
+				break;
+			case "Verdant Shroud":
+				if (roll < 50) return 0; // 50% chance of Terra
+				if (roll < 80) return 2; // 30% chance of Ocean
+				break;
+			case "Far Silence":
+				if (roll < 60) return 4; // 60% chance of Frozen
+				if (roll < 80) return 3; // 20% chance of Toxic
+				break;
+			case "Obsidian Belt":
+				if (roll < 50) return 3; // 50% chance of Toxic
+				if (roll < 75) return 5; // 25% chance of Lava
+				break;
+			case "Luminous Verge":
+				if (roll < 45) return 2; // 45% chance of Ocean
+				if (roll < 70) return 4; // 25% chance of Frozen
+				break;
+		}
+		
+		// If the roll falls through the cracks, or it's a generic sector (like Echo Spiral), pick purely random
+		return rng.Next(6); 
+	}
+
 	private void SpawnPlanetVisuals(SystemData sysData)
 	{
-		// Notice we removed the random generator from here! 
-		// We only want to use saved data now.
-
 		foreach (var planetData in sysData.Planets)
 		{
 			Node2D planetInstance = _planetScene.Instantiate<Node2D>();
@@ -190,8 +230,6 @@ public partial class SystemView : Node2D
 			if (sprite != null && _planetTextures.Count > 0)
 			{
 				sprite.Texture = _planetTextures[planetData.TypeIndex];
-				
-				// --- APPLY THE EXACT SAVED SCALE ---
 				sprite.Scale = new Vector2(planetData.Scale, planetData.Scale); 
 
 				Area2D area = planetInstance.GetNodeOrNull<Area2D>("ClickArea");
@@ -217,8 +255,6 @@ public partial class SystemView : Node2D
 			{
 				Node = planetInstance,
 				Data = planetData, 
-				
-				// --- APPLY THE EXACT SAVED ANGLE ---
 				Angle = planetData.StartingAngle
 			};
 			_planets.Add(visualOrbit);
@@ -253,16 +289,14 @@ public partial class SystemView : Node2D
 		string currentType = _pTypeLabel.Text.Replace("TYPE: ", "").Trim();
 		_globalData.SavedType = currentType;
 
-		// --- 2. THE DEBUG CHECK ---
-		GD.Print("\n=== SAVING TO GLOBAL DATA ===");
-		GD.Print($"Selected Star: {_globalData.SavedSystem}");
-		GD.Print($"Saved Planet: {_globalData.SavedPlanet}");
-		GD.Print($"Saved Type: {_globalData.SavedType}");
-		GD.Print($"Total Systems Explored: {_globalData.ExploredSystems.Count}");
-		GD.Print("=============================\n");
+		// --- NEW: SAVE FOR THE BATTLE MAP ---
+		_globalData.SelectedBasePlanetType = currentType;
+		
+		// For now, we give it a default placeholder coordinate.
+		// When the hex map generates, it will update this with its real location!
+		_globalData.SelectedBasePlanetHexCoords = new Vector2(0, 2);
 
-		// 3. Switch scenes
-		//GetTree().ChangeSceneToFile("res://fleet_selection.tscn");
+		// 2. Switch scenes
 		var transitioner = GetNode<SceneTransition>("/root/SceneTransition");
 		transitioner.ChangeScene("res://fleet_selection.tscn");
 	}
@@ -335,7 +369,6 @@ public partial class SystemView : Node2D
 
 	public void _on_close_button_pressed()
 	{
-		//GetTree().ChangeSceneToFile("res://galactic_map.tscn"); 
 		var transitioner = GetNode<SceneTransition>("/root/SceneTransition");
 		transitioner.ChangeScene("res://galactic_map.tscn");
 	}

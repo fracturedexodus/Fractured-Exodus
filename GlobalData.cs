@@ -48,6 +48,16 @@ public partial class GlobalData : Node
 	public string SavedPlanet { get; set; } = "";
 	public string SavedType { get; set; } = "";
 
+	// --- NEW: BASE PLANET & FLEET SELECTION ---
+	// Stores the specific planet the player clicked on to use as a starting base
+	public string SelectedBasePlanetType { get; set; } = ""; 
+	
+	// Stores the eventual hex coordinate of that planet so the battle map knows where to spawn the fleet
+	public Vector2 SelectedBasePlanetHexCoords { get; set; } = new Vector2(0, 0);
+
+	// A list to hold the names/IDs of the ships the player chose in the Fleet Selection screen
+	public List<string> SelectedPlayerFleet { get; set; } = new List<string>();
+
 	// --- 2. System Memory ---
 	// This dictionary remembers every system the player visits.
 	public Dictionary<string, SystemData> ExploredSystems { get; set; } = new Dictionary<string, SystemData>();

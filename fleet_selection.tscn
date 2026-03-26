@@ -99,6 +99,11 @@ horizontal_scroll_mode = 0
 [node name="AvailableShipList" type="VBoxContainer" parent="HBoxContainer/RightPanel/FleetBuilder/ScrollContainer" unique_id=701827624]
 layout_mode = 2
 
+[node name="DeployButton" type="Button" parent="HBoxContainer/RightPanel/FleetBuilder" unique_id=104140994]
+custom_minimum_size = Vector2(200, 60)
+layout_mode = 2
+text = "DEPLOY FLEET"
+
 [node name="BackGroundMusic" type="AudioStreamPlayer" parent="." unique_id=835005266]
 stream = ExtResource("2_le7cs")
 autoplay = true

@@ -1,0 +1,12 @@
+[gd_scene format=3 uid="uid://o3w5mprxp254"]
+
+[node name="HexTile" type="Node2D" unique_id=1935254779]
+
+[node name="HexBackground" type="Polygon2D" parent="." unique_id=1734737189]
+color = Color(0.1254902, 0, 0.7882353, 0)
+polygon = PackedVector2Array(0, -65, 56.3, -32.5, 56.3, 32.5, 0, 65, -56.3, 32.5, -56.3, -32.5)
+
+[node name="HexBorder" type="Line2D" parent="HexBackground" unique_id=1322186828]
+points = PackedVector2Array(0, -65, 56.3, -32.5, 56.3, 32.5, 0, 65, -56.3, 32.5, -56.3, -32.5, 0, -65)
+width = 2.0
+default_color = Color(0.2784314, 0.34509805, 1, 1)
