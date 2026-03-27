@@ -48,6 +48,15 @@ public partial class BattleMap : Node2D
 	}
 	private Dictionary<Vector2I, MapEntity> _hexContents = new Dictionary<Vector2I, MapEntity>();
 
+	// --- NEW: ENEMY ROSTER ---
+	private string[] _enemyShipTypes = new string[] {
+		"Aether Censor Obelisk",
+		"Custodian Logic Barge",
+		"Ignis Repurposed Terraformer",
+		"Reformatter Dreadnought",
+		"Scrap-Stick Subversion Drone"
+	};
+
 	// --- GAME STATE ---
 	private Vector2I? _selectedHex = null; 
 	private int _currentTurn = 1; 
@@ -68,7 +77,6 @@ public partial class BattleMap : Node2D
 	{
 		_globalData = GetNodeOrNull<GlobalData>("/root/GlobalData");
 		
-		// --- NEW: Load the saved turn number ---
 		if (_globalData != null && _globalData.CurrentTurn > 0)
 		{
 			_currentTurn = _globalData.CurrentTurn;
@@ -164,6 +172,7 @@ public partial class BattleMap : Node2D
 						_selectedHex = null;
 						ClearHighlights();
 					}
+					// IMPORTANT: Only allow selecting Player Fleet
 					else if (_hexContents.ContainsKey(clickedHex) && _hexContents[clickedHex].Type == "Player Fleet")
 					{
 						_selectedHex = clickedHex;
@@ -178,6 +187,7 @@ public partial class BattleMap : Node2D
 				}
 				else
 				{
+					// IMPORTANT: Only allow selecting Player Fleet
 					if (_hexContents.ContainsKey(clickedHex) && _hexContents[clickedHex].Type == "Player Fleet")
 					{
 						_selectedHex = clickedHex;
@@ -197,7 +207,8 @@ public partial class BattleMap : Node2D
 				MapEntity entity = _hexContents[hoveredHex];
 				
 				string dynamicStats = "";
-				if (entity.Type == "Player Fleet")
+				// Show stats for BOTH Player and Enemy ships
+				if (entity.Type == "Player Fleet" || entity.Type == "Enemy Fleet")
 				{
 					dynamicStats = $"HP: {entity.CurrentHP}/{entity.MaxHP} | SHIELD: {entity.CurrentShields}/{entity.MaxShields}\n" +
 								   $"MOVE: {entity.CurrentMovement}/{entity.MaxMovement}\n";
@@ -242,19 +253,19 @@ public partial class BattleMap : Node2D
 	{
 		if (_globalData != null)
 		{
-			// 1. Save the turn counter
 			_globalData.CurrentTurn = _currentTurn;
 
-			// 2. Iterate through the map and record the exact state of every ship
-			var fleetState = new Godot.Collections.Array();
+			var playerState = new Godot.Collections.Array();
+			var enemyState = new Godot.Collections.Array(); // Added Enemy array
+			
 			foreach (var kvp in _hexContents)
 			{
-				if (kvp.Value.Type == "Player Fleet")
+				if (kvp.Value.Type == "Player Fleet" || kvp.Value.Type == "Enemy Fleet")
 				{
 					var shipDict = new Godot.Collections.Dictionary<string, Variant>();
 					shipDict["Name"] = kvp.Value.Name;
-					shipDict["Q"] = kvp.Key.X; // The Hex Grid X coordinate
-					shipDict["R"] = kvp.Key.Y; // The Hex Grid Y coordinate
+					shipDict["Q"] = kvp.Key.X; 
+					shipDict["R"] = kvp.Key.Y; 
 					shipDict["CurrentHP"] = kvp.Value.CurrentHP;
 					shipDict["MaxHP"] = kvp.Value.MaxHP;
 					shipDict["CurrentShields"] = kvp.Value.CurrentShields;
@@ -262,13 +273,15 @@ public partial class BattleMap : Node2D
 					shipDict["CurrentMovement"] = kvp.Value.CurrentMovement;
 					shipDict["MaxMovement"] = kvp.Value.MaxMovement;
 					
-					fleetState.Add(shipDict);
+					// Sort them into the right pockets!
+					if (kvp.Value.Type == "Player Fleet") playerState.Add(shipDict);
+					if (kvp.Value.Type == "Enemy Fleet") enemyState.Add(shipDict);
 				}
 			}
 			
-			_globalData.SavedFleetState = fleetState;
+			_globalData.SavedFleetState = playerState;
+			_globalData.SavedEnemyFleetState = enemyState; // Save enemies to suitcase
 
-			// 3. Trigger the file write
 			if (_globalData.HasMethod("SaveGame"))
 			{
 				_globalData.Call("SaveGame");
@@ -344,7 +357,8 @@ public partial class BattleMap : Node2D
 				if (_hexContents.ContainsKey(next))
 				{
 					string type = _hexContents[next].Type;
-					if (type == "Planet" || type == "Base Planet (Player Start)" || type == "Celestial Body" || type == "Player Fleet")
+					// Block movement through Enemy ships as well!
+					if (type == "Planet" || type == "Base Planet (Player Start)" || type == "Celestial Body" || type == "Player Fleet" || type == "Enemy Fleet")
 					{
 						isBlocked = true; 
 					}
@@ -444,7 +458,7 @@ public partial class BattleMap : Node2D
 		Vector2 screenSize = GetViewportRect().Size;
 
 		_endTurnButton = new Button();
-		_endTurnButton.Text = $"TURN {_currentTurn}"; // Loads the current turn dynamically!
+		_endTurnButton.Text = $"TURN {_currentTurn}"; 
 		_endTurnButton.CustomMinimumSize = new Vector2(160, 50);
 		
 		StyleBoxFlat btnStyle = new StyleBoxFlat();
@@ -634,22 +648,18 @@ public partial class BattleMap : Node2D
 			}
 		}
 
-		// --- NEW: Check if we are loading a saved game ---
+		// -------------------------------------------------------------------
+		// 1. SPAWN PLAYER FLEET
+		// -------------------------------------------------------------------
 		if (_globalData.SavedFleetState != null && _globalData.SavedFleetState.Count > 0)
 		{
-			GD.Print("Spawning fleet from Save Data!");
+			GD.Print("Spawning Player fleet from Save Data!");
 			
 			foreach (var item in _globalData.SavedFleetState)
 			{
 				var shipDict = (Godot.Collections.Dictionary)item;
-				
 				string shipName = (string)shipDict["Name"];
-				
-				// Pull the exact coordinates from the dictionary
-				Vector2I spawnPos = new Vector2I(
-					(int)shipDict["Q"], 
-					(int)shipDict["R"]
-				);
+				Vector2I spawnPos = new Vector2I((int)shipDict["Q"], (int)shipDict["R"]);
 
 				MapEntity shipData = new MapEntity { 
 					Name = shipName, 
@@ -668,10 +678,9 @@ public partial class BattleMap : Node2D
 				SpawnEntityAtHex(spawnPos, shipTexPath, shipData, 0.2f); 
 			}
 		}
-		// --- IF NOT loading, do a fresh spawn around the base planet ---
 		else if (_globalData.SelectedPlayerFleet != null && _globalData.SelectedPlayerFleet.Count > 0)
 		{
-			GD.Print("Spawning fresh fleet around Base Planet.");
+			GD.Print("Spawning fresh Player fleet around Base Planet.");
 			int currentDirIndex = 0;
 
 			foreach (string shipName in _globalData.SelectedPlayerFleet)
@@ -705,6 +714,116 @@ public partial class BattleMap : Node2D
 					}
 				}
 			}
+		}
+
+		// -------------------------------------------------------------------
+		// 2. SPAWN ENEMY FLEET
+		// -------------------------------------------------------------------
+		if (_globalData.SavedEnemyFleetState != null && _globalData.SavedEnemyFleetState.Count > 0)
+		{
+			GD.Print("Spawning Enemy fleet from Save Data!");
+			
+			foreach (var item in _globalData.SavedEnemyFleetState)
+			{
+				var shipDict = (Godot.Collections.Dictionary)item;
+				string shipName = (string)shipDict["Name"];
+				Vector2I spawnPos = new Vector2I((int)shipDict["Q"], (int)shipDict["R"]);
+
+				MapEntity shipData = new MapEntity { 
+					Name = shipName, 
+					Type = "Enemy Fleet", 
+					Details = "Status: Hostile Target",
+					MaxMovement = (int)shipDict["MaxMovement"],
+					CurrentMovement = (int)shipDict["CurrentMovement"],
+					MaxHP = (int)shipDict["MaxHP"],
+					CurrentHP = (int)shipDict["CurrentHP"],
+					MaxShields = (int)shipDict["MaxShields"],
+					CurrentShields = (int)shipDict["CurrentShields"],
+					BaseRotationOffset = GetShipRotationOffset(shipName)
+				};
+				
+				string shipTexPath = GetShipTexturePath(shipName);
+				SpawnEntityAtHex(spawnPos, shipTexPath, shipData, 0.2f); 
+			}
+		}
+		else 
+		{
+			GD.Print("Spawning fresh Enemy fleet!");
+
+			// Find a random planet that IS NOT the player's base planet
+			List<Vector2I> potentialEnemyBases = new List<Vector2I>();
+			foreach (var kvp in _hexContents)
+			{
+				if (kvp.Value.Type == "Planet" && kvp.Key != basePlanetLocation)
+				{
+					potentialEnemyBases.Add(kvp.Key);
+				}
+			}
+
+			// If for some reason there are no other planets, use the Sun at 0,0
+			Vector2I enemyBaseLocation = new Vector2I(0, 0);
+			if (potentialEnemyBases.Count > 0)
+			{
+				enemyBaseLocation = potentialEnemyBases[rng.Next(potentialEnemyBases.Count)];
+			}
+
+			// Spawn 1 to 5 random enemy ships
+			int enemyCount = rng.Next(1, 6); 
+			int enemyDirIndex = 0;
+			var savedEnemyArray = new Godot.Collections.Array();
+
+			for (int i = 0; i < enemyCount; i++)
+			{
+				string enemyName = _enemyShipTypes[rng.Next(_enemyShipTypes.Length)];
+				
+				// Spiral outwards to find an empty hex for the enemy
+				while (enemyDirIndex < 18) 
+				{
+					int ring = (enemyDirIndex / 6) + 1;
+					Vector2I spawnPos = enemyBaseLocation + _hexDirections[enemyDirIndex % 6] * ring;
+					enemyDirIndex++;
+					
+					if (_hexGrid.ContainsKey(spawnPos) && !_hexContents.ContainsKey(spawnPos))
+					{
+						int shipMovement = GetShipBaseMovement(enemyName); 
+						(int hp, int shields) = GetShipCombatStats(enemyName);
+
+						MapEntity shipData = new MapEntity { 
+							Name = enemyName, 
+							Type = "Enemy Fleet", 
+							Details = "Status: Hostile Target",
+							MaxMovement = shipMovement,
+							CurrentMovement = shipMovement,
+							MaxHP = hp,
+							CurrentHP = hp,
+							MaxShields = shields,
+							CurrentShields = shields,
+							BaseRotationOffset = GetShipRotationOffset(enemyName)
+						};
+						
+						string shipTexPath = GetShipTexturePath(enemyName);
+						SpawnEntityAtHex(spawnPos, shipTexPath, shipData, 0.2f); 
+
+						// Pack them into RAM immediately so they don't reshuffle if the player leaves!
+						var shipDict = new Godot.Collections.Dictionary<string, Variant>();
+						shipDict["Name"] = enemyName;
+						shipDict["Q"] = spawnPos.X;
+						shipDict["R"] = spawnPos.Y;
+						shipDict["CurrentHP"] = hp;
+						shipDict["MaxHP"] = hp;
+						shipDict["CurrentShields"] = shields;
+						shipDict["MaxShields"] = shields;
+						shipDict["CurrentMovement"] = shipMovement;
+						shipDict["MaxMovement"] = shipMovement;
+						savedEnemyArray.Add(shipDict);
+
+						break; 
+					}
+				}
+			}
+			
+			// Lock the enemies into the suitcase
+			_globalData.SavedEnemyFleetState = savedEnemyArray;
 		}
 	}
 
@@ -775,15 +894,13 @@ public partial class BattleMap : Node2D
 	private string GetPlanetTypeString(int typeIndex)
 	{
 		string[] types = { "Terra", "Arid", "Ocean", "Toxic", "Frozen", "Lava" };
-		if (typeIndex >= 0 && typeIndex < types.Length)
-			return types[typeIndex];
+		if (typeIndex >= 0 && typeIndex < types.Length) return types[typeIndex];
 		return "Terra";
 	}
 
 	private string GetTexturePathForType(string type)
 	{
 		if (string.IsNullOrEmpty(type)) return "res://Planets/terra_planet.png";
-		
 		switch (type.ToUpper())
 		{
 			case "TERRA": return "res://Planets/terra_planet.png";
@@ -796,10 +913,12 @@ public partial class BattleMap : Node2D
 		}
 	}
 
+	// --- HANDLES BOTH PLAYER AND ENEMY SPRITES ---
 	private string GetShipTexturePath(string shipName)
 	{
 		switch (shipName)
 		{
+			// Player
 			case "The Relic Harvester": return "res://Ships/RelicHarvesterSprite.png";
 			case "The Panacea Spire": return "res://Ships/PanaceaSpireSprite.png";
 			case "The Neptune Forge": return "res://Ships/NeptuneForgeSprite.png";
@@ -807,6 +926,14 @@ public partial class BattleMap : Node2D
 			case "The Valkyrie Wing": return "res://Ships/ValkyrieWingSprite.png";
 			case "The Aegis Bastion": return "res://Ships/AegisBastionSprite.png";
 			case "The Aether Skimmer": return "res://Ships/AetherSkimmerSprite.png";
+			
+			// Enemies
+			case "Aether Censor Obelisk": return "res://EnemyShips/AetherCensorObeliskSprite.png";
+			case "Custodian Logic Barge": return "res://EnemyShips/CustodianLogicBargeSprite.png";
+			case "Ignis Repurposed Terraformer": return "res://EnemyShips/IgnisRepurposedTerraformerSprite.png";
+			case "Reformatter Dreadnought": return "res://EnemyShips/ReformatterDreadnoughtSprite.png";
+			case "Scrap-Stick Subversion Drone": return "res://EnemyShips/ScrapStickSubversionDroneSprite.png";
+			
 			default: return "res://icon.svg"; 
 		}
 	}
@@ -815,6 +942,7 @@ public partial class BattleMap : Node2D
 	{
 		switch (shipName)
 		{
+			// Player
 			case "The Aether Skimmer": return 5;
 			case "The Valkyrie Wing": return 4;
 			case "The Genesis Ark": return 3;
@@ -822,6 +950,14 @@ public partial class BattleMap : Node2D
 			case "The Relic Harvester": return 3;
 			case "The Neptune Forge": return 2;
 			case "The Aegis Bastion": return 2;
+			
+			// Enemies
+			case "Scrap-Stick Subversion Drone": return 5;
+			case "Aether Censor Obelisk": return 4;
+			case "Custodian Logic Barge": return 2;
+			case "Ignis Repurposed Terraformer": return 2;
+			case "Reformatter Dreadnought": return 2;
+			
 			default: return 3; 
 		}
 	}
@@ -830,6 +966,7 @@ public partial class BattleMap : Node2D
 	{
 		switch (shipName)
 		{
+			// Player
 			case "The Aegis Bastion": return (100, 50);   
 			case "The Neptune Forge": return (80, 20);    
 			case "The Genesis Ark": return (50, 30);      
@@ -837,6 +974,14 @@ public partial class BattleMap : Node2D
 			case "The Relic Harvester": return (50, 20);  
 			case "The Valkyrie Wing": return (30, 20);    
 			case "The Aether Skimmer": return (20, 10);   
+			
+			// Enemies
+			case "Reformatter Dreadnought": return (120, 40); 
+			case "Ignis Repurposed Terraformer": return (80, 10); 
+			case "Custodian Logic Barge": return (60, 60); 
+			case "Aether Censor Obelisk": return (30, 20); 
+			case "Scrap-Stick Subversion Drone": return (20, 0); 
+			
 			default: return (50, 25); 
 		}
 	}
@@ -853,9 +998,14 @@ public partial class BattleMap : Node2D
 				return Mathf.Pi / 2f; 
 				
 			case "The Neptune Forge":
+			case "Scrap-Stick Subversion Drone":
+			case "Reformatter Dreadnought":
 				return Mathf.Pi; 
 
 			case "The Aether Skimmer":
+			case "Aether Censor Obelisk":
+			case "Custodian Logic Barge":
+			case "Ignis Repurposed Terraformer":
 				return 0f; 
 
 			default:

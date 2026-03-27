@@ -55,8 +55,11 @@ public partial class GlobalData : Node
 
 	// --- 4. BATTLE STATE MEMORY ---
 	public int CurrentTurn { get; set; } = 1;
-	// This array will hold dictionaries containing the X/Y coordinates and HP/Shield stats of every ship
+	// This array will hold dictionaries containing the X/Y coordinates and HP/Shield stats of every player ship
 	public Godot.Collections.Array SavedFleetState { get; set; } = new Godot.Collections.Array();
+	
+	// --- NEW: Enemy Fleet Memory ---
+	public Godot.Collections.Array SavedEnemyFleetState { get; set; } = new Godot.Collections.Array();
 
 	public override void _Ready()
 	{
@@ -78,6 +81,7 @@ public partial class GlobalData : Node
 		// Save the Turn Number and the exact Ship Grid States
 		saveData["CurrentTurn"] = CurrentTurn;
 		saveData["SavedFleetState"] = SavedFleetState;
+		saveData["SavedEnemyFleetState"] = SavedEnemyFleetState; // Save Enemies!
 		
 		var fleetArray = new Godot.Collections.Array();
 		if (SelectedPlayerFleet != null)
@@ -143,6 +147,7 @@ public partial class GlobalData : Node
 		// Unpack the exact Battle State!
 		if (savedData.ContainsKey("CurrentTurn")) CurrentTurn = (int)savedData["CurrentTurn"];
 		if (savedData.ContainsKey("SavedFleetState")) SavedFleetState = (Godot.Collections.Array)savedData["SavedFleetState"];
+		if (savedData.ContainsKey("SavedEnemyFleetState")) SavedEnemyFleetState = (Godot.Collections.Array)savedData["SavedEnemyFleetState"]; // Load Enemies!
 		
 		if (savedData.ContainsKey("SelectedPlayerFleet"))
 		{
@@ -186,7 +191,7 @@ public partial class GlobalData : Node
 	}
 
 	// ==========================================
-	// NEW: RESET SYSTEM
+	// RESET SYSTEM
 	// ==========================================
 	public void ResetForNewGame()
 	{
@@ -201,6 +206,7 @@ public partial class GlobalData : Node
 		CurrentSectorStars.Clear();
 		CurrentTurn = 1;
 		SavedFleetState.Clear();
+		SavedEnemyFleetState.Clear(); // Reset Enemies!
 
 		// 2. Delete the physical save file from the hard drive!
 		if (FileAccess.FileExists(_savePath))
