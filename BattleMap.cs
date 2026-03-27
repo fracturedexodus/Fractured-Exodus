@@ -26,6 +26,9 @@ public partial class BattleMap : Node2D
 
 	private Dictionary<Vector2I, Node2D> _hexGrid = new Dictionary<Vector2I, Node2D>();
 
+	// --- AUDIO ---
+	private AudioStreamPlayer _bgmPlayer;
+
 	// --- ENTITY DATA STORAGE ---
 	public class MapEntity
 	{
@@ -34,17 +37,27 @@ public partial class BattleMap : Node2D
 		public string Details;
 		public int MaxMovement;
 		public int CurrentMovement; 
+		
+		public int MaxHP;
+		public int CurrentHP;
+		public int MaxShields;
+		public int CurrentShields;
+
 		public Sprite2D VisualSprite; 
 		public float BaseRotationOffset; 
 	}
 	private Dictionary<Vector2I, MapEntity> _hexContents = new Dictionary<Vector2I, MapEntity>();
 
-	// --- SELECTION STATE ---
+	// --- GAME STATE ---
 	private Vector2I? _selectedHex = null; 
+	private int _currentTurn = 1; 
 
 	// --- UI ELEMENTS ---
 	private PanelContainer _infoPanel; 
 	private Label _infoLabel;
+	private Button _endTurnButton;
+	private Button _saveGameButton;
+	private Button _mainMenuButton;
 
 	private Vector2I[] _hexDirections = new Vector2I[] {
 		new Vector2I(1, 0), new Vector2I(1, -1), new Vector2I(0, -1), 
@@ -55,6 +68,12 @@ public partial class BattleMap : Node2D
 	{
 		_globalData = GetNodeOrNull<GlobalData>("/root/GlobalData");
 		
+		// --- NEW: Load the saved turn number ---
+		if (_globalData != null && _globalData.CurrentTurn > 0)
+		{
+			_currentTurn = _globalData.CurrentTurn;
+		}
+		
 		AddChild(_bgLayer);
 		AddChild(_gridLayer);
 		AddChild(_highlightLayer);
@@ -62,14 +81,27 @@ public partial class BattleMap : Node2D
 
 		SetupCamera();
 		SetupSpaceBackground();
-		SetupHoverUI(); 
+		SetupMusic(); 
+		SetupUI(); 
 		GenerateGrid();
 		PopulateMapFromMemory();
 	}
 
-	// ==========================================
-	// CAMERA & CONTROLS
-	// ==========================================
+	private void SetupMusic()
+	{
+		_bgmPlayer = new AudioStreamPlayer();
+		AddChild(_bgmPlayer);
+
+		AudioStream bgmStream = GD.Load<AudioStream>("res://battle_theme.mp3"); 
+		
+		if (bgmStream != null)
+		{
+			_bgmPlayer.Stream = bgmStream;
+			_bgmPlayer.VolumeDb = -15.0f; 
+			_bgmPlayer.Play();
+		}
+	}
+
 	private void SetupCamera()
 	{
 		_camera = new Camera2D();
@@ -90,7 +122,6 @@ public partial class BattleMap : Node2D
 			_camera.Position += panDirection.Normalized() * _panSpeed * (float)delta * (1.0f / _camera.Zoom.X);
 		}
 		
-		// --- SHIP ROTATION LOGIC ---
 		if (_selectedHex.HasValue && _hexContents.ContainsKey(_selectedHex.Value))
 		{
 			MapEntity selectedShip = _hexContents[_selectedHex.Value];
@@ -104,9 +135,8 @@ public partial class BattleMap : Node2D
 		}
 	}
 
-	public override void _Input(InputEvent @event)
+	public override void _UnhandledInput(InputEvent @event)
 	{
-		// --- MOUSE WHEEL ZOOMING ---
 		if (@event is InputEventMouseButton mouseButton && mouseButton.IsPressed())
 		{
 			if (mouseButton.ButtonIndex == MouseButton.WheelUp) _camera.Zoom += new Vector2(_zoomSpeed, _zoomSpeed);
@@ -117,44 +147,37 @@ public partial class BattleMap : Node2D
 				Mathf.Clamp(_camera.Zoom.Y, _minZoom, _maxZoom)
 			);
 			
-			// --- UPDATED SELECTION & MOVEMENT LOGIC (LEFT CLICK) ---
 			if (mouseButton.ButtonIndex == MouseButton.Left)
 			{
 				Vector2I clickedHex = PixelToHex(GetGlobalMousePosition());
 
 				if (_selectedHex.HasValue)
 				{
-					// We already have a ship selected. Are we trying to move it?
 					MapEntity ship = _hexContents[_selectedHex.Value];
 					Dictionary<Vector2I, int> reachable = GetReachableHexes(_selectedHex.Value, ship.CurrentMovement);
 
 					if (reachable.ContainsKey(clickedHex) && clickedHex != _selectedHex.Value)
 					{
-						// Valid move!
 						int movementCost = reachable[clickedHex];
 						MoveShip(_selectedHex.Value, clickedHex, movementCost);
 						
-						// Deselect after moving
 						_selectedHex = null;
 						ClearHighlights();
 					}
 					else if (_hexContents.ContainsKey(clickedHex) && _hexContents[clickedHex].Type == "Player Fleet")
 					{
-						// We clicked a different ship. Select that one instead!
 						_selectedHex = clickedHex;
 						reachable = GetReachableHexes(clickedHex, _hexContents[clickedHex].CurrentMovement);
 						DrawHighlights(clickedHex, reachable.Keys);
 					}
 					else
 					{
-						// We clicked empty space or an invalid hex. Deselect.
 						_selectedHex = null;
 						ClearHighlights();
 					}
 				}
 				else
 				{
-					// No ship is currently selected. Are we clicking one now?
 					if (_hexContents.ContainsKey(clickedHex) && _hexContents[clickedHex].Type == "Player Fleet")
 					{
 						_selectedHex = clickedHex;
@@ -165,7 +188,6 @@ public partial class BattleMap : Node2D
 			}
 		}
 
-		// --- MOUSE HOVER UI ---
 		if (@event is InputEventMouseMotion)
 		{
 			Vector2I hoveredHex = PixelToHex(GetGlobalMousePosition());
@@ -173,8 +195,17 @@ public partial class BattleMap : Node2D
 			if (_hexContents.ContainsKey(hoveredHex))
 			{
 				MapEntity entity = _hexContents[hoveredHex];
+				
+				string dynamicStats = "";
+				if (entity.Type == "Player Fleet")
+				{
+					dynamicStats = $"HP: {entity.CurrentHP}/{entity.MaxHP} | SHIELD: {entity.CurrentShields}/{entity.MaxShields}\n" +
+								   $"MOVE: {entity.CurrentMovement}/{entity.MaxMovement}\n";
+				}
+
 				_infoLabel.Text = $"[ {entity.Name.ToUpper()} ]\n" +
 								  $"Type: {entity.Type}\n" +
+								  $"{dynamicStats}" + 
 								  $"Data: {entity.Details}";
 				_infoPanel.Visible = true;
 			}
@@ -186,25 +217,100 @@ public partial class BattleMap : Node2D
 	}
 
 	// ==========================================
-	// NEW: SHIP MOVEMENT ANIMATION
+	// TURN LOGIC, SAVING & MOVEMENT
 	// ==========================================
+	private void OnEndTurnPressed()
+	{
+		_currentTurn++;
+		GD.Print($"--- TURN {_currentTurn} START ---");
+
+		foreach (var kvp in _hexContents)
+		{
+			MapEntity entity = kvp.Value;
+			if (entity.Type == "Player Fleet")
+			{
+				entity.CurrentMovement = entity.MaxMovement;
+			}
+		}
+
+		_selectedHex = null;
+		ClearHighlights();
+		_endTurnButton.Text = $"TURN {_currentTurn}";
+	}
+
+	private void OnSaveGamePressed()
+	{
+		if (_globalData != null)
+		{
+			// 1. Save the turn counter
+			_globalData.CurrentTurn = _currentTurn;
+
+			// 2. Iterate through the map and record the exact state of every ship
+			var fleetState = new Godot.Collections.Array();
+			foreach (var kvp in _hexContents)
+			{
+				if (kvp.Value.Type == "Player Fleet")
+				{
+					var shipDict = new Godot.Collections.Dictionary<string, Variant>();
+					shipDict["Name"] = kvp.Value.Name;
+					shipDict["Q"] = kvp.Key.X; // The Hex Grid X coordinate
+					shipDict["R"] = kvp.Key.Y; // The Hex Grid Y coordinate
+					shipDict["CurrentHP"] = kvp.Value.CurrentHP;
+					shipDict["MaxHP"] = kvp.Value.MaxHP;
+					shipDict["CurrentShields"] = kvp.Value.CurrentShields;
+					shipDict["MaxShields"] = kvp.Value.MaxShields;
+					shipDict["CurrentMovement"] = kvp.Value.CurrentMovement;
+					shipDict["MaxMovement"] = kvp.Value.MaxMovement;
+					
+					fleetState.Add(shipDict);
+				}
+			}
+			
+			_globalData.SavedFleetState = fleetState;
+
+			// 3. Trigger the file write
+			if (_globalData.HasMethod("SaveGame"))
+			{
+				_globalData.Call("SaveGame");
+			}
+			
+			_saveGameButton.Text = "GAME SAVED!";
+			_saveGameButton.AddThemeColorOverride("font_color", new Color(0.3f, 1f, 0.3f)); 
+			
+			GetTree().CreateTimer(2.0f).Timeout += () => 
+			{
+				_saveGameButton.Text = "SAVE GAME";
+				_saveGameButton.RemoveThemeColorOverride("font_color");
+			};
+		}
+	}
+
+	private void OnMainMenuPressed()
+	{
+		GD.Print("Returning to Main Menu...");
+		SceneTransition transitioner = GetNodeOrNull<SceneTransition>("/root/SceneTransition");
+		if (transitioner != null)
+		{
+			transitioner.ChangeScene("res://main_menu.tscn");
+		}
+		else
+		{
+			GetTree().ChangeSceneToFile("res://main_menu.tscn");
+		}
+	}
+
 	private void MoveShip(Vector2I fromHex, Vector2I toHex, int cost)
 	{
 		MapEntity ship = _hexContents[fromHex];
 		
-		// 1. Update the Data Dictionary
 		_hexContents.Remove(fromHex);
 		_hexContents[toHex] = ship;
 		
-		// 2. Deduct Movement Points and update the UI details string
 		ship.CurrentMovement -= cost;
-		ship.Details = $"Status: Awaiting Orders\nMovement: {ship.CurrentMovement}/{ship.MaxMovement}";
 
-		// 3. Smooth Movement Animation using Godot's Tween
 		Tween tween = CreateTween();
 		Vector2 targetPixelPos = HexToPixel(toHex);
 		
-		// Calculate a dynamic duration so a long move takes slightly more time than a 1-hex move
 		float distance = ship.VisualSprite.Position.DistanceTo(targetPixelPos);
 		float duration = Mathf.Max(0.3f, distance / 500f); 
 
@@ -216,8 +322,6 @@ public partial class BattleMap : Node2D
 	// ==========================================
 	// PATHFINDING & HIGHLIGHTS
 	// ==========================================
-	
-	// --- UPDATED: Now returns a Dictionary so we know exactly how much each hex costs! ---
 	private Dictionary<Vector2I, int> GetReachableHexes(Vector2I startHex, int movementRange)
 	{
 		Dictionary<Vector2I, int> costSoFar = new Dictionary<Vector2I, int>();
@@ -242,7 +346,7 @@ public partial class BattleMap : Node2D
 					string type = _hexContents[next].Type;
 					if (type == "Planet" || type == "Base Planet (Player Start)" || type == "Celestial Body" || type == "Player Fleet")
 					{
-						isBlocked = true; // Can't move through planets, stars, or other ships!
+						isBlocked = true; 
 					}
 				}
 
@@ -305,7 +409,7 @@ public partial class BattleMap : Node2D
 	// ==========================================
 	// UI LOGIC
 	// ==========================================
-	private void SetupHoverUI()
+	private void SetupUI()
 	{
 		CanvasLayer uiLayer = new CanvasLayer { Layer = 10 }; 
 		AddChild(uiLayer);
@@ -313,22 +417,21 @@ public partial class BattleMap : Node2D
 		_infoPanel = new PanelContainer();
 		_infoPanel.Position = new Vector2(20, 20); 
 		
-		StyleBoxFlat style = new StyleBoxFlat();
-		style.BgColor = new Color(0.05f, 0.05f, 0.1f, 0.9f); 
-		style.BorderWidthBottom = 2;
-		style.BorderWidthTop = 2;
-		style.BorderWidthLeft = 2;
-		style.BorderWidthRight = 2;
-		style.BorderColor = new Color(0.2f, 0.8f, 1f, 1f); 
-		style.CornerRadiusTopLeft = 5;
-		style.CornerRadiusBottomRight = 5;
+		StyleBoxFlat panelStyle = new StyleBoxFlat();
+		panelStyle.BgColor = new Color(0.05f, 0.05f, 0.1f, 0.9f); 
+		panelStyle.BorderWidthBottom = 2;
+		panelStyle.BorderWidthTop = 2;
+		panelStyle.BorderWidthLeft = 2;
+		panelStyle.BorderWidthRight = 2;
+		panelStyle.BorderColor = new Color(0.2f, 0.8f, 1f, 1f); 
+		panelStyle.CornerRadiusTopLeft = 5;
+		panelStyle.CornerRadiusBottomRight = 5;
+		panelStyle.ContentMarginLeft = 15;
+		panelStyle.ContentMarginRight = 15;
+		panelStyle.ContentMarginTop = 15;
+		panelStyle.ContentMarginBottom = 15;
 		
-		style.ContentMarginLeft = 15;
-		style.ContentMarginRight = 15;
-		style.ContentMarginTop = 15;
-		style.ContentMarginBottom = 15;
-		
-		_infoPanel.AddThemeStyleboxOverride("panel", style);
+		_infoPanel.AddThemeStyleboxOverride("panel", panelStyle);
 
 		_infoLabel = new Label();
 		_infoLabel.CustomMinimumSize = new Vector2(250, 0); 
@@ -336,8 +439,69 @@ public partial class BattleMap : Node2D
 		
 		_infoPanel.AddChild(_infoLabel);
 		uiLayer.AddChild(_infoPanel);
-		
 		_infoPanel.Visible = false; 
+
+		Vector2 screenSize = GetViewportRect().Size;
+
+		_endTurnButton = new Button();
+		_endTurnButton.Text = $"TURN {_currentTurn}"; // Loads the current turn dynamically!
+		_endTurnButton.CustomMinimumSize = new Vector2(160, 50);
+		
+		StyleBoxFlat btnStyle = new StyleBoxFlat();
+		btnStyle.BgColor = new Color(0.1f, 0.3f, 0.1f, 0.9f); 
+		btnStyle.BorderWidthBottom = 2;
+		btnStyle.BorderWidthTop = 2;
+		btnStyle.BorderWidthLeft = 2;
+		btnStyle.BorderWidthRight = 2;
+		btnStyle.BorderColor = new Color(0.3f, 1f, 0.3f, 1f); 
+		btnStyle.CornerRadiusTopLeft = 5;
+		btnStyle.CornerRadiusBottomRight = 5;
+		_endTurnButton.AddThemeStyleboxOverride("normal", btnStyle);
+		_endTurnButton.AddThemeStyleboxOverride("hover", panelStyle); 
+		
+		_endTurnButton.Position = new Vector2(screenSize.X - 180, 20);
+		_endTurnButton.Pressed += OnEndTurnPressed;
+		uiLayer.AddChild(_endTurnButton);
+
+		_saveGameButton = new Button();
+		_saveGameButton.Text = "SAVE GAME";
+		_saveGameButton.CustomMinimumSize = new Vector2(160, 50);
+		
+		StyleBoxFlat saveStyle = new StyleBoxFlat();
+		saveStyle.BgColor = new Color(0.1f, 0.2f, 0.4f, 0.9f); 
+		saveStyle.BorderWidthBottom = 2;
+		saveStyle.BorderWidthTop = 2;
+		saveStyle.BorderWidthLeft = 2;
+		saveStyle.BorderWidthRight = 2;
+		saveStyle.BorderColor = new Color(0.3f, 0.6f, 1f, 1f); 
+		saveStyle.CornerRadiusTopLeft = 5;
+		saveStyle.CornerRadiusBottomRight = 5;
+		_saveGameButton.AddThemeStyleboxOverride("normal", saveStyle);
+		_saveGameButton.AddThemeStyleboxOverride("hover", panelStyle); 
+		
+		_saveGameButton.Position = new Vector2(screenSize.X - 360, 20); 
+		_saveGameButton.Pressed += OnSaveGamePressed;
+		uiLayer.AddChild(_saveGameButton);
+
+		_mainMenuButton = new Button();
+		_mainMenuButton.Text = "MAIN MENU";
+		_mainMenuButton.CustomMinimumSize = new Vector2(160, 50);
+		
+		StyleBoxFlat menuStyle = new StyleBoxFlat();
+		menuStyle.BgColor = new Color(0.4f, 0.1f, 0.1f, 0.9f); 
+		menuStyle.BorderWidthBottom = 2;
+		menuStyle.BorderWidthTop = 2;
+		menuStyle.BorderWidthLeft = 2;
+		menuStyle.BorderWidthRight = 2;
+		menuStyle.BorderColor = new Color(1f, 0.3f, 0.3f, 1f); 
+		menuStyle.CornerRadiusTopLeft = 5;
+		menuStyle.CornerRadiusBottomRight = 5;
+		_mainMenuButton.AddThemeStyleboxOverride("normal", menuStyle);
+		_mainMenuButton.AddThemeStyleboxOverride("hover", panelStyle); 
+		
+		_mainMenuButton.Position = new Vector2(screenSize.X - 540, 20); 
+		_mainMenuButton.Pressed += OnMainMenuPressed;
+		uiLayer.AddChild(_mainMenuButton);
 	}
 
 	private Vector2I PixelToHex(Vector2 pt)
@@ -470,8 +634,44 @@ public partial class BattleMap : Node2D
 			}
 		}
 
-		if (_globalData.SelectedPlayerFleet != null && _globalData.SelectedPlayerFleet.Count > 0)
+		// --- NEW: Check if we are loading a saved game ---
+		if (_globalData.SavedFleetState != null && _globalData.SavedFleetState.Count > 0)
 		{
+			GD.Print("Spawning fleet from Save Data!");
+			
+			foreach (var item in _globalData.SavedFleetState)
+			{
+				var shipDict = (Godot.Collections.Dictionary)item;
+				
+				string shipName = (string)shipDict["Name"];
+				
+				// Pull the exact coordinates from the dictionary
+				Vector2I spawnPos = new Vector2I(
+					(int)shipDict["Q"], 
+					(int)shipDict["R"]
+				);
+
+				MapEntity shipData = new MapEntity { 
+					Name = shipName, 
+					Type = "Player Fleet", 
+					Details = "Status: Online",
+					MaxMovement = (int)shipDict["MaxMovement"],
+					CurrentMovement = (int)shipDict["CurrentMovement"],
+					MaxHP = (int)shipDict["MaxHP"],
+					CurrentHP = (int)shipDict["CurrentHP"],
+					MaxShields = (int)shipDict["MaxShields"],
+					CurrentShields = (int)shipDict["CurrentShields"],
+					BaseRotationOffset = GetShipRotationOffset(shipName)
+				};
+				
+				string shipTexPath = GetShipTexturePath(shipName);
+				SpawnEntityAtHex(spawnPos, shipTexPath, shipData, 0.2f); 
+			}
+		}
+		// --- IF NOT loading, do a fresh spawn around the base planet ---
+		else if (_globalData.SelectedPlayerFleet != null && _globalData.SelectedPlayerFleet.Count > 0)
+		{
+			GD.Print("Spawning fresh fleet around Base Planet.");
 			int currentDirIndex = 0;
 
 			foreach (string shipName in _globalData.SelectedPlayerFleet)
@@ -484,13 +684,18 @@ public partial class BattleMap : Node2D
 					if (_hexGrid.ContainsKey(spawnPos) && !_hexContents.ContainsKey(spawnPos))
 					{
 						int shipMovement = GetShipBaseMovement(shipName); 
+						(int hp, int shields) = GetShipCombatStats(shipName);
 
 						MapEntity shipData = new MapEntity { 
 							Name = shipName, 
 							Type = "Player Fleet", 
-							Details = $"Status: Awaiting Orders\nMovement: {shipMovement}/{shipMovement}",
+							Details = "Status: Online",
 							MaxMovement = shipMovement,
 							CurrentMovement = shipMovement,
+							MaxHP = hp,
+							CurrentHP = hp,
+							MaxShields = shields,
+							CurrentShields = shields,
 							BaseRotationOffset = GetShipRotationOffset(shipName)
 						};
 						
@@ -618,6 +823,21 @@ public partial class BattleMap : Node2D
 			case "The Neptune Forge": return 2;
 			case "The Aegis Bastion": return 2;
 			default: return 3; 
+		}
+	}
+
+	private (int hp, int shields) GetShipCombatStats(string shipName)
+	{
+		switch (shipName)
+		{
+			case "The Aegis Bastion": return (100, 50);   
+			case "The Neptune Forge": return (80, 20);    
+			case "The Genesis Ark": return (50, 30);      
+			case "The Panacea Spire": return (40, 40);    
+			case "The Relic Harvester": return (50, 20);  
+			case "The Valkyrie Wing": return (30, 20);    
+			case "The Aether Skimmer": return (20, 10);   
+			default: return (50, 25); 
 		}
 	}
 

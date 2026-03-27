@@ -35,16 +35,22 @@ autoplay = true
 
 [node name="MenuButtons" type="VBoxContainer" parent="." unique_id=1147559899]
 layout_mode = 0
-offset_left = 1445.0
+offset_left = 1352.0
 offset_top = 477.0
-offset_right = 1814.9296
-offset_bottom = 612.0
+offset_right = 1922.0
+offset_bottom = 710.0
 
 [node name="LaunchFleet" type="Button" parent="MenuButtons" unique_id=2054043177]
 layout_mode = 2
 theme_override_fonts/font = ExtResource("4_dq1pj")
 theme_override_font_sizes/font_size = 50
-text = "Launch Fleet"
+text = "Launch New Fleet"
+
+[node name="LoadGame" type="Button" parent="MenuButtons" unique_id=1469085794]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("4_dq1pj")
+theme_override_font_sizes/font_size = 50
+text = "Continue Game"
 
 [node name="Abandon_Run" type="Button" parent="MenuButtons" unique_id=2051986787]
 layout_mode = 2
@@ -63,4 +69,5 @@ theme_override_font_sizes/font_size = 141
 text = "FRACTURED EXODUS"
 
 [connection signal="pressed" from="MenuButtons/LaunchFleet" to="." method="_on_launch_fleet_pressed"]
+[connection signal="pressed" from="MenuButtons/LoadGame" to="." method="_on_load_game_pressed"]
 [connection signal="pressed" from="MenuButtons/Abandon_Run" to="." method="_on_abandon_run_pressed"]
