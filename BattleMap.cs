@@ -1331,6 +1331,7 @@ public partial class BattleMap : Node2D
 		switch (shipName)
 		{
 			case "The Valkyrie Wing": return "res://Sounds/ValkyrieWing.wav";
+			case "The Aegis Bastion": return "res://Sounds/HeavyThrusters.wav";
 			default: return ""; 
 		}
 	}
