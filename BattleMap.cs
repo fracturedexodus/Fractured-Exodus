@@ -7,6 +7,7 @@ public partial class BattleMap : Node2D
 	// --- MAP SETTINGS ---
 	[Export] public float HexSize = 65f; 
 	private int _maxMapRadius = 35; 
+	private int _scanningRange = 5; // How close before combat triggers!
 
 	private PackedScene _hexScene = GD.Load<PackedScene>("res://hex_tile.tscn");
 	private GlobalData _globalData;
@@ -25,7 +26,12 @@ public partial class BattleMap : Node2D
 	private Node2D _entityLayer = new Node2D(); 
 
 	private Dictionary<Vector2I, Node2D> _hexGrid = new Dictionary<Vector2I, Node2D>();
+	
+	// --- AUDIO PLAYERS ---
 	private AudioStreamPlayer _bgmPlayer;
+	private AudioStreamPlayer _sfxPlayer; 
+	private AudioStreamPlayer _laserPlayer;
+	private AudioStreamPlayer _explosionPlayer;
 
 	// --- ENTITY DATA STORAGE ---
 	public class MapEntity
@@ -34,20 +40,20 @@ public partial class BattleMap : Node2D
 		public string Type;
 		public string Details;
 		
-		// Movement Economy
 		public int MaxMovement;
 		public int CurrentMovement; 
-		
-		// Action Economy
 		public bool HasAction;
 		public int AttackRange;
 		public int AttackDamage;
 		
-		// Health & Defenses
 		public int MaxHP;
 		public int CurrentHP;
 		public int MaxShields;
 		public int CurrentShields;
+
+		public int InitiativeBonus;
+		public int CurrentInitiativeRoll;
+		public bool IsDead = false;
 
 		public Sprite2D VisualSprite; 
 		public float BaseRotationOffset; 
@@ -59,10 +65,15 @@ public partial class BattleMap : Node2D
 		"Reformatter Dreadnought", "Scrap-Stick Subversion Drone"
 	};
 
-	// --- GAME STATE ---
+	// --- BG3 COMBAT STATE ---
+	private bool _inCombat = false;
+	private List<MapEntity> _initiativeQueue = new List<MapEntity>();
+	private int _currentQueueIndex = 0;
+	private MapEntity _activeShip = null;
+
 	private Vector2I? _selectedHex = null; 
 	private int _currentTurn = 1; 
-	private bool _isTargeting = false; // Tracks if the player clicked "Attack"
+	private bool _isTargeting = false; 
 
 	// --- UI ELEMENTS ---
 	private PanelContainer _infoPanel; 
@@ -70,7 +81,9 @@ public partial class BattleMap : Node2D
 	private Button _endTurnButton;
 	private Button _saveGameButton;
 	private Button _mainMenuButton;
-	private Button _attackButton; // --- NEW: The Attack Button
+	private Button _attackButton; 
+	private HBoxContainer _initiativeUI; 
+	private Label _initiativeTurnLabel; 
 
 	private Vector2I[] _hexDirections = new Vector2I[] {
 		new Vector2I(1, 0), new Vector2I(1, -1), new Vector2I(0, -1), 
@@ -89,51 +102,52 @@ public partial class BattleMap : Node2D
 
 		SetupCamera();
 		SetupSpaceBackground();
-		SetupMusic(); 
+		SetupAudio(); 
 		SetupUI(); 
 		GenerateGrid();
 		PopulateMapFromMemory();
+		
+		CheckForCombatTrigger();
 	}
 
-	private void SetupMusic()
-	{
+	private void SetupAudio() 
+	{ 
 		_bgmPlayer = new AudioStreamPlayer();
 		AddChild(_bgmPlayer);
 		AudioStream bgmStream = GD.Load<AudioStream>("res://battle_theme.mp3"); 
-		if (bgmStream != null)
-		{
-			_bgmPlayer.Stream = bgmStream;
-			_bgmPlayer.VolumeDb = -15.0f; 
-			_bgmPlayer.Play();
-		}
+		if (bgmStream != null) { _bgmPlayer.Stream = bgmStream; _bgmPlayer.VolumeDb = -15.0f; _bgmPlayer.Play(); }
+
+		_sfxPlayer = new AudioStreamPlayer();
+		AddChild(_sfxPlayer);
+		_sfxPlayer.VolumeDb = -5.0f; 
+
+		_laserPlayer = new AudioStreamPlayer();
+		AddChild(_laserPlayer);
+		_laserPlayer.VolumeDb = -3.0f;
+		AudioStream laserStream = GD.Load<AudioStream>("res://Sounds/laser.mp3"); 
+		if (laserStream != null) _laserPlayer.Stream = laserStream;
+
+		_explosionPlayer = new AudioStreamPlayer();
+		AddChild(_explosionPlayer);
+		_explosionPlayer.VolumeDb = 0.0f; 
+		AudioStream boomStream = GD.Load<AudioStream>("res://Sounds/explosion.wav"); 
+		if (boomStream != null) _explosionPlayer.Stream = boomStream;
 	}
 
-	private void SetupCamera()
-	{
-		_camera = new Camera2D();
-		AddChild(_camera);
-		_camera.MakeCurrent();
-	}
+	private void SetupCamera() { _camera = new Camera2D(); AddChild(_camera); _camera.MakeCurrent(); }
 
 	public override void _Process(double delta)
 	{
-		// Camera Movement
 		Vector2 panDirection = Vector2.Zero;
 		if (Input.IsKeyPressed(Key.W)) panDirection.Y -= 1;
 		if (Input.IsKeyPressed(Key.S)) panDirection.Y += 1;
 		if (Input.IsKeyPressed(Key.A)) panDirection.X -= 1;
 		if (Input.IsKeyPressed(Key.D)) panDirection.X += 1;
-		if (panDirection != Vector2.Zero)
-		{
-			_camera.Position += panDirection.Normalized() * _panSpeed * (float)delta * (1.0f / _camera.Zoom.X);
-		}
+		if (panDirection != Vector2.Zero) _camera.Position += panDirection.Normalized() * _panSpeed * (float)delta * (1.0f / _camera.Zoom.X);
 		
-		// Dynamic UI Updates based on selection
 		if (_selectedHex.HasValue && _hexContents.ContainsKey(_selectedHex.Value))
 		{
 			MapEntity selectedShip = _hexContents[_selectedHex.Value];
-			
-			// Ship Rotation
 			if (IsInstanceValid(selectedShip.VisualSprite))
 			{
 				Vector2 mousePos = GetGlobalMousePosition();
@@ -141,8 +155,7 @@ public partial class BattleMap : Node2D
 				selectedShip.VisualSprite.Rotation = Mathf.LerpAngle(selectedShip.VisualSprite.Rotation, targetAngle, 0.15f);
 			}
 
-			// Show Attack Button if we have an action and are a player
-			if (selectedShip.Type == "Player Fleet" && selectedShip.HasAction)
+			if (selectedShip.Type == "Player Fleet" && selectedShip.HasAction && (!_inCombat || selectedShip == _activeShip))
 			{
 				_attackButton.Visible = true;
 			}
@@ -167,17 +180,12 @@ public partial class BattleMap : Node2D
 		{
 			if (mouseButton.ButtonIndex == MouseButton.WheelUp) _camera.Zoom += new Vector2(_zoomSpeed, _zoomSpeed);
 			else if (mouseButton.ButtonIndex == MouseButton.WheelDown) _camera.Zoom -= new Vector2(_zoomSpeed, _zoomSpeed);
-
-			_camera.Zoom = new Vector2(
-				Mathf.Clamp(_camera.Zoom.X, _minZoom, _maxZoom),
-				Mathf.Clamp(_camera.Zoom.Y, _minZoom, _maxZoom)
-			);
+			_camera.Zoom = new Vector2(Mathf.Clamp(_camera.Zoom.X, _minZoom, _maxZoom), Mathf.Clamp(_camera.Zoom.Y, _minZoom, _maxZoom));
 			
 			if (mouseButton.ButtonIndex == MouseButton.Left)
 			{
 				Vector2I clickedHex = PixelToHex(GetGlobalMousePosition());
 
-				// --- COMBAT TARGETING MODE ---
 				if (_isTargeting && _selectedHex.HasValue)
 				{
 					if (_hexContents.ContainsKey(clickedHex) && _hexContents[clickedHex].Type == "Enemy Fleet")
@@ -190,25 +198,29 @@ public partial class BattleMap : Node2D
 							PerformAttack(_selectedHex.Value, clickedHex);
 							_isTargeting = false;
 							_attackButton.Text = "ATTACK";
+							CheckForCombatTrigger(); 
 						}
-						else
-						{
-							GD.Print("Target out of range!");
-						}
+						else GD.Print("Target out of range!");
 					}
 					else
 					{
-						// Clicked empty space or friendly ship, cancel targeting
 						_isTargeting = false;
 						_attackButton.Text = "ATTACK";
 					}
-					return; // Stop further input processing this click
+					return; 
 				}
 
-				// --- NORMAL MOVEMENT & SELECTION MODE ---
 				if (_selectedHex.HasValue)
 				{
 					MapEntity ship = _hexContents[_selectedHex.Value];
+					
+					if (_inCombat && ship != _activeShip)
+					{
+						_selectedHex = null;
+						ClearHighlights();
+						return; 
+					}
+
 					Dictionary<Vector2I, int> reachable = GetReachableHexes(_selectedHex.Value, ship.CurrentMovement);
 
 					if (reachable.ContainsKey(clickedHex) && clickedHex != _selectedHex.Value)
@@ -217,12 +229,17 @@ public partial class BattleMap : Node2D
 						MoveShip(_selectedHex.Value, clickedHex, movementCost);
 						_selectedHex = null;
 						ClearHighlights();
+						
+						if (!_inCombat) CheckForCombatTrigger(); 
 					}
 					else if (_hexContents.ContainsKey(clickedHex) && _hexContents[clickedHex].Type == "Player Fleet")
 					{
-						_selectedHex = clickedHex;
-						reachable = GetReachableHexes(clickedHex, _hexContents[clickedHex].CurrentMovement);
-						DrawHighlights(clickedHex, reachable.Keys);
+						if (!_inCombat || _hexContents[clickedHex] == _activeShip)
+						{
+							_selectedHex = clickedHex;
+							reachable = GetReachableHexes(clickedHex, _hexContents[clickedHex].CurrentMovement);
+							DrawHighlights(clickedHex, reachable.Keys);
+						}
 					}
 					else
 					{
@@ -234,19 +251,20 @@ public partial class BattleMap : Node2D
 				{
 					if (_hexContents.ContainsKey(clickedHex) && _hexContents[clickedHex].Type == "Player Fleet")
 					{
-						_selectedHex = clickedHex;
-						Dictionary<Vector2I, int> reachable = GetReachableHexes(clickedHex, _hexContents[clickedHex].CurrentMovement);
-						DrawHighlights(clickedHex, reachable.Keys);
+						if (!_inCombat || _hexContents[clickedHex] == _activeShip)
+						{
+							_selectedHex = clickedHex;
+							Dictionary<Vector2I, int> reachable = GetReachableHexes(clickedHex, _hexContents[clickedHex].CurrentMovement);
+							DrawHighlights(clickedHex, reachable.Keys);
+						}
 					}
 				}
 			}
 		}
 
-		// --- HOVER UI UPDATE ---
 		if (@event is InputEventMouseMotion)
 		{
 			Vector2I hoveredHex = PixelToHex(GetGlobalMousePosition());
-
 			if (_hexContents.ContainsKey(hoveredHex))
 			{
 				MapEntity entity = _hexContents[hoveredHex];
@@ -254,27 +272,199 @@ public partial class BattleMap : Node2D
 				if (entity.Type == "Player Fleet" || entity.Type == "Enemy Fleet")
 				{
 					string actionStatus = entity.HasAction ? "READY" : "USED";
+					string initText = _inCombat ? $" | INIT: {entity.CurrentInitiativeRoll}" : "";
 					dynamicStats = $"HP: {entity.CurrentHP}/{entity.MaxHP} | SHIELD: {entity.CurrentShields}/{entity.MaxShields}\n" +
-								   $"MOVE: {entity.CurrentMovement}/{entity.MaxMovement} | ACTION: {actionStatus}\n" +
+								   $"MOVE: {entity.CurrentMovement}/{entity.MaxMovement} | ACTION: {actionStatus}{initText}\n" +
 								   $"RANGE: {entity.AttackRange} | DMG: {entity.AttackDamage}\n";
 				}
 
-				_infoLabel.Text = $"[ {entity.Name.ToUpper()} ]\n" +
-								  $"Type: {entity.Type}\n" +
-								  $"{dynamicStats}" + 
-								  $"Data: {entity.Details}";
+				_infoLabel.Text = $"[ {entity.Name.ToUpper()} ]\nType: {entity.Type}\n{dynamicStats}Data: {entity.Details}";
 				_infoPanel.Visible = true;
 			}
-			else
+			else _infoPanel.Visible = false; 
+		}
+	}
+
+	private void CheckForCombatTrigger()
+	{
+		if (_inCombat) return;
+
+		List<Vector2I> players = new List<Vector2I>();
+		List<Vector2I> enemies = new List<Vector2I>();
+
+		foreach (var kvp in _hexContents)
+		{
+			if (kvp.Value.Type == "Player Fleet") players.Add(kvp.Key);
+			if (kvp.Value.Type == "Enemy Fleet") enemies.Add(kvp.Key);
+		}
+
+		if (enemies.Count == 0 || players.Count == 0) return;
+
+		foreach (Vector2I p in players)
+		{
+			foreach (Vector2I e in enemies)
 			{
-				_infoPanel.Visible = false; 
+				if (HexDistance(p, e) <= _scanningRange)
+				{
+					StartCombat();
+					return;
+				}
 			}
 		}
 	}
 
-	// ==========================================
-	// COMBAT LOGIC
-	// ==========================================
+	private void StartCombat()
+	{
+		_inCombat = true;
+		GD.Print("HOSTILES DETECTED. ROLLING INITIATIVE...");
+		_initiativeQueue.Clear();
+
+		Random rng = new Random();
+		foreach (var kvp in _hexContents)
+		{
+			if (kvp.Value.Type == "Player Fleet" || kvp.Value.Type == "Enemy Fleet")
+			{
+				kvp.Value.CurrentInitiativeRoll = rng.Next(1, 21) + kvp.Value.InitiativeBonus;
+				kvp.Value.HasAction = true;
+				kvp.Value.CurrentMovement = kvp.Value.MaxMovement;
+				_initiativeQueue.Add(kvp.Value);
+			}
+		}
+
+		_initiativeQueue.Sort((a, b) => b.CurrentInitiativeRoll.CompareTo(a.CurrentInitiativeRoll));
+		_currentQueueIndex = 0;
+		_currentTurn = 1;
+		_endTurnButton.Text = "END TURN";
+
+		UpdateInitiativeUI();
+		StartActiveTurn();
+	}
+
+	private void UpdateInitiativeUI()
+	{
+		foreach (Node child in _initiativeUI.GetChildren()) child.QueueFree();
+
+		if (!_inCombat)
+		{
+			_initiativeTurnLabel.Text = "EXPLORATION MODE";
+			return;
+		}
+
+		StyleBoxFlat blackSquareStyle = new StyleBoxFlat();
+		blackSquareStyle.BgColor = new Color(0, 0, 0, 1); 
+		blackSquareStyle.BorderWidthBottom = 2; blackSquareStyle.BorderWidthTop = 2; blackSquareStyle.BorderWidthLeft = 2; blackSquareStyle.BorderWidthRight = 2;
+		blackSquareStyle.BorderColor = new Color(0.3f, 0.3f, 0.3f, 1f); 
+
+		for (int i = 0; i < _initiativeQueue.Count; i++)
+		{
+			MapEntity ship = _initiativeQueue[i];
+			if (ship.IsDead) continue;
+
+			PanelContainer squarePanel = new PanelContainer();
+			squarePanel.AddThemeStyleboxOverride("panel", blackSquareStyle);
+			squarePanel.CustomMinimumSize = new Vector2(64, 64); 
+			
+			if (i == _currentQueueIndex)
+			{
+				StyleBoxFlat activeStyle = blackSquareStyle.Duplicate() as StyleBoxFlat;
+				activeStyle.BorderColor = new Color(0.2f, 1f, 0.2f, 1f); 
+				squarePanel.AddThemeStyleboxOverride("panel", activeStyle);
+				_initiativeTurnLabel.Text = $"CURRENT TURN: {ship.Name.ToUpper()}"; 
+			}
+
+			TextureRect icon = new TextureRect();
+			Texture2D tex = GD.Load<Texture2D>(GetShipTexturePath(ship.Name));
+			icon.Texture = tex;
+			icon.ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize;
+			icon.StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered;
+			icon.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+			icon.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
+
+			if (i == _currentQueueIndex) icon.Modulate = new Color(0.8f, 1f, 0.8f); 
+			else if (ship.Type == "Enemy Fleet") icon.Modulate = new Color(1f, 0.5f, 0.5f); 
+			else icon.Modulate = new Color(1f, 1f, 1f, 0.6f); 
+			
+			squarePanel.AddChild(icon);
+			_initiativeUI.AddChild(squarePanel);
+		}
+	}
+
+	private void StartActiveTurn()
+	{
+		_initiativeQueue.RemoveAll(s => s.IsDead);
+
+		if (_initiativeQueue.Count == 0 || !AreBothSidesAlive())
+		{
+			EndCombat();
+			return;
+		}
+
+		if (_currentQueueIndex >= _initiativeQueue.Count)
+		{
+			_currentQueueIndex = 0;
+			_currentTurn++;
+			GD.Print($"--- ROUND {_currentTurn} ---");
+		}
+
+		_activeShip = _initiativeQueue[_currentQueueIndex];
+		_activeShip.CurrentMovement = _activeShip.MaxMovement;
+		_activeShip.HasAction = true;
+
+		UpdateInitiativeUI();
+		
+		Tween camTween = CreateTween();
+		camTween.TweenProperty(_camera, "position", _activeShip.VisualSprite.Position, 0.5f).SetTrans(Tween.TransitionType.Sine);
+
+		if (_activeShip.Type == "Enemy Fleet")
+		{
+			GD.Print($"Enemy turn: {_activeShip.Name}");
+			GetTree().CreateTimer(1.0f).Timeout += () => ExecuteSingleEnemyAI(_activeShip);
+		}
+		else
+		{
+			GD.Print($"Player turn: {_activeShip.Name}");
+			foreach (var kvp in _hexContents)
+			{
+				if (kvp.Value == _activeShip)
+				{
+					_selectedHex = kvp.Key;
+					DrawHighlights(_selectedHex.Value, GetReachableHexes(_selectedHex.Value, _activeShip.CurrentMovement).Keys);
+					break;
+				}
+			}
+		}
+	}
+
+	private void EndActiveTurn()
+	{
+		if (!_inCombat) return;
+		_selectedHex = null;
+		ClearHighlights();
+		_currentQueueIndex++;
+		StartActiveTurn();
+	}
+
+	private bool AreBothSidesAlive()
+	{
+		bool playerAlive = false;
+		bool enemyAlive = false;
+		foreach (var ship in _initiativeQueue)
+		{
+			if (ship.Type == "Player Fleet") playerAlive = true;
+			if (ship.Type == "Enemy Fleet") enemyAlive = true;
+		}
+		return playerAlive && enemyAlive;
+	}
+
+	private void EndCombat()
+	{
+		_inCombat = false;
+		_activeShip = null;
+		GD.Print("COMBAT OVER.");
+		_initiativeTurnLabel.Text = "EXPLORATION MODE";
+		foreach (Node child in _initiativeUI.GetChildren()) child.QueueFree();
+	}
+
 	private void OnAttackPressed()
 	{
 		_isTargeting = !_isTargeting;
@@ -287,15 +477,12 @@ public partial class BattleMap : Node2D
 		MapEntity attacker = _hexContents[attackerHex];
 		MapEntity defender = _hexContents[defenderHex];
 
-		// Expend Action
 		attacker.HasAction = false;
-
-		// Visual Effects
-		DrawLaserBeam(HexToPixel(attackerHex), HexToPixel(defenderHex));
-
-		// Damage Math
-		int damageRemaining = attacker.AttackDamage;
 		
+		DrawLaserBeam(HexToPixel(attackerHex), HexToPixel(defenderHex));
+		if (_laserPlayer.Stream != null) _laserPlayer.Play();
+
+		int damageRemaining = attacker.AttackDamage;
 		if (defender.CurrentShields > 0)
 		{
 			if (defender.CurrentShields >= damageRemaining)
@@ -309,15 +496,20 @@ public partial class BattleMap : Node2D
 				defender.CurrentShields = 0;
 			}
 		}
-		
 		defender.CurrentHP -= damageRemaining;
 
-		// Did they die?
 		if (defender.CurrentHP <= 0)
 		{
 			GD.Print($"{defender.Name} was destroyed!");
+			
+			if (_explosionPlayer.Stream != null) _explosionPlayer.Play();
+			DrawExplosion(HexToPixel(defenderHex));
+
+			defender.IsDead = true;
 			defender.VisualSprite.QueueFree();
 			_hexContents.Remove(defenderHex);
+			
+			if (_inCombat) UpdateInitiativeUI();
 		}
 	}
 
@@ -327,162 +519,204 @@ public partial class BattleMap : Node2D
 		laser.AddPoint(startPos);
 		laser.AddPoint(endPos);
 		laser.Width = 4.0f;
-		laser.DefaultColor = new Color(1f, 0.2f, 0.2f, 1f); // Neon Red Laser
+		laser.DefaultColor = new Color(1f, 0.2f, 0.2f, 1f); 
 		_entityLayer.AddChild(laser);
 
-		// Fade out the laser over 0.4 seconds
 		Tween tween = CreateTween();
 		tween.TweenProperty(laser, "modulate", new Color(1, 1, 1, 0), 0.4f);
-		tween.TweenCallback(Callable.From(laser.QueueFree)); // Delete node after fade
+		tween.TweenCallback(Callable.From(laser.QueueFree)); 
 	}
 
-	// ==========================================
-	// TURN LOGIC & ENEMY AI
-	// ==========================================
+	private void DrawExplosion(Vector2 pos)
+	{
+		Polygon2D shockwave = new Polygon2D();
+		Vector2[] points = new Vector2[32];
+		for (int i = 0; i < 32; i++)
+		{
+			float angle = (i / 32f) * Mathf.Pi * 2f;
+			points[i] = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * HexSize * 0.5f;
+		}
+		shockwave.Polygon = points;
+		shockwave.Color = new Color(1f, 1f, 1f, 0.8f); 
+		shockwave.Position = pos;
+		_entityLayer.AddChild(shockwave);
+
+		Tween flashTween = CreateTween();
+		flashTween.TweenProperty(shockwave, "scale", new Vector2(3.0f, 3.0f), 0.8f).SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.Out);
+		flashTween.Parallel().TweenProperty(shockwave, "color", new Color(1f, 0.4f, 0f, 0f), 0.8f); 
+		flashTween.TweenCallback(Callable.From(shockwave.QueueFree)); 
+
+		CpuParticles2D particles = new CpuParticles2D();
+		particles.Position = pos;
+		particles.Emitting = false;
+		particles.OneShot = true;
+		particles.Explosiveness = 0.6f; 
+		particles.Lifetime = 2.5f; 
+		particles.Amount = 60; 
+		particles.Spread = 180f;
+		particles.Gravity = Vector2.Zero; 
+		particles.InitialVelocityMin = 20f; 
+		particles.InitialVelocityMax = 80f; 
+		particles.ScaleAmountMin = 8f;
+		particles.ScaleAmountMax = 24f;
+		
+		Gradient grad = new Gradient();
+		grad.Offsets = new float[] { 0.0f, 0.1f, 0.3f, 0.6f, 1.0f };
+		grad.Colors = new Color[] {
+			new Color(1f, 1f, 1f, 1f),       
+			new Color(1f, 0.9f, 0.2f, 1f),   
+			new Color(1f, 0.4f, 0f, 1f),     
+			new Color(0.2f, 0.2f, 0.2f, 1f), 
+			new Color(0.2f, 0.2f, 0.2f, 0f)  
+		};
+		particles.ColorRamp = grad;
+
+		Curve sizeCurve = new Curve();
+		sizeCurve.AddPoint(new Vector2(0f, 1f));
+		sizeCurve.AddPoint(new Vector2(1f, 0f));
+		particles.ScaleAmountCurve = sizeCurve;
+
+		_entityLayer.AddChild(particles);
+		particles.Emitting = true; 
+
+		GetTree().CreateTimer(3.0f).Timeout += () => 
+		{
+			if (IsInstanceValid(particles)) particles.QueueFree();
+		};
+	}
+
+	private void ExecuteSingleEnemyAI(MapEntity enemyShip)
+	{
+		if (enemyShip.IsDead || !_inCombat) return;
+
+		Vector2I currentPos = new Vector2I(0,0);
+		bool found = false;
+		foreach(var kvp in _hexContents) { if (kvp.Value == enemyShip) { currentPos = kvp.Key; found = true; break; } }
+		if (!found) { EndActiveTurn(); return; }
+
+		List<Vector2I> playerPositions = new List<Vector2I>();
+		foreach (var kvp in _hexContents) if (kvp.Value.Type == "Player Fleet") playerPositions.Add(kvp.Key);
+		
+		if (playerPositions.Count == 0) { EndActiveTurn(); return; }
+
+		Vector2I targetPlayer = playerPositions[0];
+		int minDistance = HexDistance(currentPos, targetPlayer);
+
+		foreach (Vector2I playerHex in playerPositions)
+		{
+			int dist = HexDistance(currentPos, playerHex);
+			if (dist < minDistance) { minDistance = dist; targetPlayer = playerHex; }
+		}
+
+		int stepsTaken = 0;
+		while (stepsTaken < enemyShip.CurrentMovement && HexDistance(currentPos, targetPlayer) > enemyShip.AttackRange)
+		{
+			Vector2I bestNeighbor = currentPos;
+			int bestDist = HexDistance(currentPos, targetPlayer);
+			bool foundMove = false;
+
+			foreach (Vector2I dir in _hexDirections)
+			{
+				Vector2I neighbor = currentPos + dir;
+				if (!_hexGrid.ContainsKey(neighbor)) continue;
+				
+				bool isBlocked = false;
+				if (_hexContents.ContainsKey(neighbor))
+				{
+					string type = _hexContents[neighbor].Type;
+					if (type == "Planet" || type == "Base Planet (Player Start)" || type == "Celestial Body" || type == "Player Fleet" || type == "Enemy Fleet") isBlocked = true; 
+				}
+
+				if (!isBlocked)
+				{
+					int distToTarget = HexDistance(neighbor, targetPlayer);
+					if (distToTarget < bestDist)
+					{
+						bestDist = distToTarget; bestNeighbor = neighbor; foundMove = true;
+					}
+				}
+			}
+
+			if (!foundMove) break; 
+			currentPos = bestNeighbor;
+			stepsTaken++;
+		}
+
+		Vector2I oldPos = new Vector2I(0,0);
+		foreach(var kvp in _hexContents) if (kvp.Value == enemyShip) oldPos = kvp.Key;
+
+		if (currentPos != oldPos)
+		{
+			_hexContents.Remove(oldPos);
+			_hexContents[currentPos] = enemyShip;
+			enemyShip.CurrentMovement -= stepsTaken;
+
+			Tween tween = CreateTween();
+			Vector2 targetPixelPos = HexToPixel(currentPos);
+			float distance = enemyShip.VisualSprite.Position.DistanceTo(targetPixelPos);
+			float duration = Mathf.Max(0.3f, distance / 500f); 
+
+			string sfxPath = GetShipMovementSoundPath(enemyShip.Name);
+			if (!string.IsNullOrEmpty(sfxPath))
+			{
+				AudioStream sfx = GD.Load<AudioStream>(sfxPath);
+				if (sfx != null) { _sfxPlayer.Stream = sfx; _sfxPlayer.Play(); }
+			}
+
+			tween.TweenProperty(enemyShip.VisualSprite, "position", targetPixelPos, duration).SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.InOut);
+			float targetAngle = enemyShip.VisualSprite.Position.AngleToPoint(targetPixelPos) + enemyShip.BaseRotationOffset;
+			tween.Parallel().TweenProperty(enemyShip.VisualSprite, "rotation", targetAngle, 0.2f);
+			
+			tween.Finished += () => 
+			{
+				TryEnemyShootAndEnd(enemyShip, currentPos, targetPlayer);
+			};
+		}
+		else
+		{
+			TryEnemyShootAndEnd(enemyShip, currentPos, targetPlayer);
+		}
+	}
+
+	private void TryEnemyShootAndEnd(MapEntity enemyShip, Vector2I currentPos, Vector2I targetPlayer)
+	{
+		if (enemyShip.HasAction && _hexContents.ContainsKey(targetPlayer)) 
+		{
+			int finalDist = HexDistance(currentPos, targetPlayer);
+			if (finalDist <= enemyShip.AttackRange)
+			{
+				PerformAttack(currentPos, targetPlayer);
+			}
+		}
+		GetTree().CreateTimer(0.8f).Timeout += () => EndActiveTurn();
+	}
+
 	private void OnEndTurnPressed()
 	{
-		_currentTurn++;
-		GD.Print($"--- TURN {_currentTurn} START ---");
-
-		// Refill ALL movement points and Actions
-		foreach (var kvp in _hexContents)
+		if (!_inCombat)
 		{
-			if (kvp.Value.Type == "Player Fleet" || kvp.Value.Type == "Enemy Fleet")
+			_currentTurn++;
+			foreach (var kvp in _hexContents)
 			{
-				kvp.Value.CurrentMovement = kvp.Value.MaxMovement;
-				kvp.Value.HasAction = true;
+				if (kvp.Value.Type == "Player Fleet" || kvp.Value.Type == "Enemy Fleet")
+				{
+					kvp.Value.CurrentMovement = kvp.Value.MaxMovement;
+					kvp.Value.HasAction = true;
+				}
 			}
+			_selectedHex = null;
+			ClearHighlights();
+			_endTurnButton.Text = $"TURN {_currentTurn}";
 		}
-
-		_selectedHex = null;
-		_isTargeting = false;
-		ClearHighlights();
-		_endTurnButton.Text = $"TURN {_currentTurn}";
-
-		ExecuteEnemyTurn();
-	}
-
-	private int HexDistance(Vector2I a, Vector2I b)
-	{
-		return (Mathf.Abs(a.X - b.X) + Mathf.Abs(a.X + a.Y - b.X - b.Y) + Mathf.Abs(a.Y - b.Y)) / 2;
-	}
-
-	private void ExecuteEnemyTurn()
-	{
-		List<Vector2I> enemyPositions = new List<Vector2I>();
-		List<Vector2I> playerPositions = new List<Vector2I>();
-
-		foreach (var kvp in _hexContents)
+		else
 		{
-			if (kvp.Value.Type == "Enemy Fleet") enemyPositions.Add(kvp.Key);
-			if (kvp.Value.Type == "Player Fleet") playerPositions.Add(kvp.Key);
-		}
-
-		if (playerPositions.Count == 0) return; 
-
-		foreach (Vector2I enemyStartHex in enemyPositions)
-		{
-			if (!_hexContents.ContainsKey(enemyStartHex)) continue; // In case they were killed this turn
-
-			Vector2I currentPos = enemyStartHex;
-			MapEntity enemyShip = _hexContents[currentPos];
-
-			// Find closest player
-			Vector2I targetPlayer = playerPositions[0];
-			int minDistance = HexDistance(currentPos, targetPlayer);
-
-			foreach (Vector2I playerHex in playerPositions)
+			if (_activeShip != null && _activeShip.Type == "Player Fleet")
 			{
-				int dist = HexDistance(currentPos, playerHex);
-				if (dist < minDistance)
-				{
-					minDistance = dist;
-					targetPlayer = playerHex;
-				}
-			}
-
-			// MOVE
-			int stepsTaken = 0;
-			while (stepsTaken < enemyShip.CurrentMovement && HexDistance(currentPos, targetPlayer) > enemyShip.AttackRange)
-			{
-				Vector2I bestNeighbor = currentPos;
-				int bestDist = HexDistance(currentPos, targetPlayer);
-				bool foundMove = false;
-
-				foreach (Vector2I dir in _hexDirections)
-				{
-					Vector2I neighbor = currentPos + dir;
-					if (!_hexGrid.ContainsKey(neighbor)) continue;
-					
-					bool isBlocked = false;
-					if (_hexContents.ContainsKey(neighbor))
-					{
-						string type = _hexContents[neighbor].Type;
-						if (type == "Planet" || type == "Base Planet (Player Start)" || type == "Celestial Body" || type == "Player Fleet" || type == "Enemy Fleet")
-						{
-							isBlocked = true; 
-						}
-					}
-
-					if (!isBlocked)
-					{
-						int distToTarget = HexDistance(neighbor, targetPlayer);
-						if (distToTarget < bestDist)
-						{
-							bestDist = distToTarget;
-							bestNeighbor = neighbor;
-							foundMove = true;
-						}
-					}
-				}
-
-				if (!foundMove) break; 
-				currentPos = bestNeighbor;
-				stepsTaken++;
-			}
-
-			if (currentPos != enemyStartHex)
-			{
-				_hexContents.Remove(enemyStartHex);
-				_hexContents[currentPos] = enemyShip;
-				enemyShip.CurrentMovement -= stepsTaken;
-
-				Tween tween = CreateTween();
-				Vector2 targetPixelPos = HexToPixel(currentPos);
-				float distance = enemyShip.VisualSprite.Position.DistanceTo(targetPixelPos);
-				float duration = Mathf.Max(0.3f, distance / 500f); 
-
-				tween.TweenProperty(enemyShip.VisualSprite, "position", targetPixelPos, duration)
-					 .SetTrans(Tween.TransitionType.Sine)
-					 .SetEase(Tween.EaseType.InOut);
-					 
-				float targetAngle = enemyShip.VisualSprite.Position.AngleToPoint(targetPixelPos) + enemyShip.BaseRotationOffset;
-				tween.Parallel().TweenProperty(enemyShip.VisualSprite, "rotation", targetAngle, 0.2f);
-			}
-
-			// --- ENEMY SHOOTING ---
-			// Ensure target still exists (could have been killed by a previous enemy)
-			if (enemyShip.HasAction && _hexContents.ContainsKey(targetPlayer)) 
-			{
-				int finalDist = HexDistance(currentPos, targetPlayer);
-				if (finalDist <= enemyShip.AttackRange)
-				{
-					// Add a slight delay so they don't shoot while moving
-					GetTree().CreateTimer(0.5f).Timeout += () => 
-					{
-						if (_hexContents.ContainsKey(currentPos) && _hexContents.ContainsKey(targetPlayer))
-						{
-							PerformAttack(currentPos, targetPlayer);
-						}
-					};
-				}
+				EndActiveTurn();
 			}
 		}
 	}
 
-	// ==========================================
-	// SAVING & MOVEMENT
-	// ==========================================
 	private void OnSaveGamePressed()
 	{
 		if (_globalData != null)
@@ -498,15 +732,11 @@ public partial class BattleMap : Node2D
 				{
 					var shipDict = new Godot.Collections.Dictionary<string, Variant>();
 					shipDict["Name"] = kvp.Value.Name;
-					shipDict["Q"] = kvp.Key.X; 
-					shipDict["R"] = kvp.Key.Y; 
-					shipDict["CurrentHP"] = kvp.Value.CurrentHP;
-					shipDict["MaxHP"] = kvp.Value.MaxHP;
-					shipDict["CurrentShields"] = kvp.Value.CurrentShields;
-					shipDict["MaxShields"] = kvp.Value.MaxShields;
-					shipDict["CurrentMovement"] = kvp.Value.CurrentMovement;
-					shipDict["MaxMovement"] = kvp.Value.MaxMovement;
-					shipDict["HasAction"] = kvp.Value.HasAction; // SAVE ACTION STATE
+					shipDict["Q"] = kvp.Key.X; shipDict["R"] = kvp.Key.Y; 
+					shipDict["CurrentHP"] = kvp.Value.CurrentHP; shipDict["MaxHP"] = kvp.Value.MaxHP;
+					shipDict["CurrentShields"] = kvp.Value.CurrentShields; shipDict["MaxShields"] = kvp.Value.MaxShields;
+					shipDict["CurrentMovement"] = kvp.Value.CurrentMovement; shipDict["MaxMovement"] = kvp.Value.MaxMovement;
+					shipDict["HasAction"] = kvp.Value.HasAction; 
 					
 					if (kvp.Value.Type == "Player Fleet") playerState.Add(shipDict);
 					if (kvp.Value.Type == "Enemy Fleet") enemyState.Add(shipDict);
@@ -538,58 +768,55 @@ public partial class BattleMap : Node2D
 	private void MoveShip(Vector2I fromHex, Vector2I toHex, int cost)
 	{
 		MapEntity ship = _hexContents[fromHex];
-		
 		_hexContents.Remove(fromHex);
 		_hexContents[toHex] = ship;
-		
 		ship.CurrentMovement -= cost;
+
+		string sfxPath = GetShipMovementSoundPath(ship.Name);
+		if (!string.IsNullOrEmpty(sfxPath))
+		{
+			AudioStream sfx = GD.Load<AudioStream>(sfxPath);
+			if (sfx != null)
+			{
+				_sfxPlayer.Stream = sfx;
+				_sfxPlayer.Play();
+			}
+		}
 
 		Tween tween = CreateTween();
 		Vector2 targetPixelPos = HexToPixel(toHex);
-		
 		float distance = ship.VisualSprite.Position.DistanceTo(targetPixelPos);
 		float duration = Mathf.Max(0.3f, distance / 500f); 
-
-		tween.TweenProperty(ship.VisualSprite, "position", targetPixelPos, duration)
-			 .SetTrans(Tween.TransitionType.Sine)
-			 .SetEase(Tween.EaseType.InOut);
+		tween.TweenProperty(ship.VisualSprite, "position", targetPixelPos, duration).SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.InOut);
 	}
 
-	// ==========================================
-	// PATHFINDING & HIGHLIGHTS
-	// ==========================================
+	private int HexDistance(Vector2I a, Vector2I b) { return (Mathf.Abs(a.X - b.X) + Mathf.Abs(a.X + a.Y - b.X - b.Y) + Mathf.Abs(a.Y - b.Y)) / 2; }
+
 	private Dictionary<Vector2I, int> GetReachableHexes(Vector2I startHex, int movementRange)
 	{
 		Dictionary<Vector2I, int> costSoFar = new Dictionary<Vector2I, int>();
 		costSoFar[startHex] = 0;
-
 		Queue<Vector2I> frontier = new Queue<Vector2I>();
 		frontier.Enqueue(startHex);
 
 		while (frontier.Count > 0)
 		{
 			Vector2I current = frontier.Dequeue();
-
 			foreach (Vector2I dir in _hexDirections)
 			{
 				Vector2I next = current + dir;
-
 				if (!_hexGrid.ContainsKey(next)) continue;
 
 				bool isBlocked = false;
 				if (_hexContents.ContainsKey(next))
 				{
 					string type = _hexContents[next].Type;
-					if (type == "Planet" || type == "Base Planet (Player Start)" || type == "Celestial Body" || type == "Player Fleet" || type == "Enemy Fleet")
-					{
-						isBlocked = true; 
-					}
+					if (type == "Planet" || type == "Base Planet (Player Start)" || type == "Celestial Body" || type == "Player Fleet" || type == "Enemy Fleet") isBlocked = true; 
 				}
 
 				if (isBlocked) continue;
 
 				int newCost = costSoFar[current] + 1; 
-
 				if (newCost <= movementRange)
 				{
 					if (!costSoFar.ContainsKey(next) || newCost < costSoFar[next])
@@ -606,63 +833,59 @@ public partial class BattleMap : Node2D
 	private void DrawHighlights(Vector2I selectedShipHex, IEnumerable<Vector2I> reachableHexes)
 	{
 		ClearHighlights(); 
-
 		foreach (Vector2I hex in reachableHexes)
 		{
 			if (hex == selectedShipHex) continue; 
 			CreateHighlightPolygon(hex, new Color(0f, 1f, 0.3f, 0.4f)); 
 		}
-
 		CreateHighlightPolygon(selectedShipHex, new Color(1f, 0.8f, 0f, 0.6f)); 
 	}
 
-	private void ClearHighlights()
-	{
-		foreach (Node child in _highlightLayer.GetChildren()) child.QueueFree();
-	}
+	private void ClearHighlights() { foreach (Node child in _highlightLayer.GetChildren()) child.QueueFree(); }
 
 	private void CreateHighlightPolygon(Vector2I hexCoord, Color color)
 	{
 		Polygon2D poly = new Polygon2D();
 		Vector2[] points = new Vector2[6];
-		
 		for (int i = 0; i < 6; i++)
 		{
 			float angle_deg = 60 * i - 30;
 			float angle_rad = Mathf.DegToRad(angle_deg);
 			points[i] = new Vector2(HexSize * Mathf.Cos(angle_rad), HexSize * Mathf.Sin(angle_rad));
 		}
-		
-		poly.Polygon = points;
-		poly.Color = color;
-		poly.Position = HexToPixel(hexCoord);
+		poly.Polygon = points; poly.Color = color; poly.Position = HexToPixel(hexCoord);
 		_highlightLayer.AddChild(poly);
 	}
 
-	// ==========================================
-	// UI LOGIC
-	// ==========================================
 	private void SetupUI()
 	{
 		CanvasLayer uiLayer = new CanvasLayer { Layer = 10 }; 
 		AddChild(uiLayer);
 
+		VBoxContainer topContainer = new VBoxContainer();
+		topContainer.Position = new Vector2(20, 20);
+		topContainer.AddThemeConstantOverride("separation", 5);
+		uiLayer.AddChild(topContainer);
+
+		_initiativeTurnLabel = new Label();
+		_initiativeTurnLabel.Text = "EXPLORATION MODE";
+		_initiativeTurnLabel.AddThemeColorOverride("font_color", new Color(0.8f, 0.8f, 1f));
+		topContainer.AddChild(_initiativeTurnLabel);
+
+		_initiativeUI = new HBoxContainer();
+		_initiativeUI.AddThemeConstantOverride("separation", 10); 
+		topContainer.AddChild(_initiativeUI);
+
+		Vector2 screenSize = GetViewportRect().Size;
 		_infoPanel = new PanelContainer();
-		_infoPanel.Position = new Vector2(20, 20); 
+		_infoPanel.Position = new Vector2(20, screenSize.Y - 200); 
 		
 		StyleBoxFlat panelStyle = new StyleBoxFlat();
 		panelStyle.BgColor = new Color(0.05f, 0.05f, 0.1f, 0.9f); 
-		panelStyle.BorderWidthBottom = 2;
-		panelStyle.BorderWidthTop = 2;
-		panelStyle.BorderWidthLeft = 2;
-		panelStyle.BorderWidthRight = 2;
+		panelStyle.BorderWidthBottom = 2; panelStyle.BorderWidthTop = 2; panelStyle.BorderWidthLeft = 2; panelStyle.BorderWidthRight = 2;
 		panelStyle.BorderColor = new Color(0.2f, 0.8f, 1f, 1f); 
-		panelStyle.CornerRadiusTopLeft = 5;
-		panelStyle.CornerRadiusBottomRight = 5;
-		panelStyle.ContentMarginLeft = 15;
-		panelStyle.ContentMarginRight = 15;
-		panelStyle.ContentMarginTop = 15;
-		panelStyle.ContentMarginBottom = 15;
+		panelStyle.CornerRadiusTopLeft = 5; panelStyle.CornerRadiusBottomRight = 5;
+		panelStyle.ContentMarginLeft = 15; panelStyle.ContentMarginRight = 15; panelStyle.ContentMarginTop = 15; panelStyle.ContentMarginBottom = 15;
 		_infoPanel.AddThemeStyleboxOverride("panel", panelStyle);
 
 		_infoLabel = new Label();
@@ -672,20 +895,14 @@ public partial class BattleMap : Node2D
 		uiLayer.AddChild(_infoPanel);
 		_infoPanel.Visible = false; 
 
-		Vector2 screenSize = GetViewportRect().Size;
-
 		_endTurnButton = new Button();
 		_endTurnButton.Text = $"TURN {_currentTurn}"; 
 		_endTurnButton.CustomMinimumSize = new Vector2(160, 50);
 		StyleBoxFlat btnStyle = new StyleBoxFlat();
 		btnStyle.BgColor = new Color(0.1f, 0.3f, 0.1f, 0.9f); 
-		btnStyle.BorderWidthBottom = 2;
-		btnStyle.BorderWidthTop = 2;
-		btnStyle.BorderWidthLeft = 2;
-		btnStyle.BorderWidthRight = 2;
+		btnStyle.BorderWidthBottom = 2; btnStyle.BorderWidthTop = 2; btnStyle.BorderWidthLeft = 2; btnStyle.BorderWidthRight = 2;
 		btnStyle.BorderColor = new Color(0.3f, 1f, 0.3f, 1f); 
-		btnStyle.CornerRadiusTopLeft = 5;
-		btnStyle.CornerRadiusBottomRight = 5;
+		btnStyle.CornerRadiusTopLeft = 5; btnStyle.CornerRadiusBottomRight = 5;
 		_endTurnButton.AddThemeStyleboxOverride("normal", btnStyle);
 		_endTurnButton.AddThemeStyleboxOverride("hover", panelStyle); 
 		_endTurnButton.Position = new Vector2(screenSize.X - 180, 20);
@@ -697,13 +914,9 @@ public partial class BattleMap : Node2D
 		_saveGameButton.CustomMinimumSize = new Vector2(160, 50);
 		StyleBoxFlat saveStyle = new StyleBoxFlat();
 		saveStyle.BgColor = new Color(0.1f, 0.2f, 0.4f, 0.9f); 
-		saveStyle.BorderWidthBottom = 2;
-		saveStyle.BorderWidthTop = 2;
-		saveStyle.BorderWidthLeft = 2;
-		saveStyle.BorderWidthRight = 2;
+		saveStyle.BorderWidthBottom = 2; saveStyle.BorderWidthTop = 2; saveStyle.BorderWidthLeft = 2; saveStyle.BorderWidthRight = 2;
 		saveStyle.BorderColor = new Color(0.3f, 0.6f, 1f, 1f); 
-		saveStyle.CornerRadiusTopLeft = 5;
-		saveStyle.CornerRadiusBottomRight = 5;
+		saveStyle.CornerRadiusTopLeft = 5; saveStyle.CornerRadiusBottomRight = 5;
 		_saveGameButton.AddThemeStyleboxOverride("normal", saveStyle);
 		_saveGameButton.AddThemeStyleboxOverride("hover", panelStyle); 
 		_saveGameButton.Position = new Vector2(screenSize.X - 360, 20); 
@@ -715,32 +928,23 @@ public partial class BattleMap : Node2D
 		_mainMenuButton.CustomMinimumSize = new Vector2(160, 50);
 		StyleBoxFlat menuStyle = new StyleBoxFlat();
 		menuStyle.BgColor = new Color(0.4f, 0.1f, 0.1f, 0.9f); 
-		menuStyle.BorderWidthBottom = 2;
-		menuStyle.BorderWidthTop = 2;
-		menuStyle.BorderWidthLeft = 2;
-		menuStyle.BorderWidthRight = 2;
+		menuStyle.BorderWidthBottom = 2; menuStyle.BorderWidthTop = 2; menuStyle.BorderWidthLeft = 2; menuStyle.BorderWidthRight = 2;
 		menuStyle.BorderColor = new Color(1f, 0.3f, 0.3f, 1f); 
-		menuStyle.CornerRadiusTopLeft = 5;
-		menuStyle.CornerRadiusBottomRight = 5;
+		menuStyle.CornerRadiusTopLeft = 5; menuStyle.CornerRadiusBottomRight = 5;
 		_mainMenuButton.AddThemeStyleboxOverride("normal", menuStyle);
 		_mainMenuButton.AddThemeStyleboxOverride("hover", panelStyle); 
 		_mainMenuButton.Position = new Vector2(screenSize.X - 540, 20); 
 		_mainMenuButton.Pressed += OnMainMenuPressed;
 		uiLayer.AddChild(_mainMenuButton);
 
-		// --- ATTACK BUTTON ---
 		_attackButton = new Button();
 		_attackButton.Text = "ATTACK";
 		_attackButton.CustomMinimumSize = new Vector2(160, 50);
 		StyleBoxFlat atkStyle = new StyleBoxFlat();
 		atkStyle.BgColor = new Color(0.6f, 0.1f, 0.1f, 0.9f); 
-		atkStyle.BorderWidthBottom = 2;
-		atkStyle.BorderWidthTop = 2;
-		atkStyle.BorderWidthLeft = 2;
-		atkStyle.BorderWidthRight = 2;
+		atkStyle.BorderWidthBottom = 2; atkStyle.BorderWidthTop = 2; atkStyle.BorderWidthLeft = 2; atkStyle.BorderWidthRight = 2;
 		atkStyle.BorderColor = new Color(1f, 0.5f, 0.5f, 1f); 
-		atkStyle.CornerRadiusTopLeft = 5;
-		atkStyle.CornerRadiusBottomRight = 5;
+		atkStyle.CornerRadiusTopLeft = 5; atkStyle.CornerRadiusBottomRight = 5;
 		_attackButton.AddThemeStyleboxOverride("normal", atkStyle);
 		_attackButton.AddThemeStyleboxOverride("hover", panelStyle); 
 		_attackButton.Position = new Vector2(screenSize.X / 2 - 80, screenSize.Y - 80); 
@@ -770,9 +974,6 @@ public partial class BattleMap : Node2D
 		return new Vector2I(rq, rr);
 	}
 
-	// ==========================================
-	// GRID & POPULATION
-	// ==========================================
 	private void SetupSpaceBackground()
 	{
 		Vector2 screenSize = GetViewportRect().Size;
@@ -839,7 +1040,6 @@ public partial class BattleMap : Node2D
 			if (pData.Name == _globalData.SavedPlanet) basePlanetLocation = spawnHex;
 		}
 
-		// PLAYER FLEET
 		if (_globalData.SavedFleetState != null && _globalData.SavedFleetState.Count > 0)
 		{
 			foreach (var item in _globalData.SavedFleetState)
@@ -856,6 +1056,7 @@ public partial class BattleMap : Node2D
 					AttackRange = range, AttackDamage = dmg,
 					MaxHP = (int)shipDict["MaxHP"], CurrentHP = (int)shipDict["CurrentHP"],
 					MaxShields = (int)shipDict["MaxShields"], CurrentShields = (int)shipDict["CurrentShields"],
+					InitiativeBonus = GetShipInitiativeBonus(shipName),
 					BaseRotationOffset = GetShipRotationOffset(shipName)
 				};
 				SpawnEntityAtHex(spawnPos, GetShipTexturePath(shipName), shipData, 0.2f); 
@@ -881,6 +1082,7 @@ public partial class BattleMap : Node2D
 							MaxMovement = shipMovement, CurrentMovement = shipMovement, HasAction = true,
 							AttackRange = range, AttackDamage = dmg,
 							MaxHP = hp, CurrentHP = hp, MaxShields = shields, CurrentShields = shields,
+							InitiativeBonus = GetShipInitiativeBonus(shipName),
 							BaseRotationOffset = GetShipRotationOffset(shipName)
 						};
 						SpawnEntityAtHex(spawnPos, GetShipTexturePath(shipName), shipData, 0.2f); 
@@ -890,7 +1092,6 @@ public partial class BattleMap : Node2D
 			}
 		}
 
-		// ENEMY FLEET
 		if (_globalData.SavedEnemyFleetState != null && _globalData.SavedEnemyFleetState.Count > 0)
 		{
 			foreach (var item in _globalData.SavedEnemyFleetState)
@@ -907,6 +1108,7 @@ public partial class BattleMap : Node2D
 					AttackRange = range, AttackDamage = dmg,
 					MaxHP = (int)shipDict["MaxHP"], CurrentHP = (int)shipDict["CurrentHP"],
 					MaxShields = (int)shipDict["MaxShields"], CurrentShields = (int)shipDict["CurrentShields"],
+					InitiativeBonus = GetShipInitiativeBonus(shipName),
 					BaseRotationOffset = GetShipRotationOffset(shipName)
 				};
 				SpawnEntityAtHex(spawnPos, GetShipTexturePath(shipName), shipData, 0.2f); 
@@ -941,6 +1143,7 @@ public partial class BattleMap : Node2D
 							MaxMovement = shipMovement, CurrentMovement = shipMovement, HasAction = true,
 							AttackRange = range, AttackDamage = dmg,
 							MaxHP = hp, CurrentHP = hp, MaxShields = shields, CurrentShields = shields,
+							InitiativeBonus = GetShipInitiativeBonus(enemyName),
 							BaseRotationOffset = GetShipRotationOffset(enemyName)
 						};
 						SpawnEntityAtHex(spawnPos, GetShipTexturePath(enemyName), shipData, 0.2f); 
@@ -998,9 +1201,6 @@ public partial class BattleMap : Node2D
 		_hexContents[hexCoord] = entityData;
 	}
 
-	// ==========================================
-	// DATA DICTIONARIES
-	// ==========================================
 	private string GetPlanetTypeString(int typeIndex)
 	{
 		string[] types = { "Terra", "Arid", "Ocean", "Toxic", "Frozen", "Lava" };
@@ -1041,6 +1241,15 @@ public partial class BattleMap : Node2D
 			case "Reformatter Dreadnought": return "res://EnemyShips/ReformatterDreadnoughtSprite.png";
 			case "Scrap-Stick Subversion Drone": return "res://EnemyShips/ScrapStickSubversionDroneSprite.png";
 			default: return "res://icon.svg"; 
+		}
+	}
+
+	private string GetShipMovementSoundPath(string shipName)
+	{
+		switch (shipName)
+		{
+			case "The Valkyrie Wing": return "res://Sounds/ValkyrieWing.wav";
+			default: return ""; 
 		}
 	}
 
@@ -1086,12 +1295,10 @@ public partial class BattleMap : Node2D
 		}
 	}
 
-	// --- Weapon Stats (Range, Damage) ---
 	private (int range, int damage) GetShipWeaponStats(string shipName)
 	{
 		switch (shipName)
 		{
-			// Player
 			case "The Aegis Bastion": return (2, 25);   
 			case "The Neptune Forge": return (2, 30);    
 			case "The Genesis Ark": return (3, 20);      
@@ -1100,13 +1307,40 @@ public partial class BattleMap : Node2D
 			case "The Valkyrie Wing": return (2, 15);    
 			case "The Aether Skimmer": return (1, 20);   
 			
-			// Enemies
 			case "Reformatter Dreadnought": return (2, 25); 
 			case "Ignis Repurposed Terraformer": return (2, 30); 
 			case "Custodian Logic Barge": return (3, 20); 
 			case "Aether Censor Obelisk": return (2, 15); 
 			case "Scrap-Stick Subversion Drone": return (1, 20); 
 			default: return (2, 20); 
+		}
+	}
+
+	private int GetShipInitiativeBonus(string shipName)
+	{
+		switch (shipName)
+		{
+			case "The Aether Skimmer":
+			case "Scrap-Stick Subversion Drone": 
+				return 5; 
+			
+			case "The Valkyrie Wing":
+			case "Aether Censor Obelisk": 
+				return 3; 
+
+			case "The Genesis Ark":
+			case "The Panacea Spire":
+			case "The Relic Harvester":
+			case "Custodian Logic Barge": 
+				return 0; 
+			
+			case "The Neptune Forge":
+			case "Ignis Repurposed Terraformer":
+			case "The Aegis Bastion":
+			case "Reformatter Dreadnought": 
+				return -2; 
+				
+			default: return 0; 
 		}
 	}
 
