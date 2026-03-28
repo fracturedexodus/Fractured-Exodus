@@ -55,10 +55,15 @@ public partial class GlobalData : Node
 
 	// --- 4. BATTLE STATE MEMORY ---
 	public int CurrentTurn { get; set; } = 1;
+	
+	// --- NEW: MID-COMBAT BG3 SAVE STATES ---
+	public bool InCombat { get; set; } = false;
+	public int CurrentQueueIndex { get; set; } = 0;
+
 	// This array will hold dictionaries containing the X/Y coordinates and HP/Shield stats of every player ship
 	public Godot.Collections.Array SavedFleetState { get; set; } = new Godot.Collections.Array();
 	
-	// --- NEW: Enemy Fleet Memory ---
+	// --- Enemy Fleet Memory ---
 	public Godot.Collections.Array SavedEnemyFleetState { get; set; } = new Godot.Collections.Array();
 
 	public override void _Ready()
@@ -78,8 +83,10 @@ public partial class GlobalData : Node
 		saveData["SavedSystem"] = SavedSystem;
 		saveData["SavedPlanet"] = SavedPlanet;
 		
-		// Save the Turn Number and the exact Ship Grid States
+		// Save the Turn Number, Combat State, and the exact Ship Grid States
 		saveData["CurrentTurn"] = CurrentTurn;
+		saveData["InCombat"] = InCombat;
+		saveData["CurrentQueueIndex"] = CurrentQueueIndex;
 		saveData["SavedFleetState"] = SavedFleetState;
 		saveData["SavedEnemyFleetState"] = SavedEnemyFleetState; // Save Enemies!
 		
@@ -146,6 +153,9 @@ public partial class GlobalData : Node
 		
 		// Unpack the exact Battle State!
 		if (savedData.ContainsKey("CurrentTurn")) CurrentTurn = (int)savedData["CurrentTurn"];
+		if (savedData.ContainsKey("InCombat")) InCombat = (bool)savedData["InCombat"];
+		if (savedData.ContainsKey("CurrentQueueIndex")) CurrentQueueIndex = (int)savedData["CurrentQueueIndex"];
+		
 		if (savedData.ContainsKey("SavedFleetState")) SavedFleetState = (Godot.Collections.Array)savedData["SavedFleetState"];
 		if (savedData.ContainsKey("SavedEnemyFleetState")) SavedEnemyFleetState = (Godot.Collections.Array)savedData["SavedEnemyFleetState"]; // Load Enemies!
 		
@@ -205,6 +215,8 @@ public partial class GlobalData : Node
 		ExploredSystems.Clear();
 		CurrentSectorStars.Clear();
 		CurrentTurn = 1;
+		InCombat = false;
+		CurrentQueueIndex = 0;
 		SavedFleetState.Clear();
 		SavedEnemyFleetState.Clear(); // Reset Enemies!
 

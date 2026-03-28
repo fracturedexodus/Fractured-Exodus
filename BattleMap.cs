@@ -51,7 +51,6 @@ public partial class BattleMap : Node2D
 		public int MaxShields;
 		public int CurrentShields;
 
-		// --- BG3 Initiative Stats ---
 		public int InitiativeBonus;
 		public int CurrentInitiativeRoll;
 		public bool IsDead = false;
@@ -73,7 +72,7 @@ public partial class BattleMap : Node2D
 	private MapEntity _activeShip = null;
 
 	private Vector2I? _selectedHex = null; 
-	private int _currentTurn = 1; // Tracks overall rounds
+	private int _currentTurn = 1; 
 	private bool _isTargeting = false; 
 
 	// --- UI ELEMENTS ---
@@ -85,6 +84,7 @@ public partial class BattleMap : Node2D
 	private Button _attackButton; 
 	private HBoxContainer _initiativeUI; 
 	private Label _initiativeTurnLabel; 
+	private ColorRect _gameOverPanel; // --- NEW: Game Over Screen
 
 	private Vector2I[] _hexDirections = new Vector2I[] {
 		new Vector2I(1, 0), new Vector2I(1, -1), new Vector2I(0, -1), 
@@ -108,8 +108,14 @@ public partial class BattleMap : Node2D
 		GenerateGrid();
 		PopulateMapFromMemory();
 		
-		// Immediately check if we spawned inside combat range
-		CheckForCombatTrigger();
+		if (_globalData != null && _globalData.InCombat)
+		{
+			RestoreCombatState();
+		}
+		else
+		{
+			CheckForCombatTrigger();
+		}
 	}
 
 	private void SetupAudio() 
@@ -140,7 +146,6 @@ public partial class BattleMap : Node2D
 
 	public override void _Process(double delta)
 	{
-		// Camera Movement
 		Vector2 panDirection = Vector2.Zero;
 		if (Input.IsKeyPressed(Key.W)) panDirection.Y -= 1;
 		if (Input.IsKeyPressed(Key.S)) panDirection.Y += 1;
@@ -148,7 +153,6 @@ public partial class BattleMap : Node2D
 		if (Input.IsKeyPressed(Key.D)) panDirection.X += 1;
 		if (panDirection != Vector2.Zero) _camera.Position += panDirection.Normalized() * _panSpeed * (float)delta * (1.0f / _camera.Zoom.X);
 		
-		// Dynamic UI Updates
 		if (_selectedHex.HasValue && _hexContents.ContainsKey(_selectedHex.Value))
 		{
 			MapEntity selectedShip = _hexContents[_selectedHex.Value];
@@ -159,7 +163,6 @@ public partial class BattleMap : Node2D
 				selectedShip.VisualSprite.Rotation = Mathf.LerpAngle(selectedShip.VisualSprite.Rotation, targetAngle, 0.15f);
 			}
 
-			// Show attack button if it's THIS player's turn, or if we aren't in combat
 			if (selectedShip.Type == "Player Fleet" && selectedShip.HasAction && (!_inCombat || selectedShip == _activeShip))
 			{
 				_attackButton.Visible = true;
@@ -187,7 +190,6 @@ public partial class BattleMap : Node2D
 			else if (mouseButton.ButtonIndex == MouseButton.WheelDown) _camera.Zoom -= new Vector2(_zoomSpeed, _zoomSpeed);
 			_camera.Zoom = new Vector2(Mathf.Clamp(_camera.Zoom.X, _minZoom, _maxZoom), Mathf.Clamp(_camera.Zoom.Y, _minZoom, _maxZoom));
 			
-			// --- NEW: RIGHT CLICK QUICK-ATTACK ---
 			if (mouseButton.ButtonIndex == MouseButton.Right)
 			{
 				if (_inCombat && _activeShip != null && _activeShip.Type == "Player Fleet" && _activeShip.HasAction)
@@ -196,7 +198,6 @@ public partial class BattleMap : Node2D
 					
 					if (_hexContents.ContainsKey(clickedHex) && _hexContents[clickedHex].Type == "Enemy Fleet")
 					{
-						// Find where our active ship is standing
 						Vector2I activeShipHex = new Vector2I(0, 0);
 						foreach (var kvp in _hexContents)
 						{
@@ -221,14 +222,13 @@ public partial class BattleMap : Node2D
 						}
 					}
 				}
-				return; // Block further processing for right clicks
+				return; 
 			}
 
 			if (mouseButton.ButtonIndex == MouseButton.Left)
 			{
 				Vector2I clickedHex = PixelToHex(GetGlobalMousePosition());
 
-				// --- TARGETING MODE (Via UI Button) ---
 				if (_isTargeting && _selectedHex.HasValue)
 				{
 					if (_hexContents.ContainsKey(clickedHex) && _hexContents[clickedHex].Type == "Enemy Fleet")
@@ -241,7 +241,7 @@ public partial class BattleMap : Node2D
 							PerformAttack(_selectedHex.Value, clickedHex);
 							_isTargeting = false;
 							_attackButton.Text = "ATTACK";
-							CheckForCombatTrigger(); // In case shooting starts combat!
+							CheckForCombatTrigger(); 
 						}
 						else GD.Print("Target out of range!");
 					}
@@ -253,12 +253,10 @@ public partial class BattleMap : Node2D
 					return; 
 				}
 
-				// --- MOVEMENT & SELECTION ---
 				if (_selectedHex.HasValue)
 				{
 					MapEntity ship = _hexContents[_selectedHex.Value];
 					
-					// BG3 Rule: In combat, you can ONLY move the active ship. 
 					if (_inCombat && ship != _activeShip)
 					{
 						_selectedHex = null;
@@ -275,11 +273,10 @@ public partial class BattleMap : Node2D
 						_selectedHex = null;
 						ClearHighlights();
 						
-						if (!_inCombat) CheckForCombatTrigger(); // Did moving trigger combat?
+						if (!_inCombat) CheckForCombatTrigger(); 
 					}
 					else if (_hexContents.ContainsKey(clickedHex) && _hexContents[clickedHex].Type == "Player Fleet")
 					{
-						// Only allow selecting if not in combat, OR if it's the active ship
 						if (!_inCombat || _hexContents[clickedHex] == _activeShip)
 						{
 							_selectedHex = clickedHex;
@@ -308,7 +305,6 @@ public partial class BattleMap : Node2D
 			}
 		}
 
-		// --- HOVER UI UPDATE ---
 		if (@event is InputEventMouseMotion)
 		{
 			Vector2I hoveredHex = PixelToHex(GetGlobalMousePosition());
@@ -332,9 +328,6 @@ public partial class BattleMap : Node2D
 		}
 	}
 
-	// ==========================================
-	// BG3 INITIATIVE & COMBAT STATE
-	// ==========================================
 	private void CheckForCombatTrigger()
 	{
 		if (_inCombat) return;
@@ -350,7 +343,6 @@ public partial class BattleMap : Node2D
 
 		if (enemies.Count == 0 || players.Count == 0) return;
 
-		// Check distance
 		foreach (Vector2I p in players)
 		{
 			foreach (Vector2I e in enemies)
@@ -375,10 +367,7 @@ public partial class BattleMap : Node2D
 		{
 			if (kvp.Value.Type == "Player Fleet" || kvp.Value.Type == "Enemy Fleet")
 			{
-				// d20 + Ship Bonus
 				kvp.Value.CurrentInitiativeRoll = rng.Next(1, 21) + kvp.Value.InitiativeBonus;
-				
-				// Reset their action state for the start of combat
 				kvp.Value.HasAction = true;
 				kvp.Value.CurrentMovement = kvp.Value.MaxMovement;
 				
@@ -386,8 +375,13 @@ public partial class BattleMap : Node2D
 			}
 		}
 
-		// Sort by Highest Initiative
-		_initiativeQueue.Sort((a, b) => b.CurrentInitiativeRoll.CompareTo(a.CurrentInitiativeRoll));
+		// Sort by Highest Initiative (with a tiebreaker for consistency!)
+		_initiativeQueue.Sort((a, b) => {
+			int cmp = b.CurrentInitiativeRoll.CompareTo(a.CurrentInitiativeRoll);
+			if (cmp == 0) return a.Name.CompareTo(b.Name); // Stable sort fallback
+			return cmp;
+		});
+
 		_currentQueueIndex = 0;
 		_currentTurn = 1;
 		_endTurnButton.Text = "END TURN";
@@ -396,9 +390,59 @@ public partial class BattleMap : Node2D
 		StartActiveTurn();
 	}
 
+	private void RestoreCombatState()
+	{
+		_inCombat = true;
+		_currentQueueIndex = _globalData.CurrentQueueIndex;
+		_initiativeQueue.Clear();
+
+		foreach (var kvp in _hexContents)
+		{
+			if (kvp.Value.Type == "Player Fleet" || kvp.Value.Type == "Enemy Fleet")
+			{
+				_initiativeQueue.Add(kvp.Value);
+			}
+		}
+
+		// Re-apply the EXACT same sort used when combat started
+		_initiativeQueue.Sort((a, b) => {
+			int cmp = b.CurrentInitiativeRoll.CompareTo(a.CurrentInitiativeRoll);
+			if (cmp == 0) return a.Name.CompareTo(b.Name); 
+			return cmp;
+		});
+
+		UpdateInitiativeUI();
+		_endTurnButton.Text = "END TURN";
+
+		if (_initiativeQueue.Count > 0)
+		{
+			_activeShip = _initiativeQueue[_currentQueueIndex];
+			Tween camTween = CreateTween();
+			camTween.TweenProperty(_camera, "position", _activeShip.VisualSprite.Position, 0.5f).SetTrans(Tween.TransitionType.Sine);
+
+			if (_activeShip.Type == "Enemy Fleet")
+			{
+				GD.Print($"Resuming Enemy turn: {_activeShip.Name}");
+				GetTree().CreateTimer(1.0f).Timeout += () => ExecuteSingleEnemyAI(_activeShip);
+			}
+			else
+			{
+				GD.Print($"Resuming Player turn: {_activeShip.Name}");
+				foreach (var kvp in _hexContents)
+				{
+					if (kvp.Value == _activeShip)
+					{
+						_selectedHex = kvp.Key;
+						DrawHighlights(_selectedHex.Value, GetReachableHexes(_selectedHex.Value, _activeShip.CurrentMovement).Keys);
+						break;
+					}
+				}
+			}
+		}
+	}
+
 	private void UpdateInitiativeUI()
 	{
-		// Clear old UI
 		foreach (Node child in _initiativeUI.GetChildren()) child.QueueFree();
 
 		if (!_inCombat)
@@ -407,11 +451,10 @@ public partial class BattleMap : Node2D
 			return;
 		}
 
-		// Create a reusable solid black stylebox for the background squares
 		StyleBoxFlat blackSquareStyle = new StyleBoxFlat();
-		blackSquareStyle.BgColor = new Color(0, 0, 0, 1); // Solid black
+		blackSquareStyle.BgColor = new Color(0, 0, 0, 1); 
 		blackSquareStyle.BorderWidthBottom = 2; blackSquareStyle.BorderWidthTop = 2; blackSquareStyle.BorderWidthLeft = 2; blackSquareStyle.BorderWidthRight = 2;
-		blackSquareStyle.BorderColor = new Color(0.3f, 0.3f, 0.3f, 1f); // Dark grey border
+		blackSquareStyle.BorderColor = new Color(0.3f, 0.3f, 0.3f, 1f); 
 
 		for (int i = 0; i < _initiativeQueue.Count; i++)
 		{
@@ -420,43 +463,28 @@ public partial class BattleMap : Node2D
 
 			PanelContainer squarePanel = new PanelContainer();
 			squarePanel.AddThemeStyleboxOverride("panel", blackSquareStyle);
-			squarePanel.CustomMinimumSize = new Vector2(64, 64); // Size of the square
+			squarePanel.CustomMinimumSize = new Vector2(64, 64); 
 			
-			// Highlight the active ship's border
 			if (i == _currentQueueIndex)
 			{
 				StyleBoxFlat activeStyle = blackSquareStyle.Duplicate() as StyleBoxFlat;
-				activeStyle.BorderColor = new Color(0.2f, 1f, 0.2f, 1f); // Bright green border
+				activeStyle.BorderColor = new Color(0.2f, 1f, 0.2f, 1f); 
 				squarePanel.AddThemeStyleboxOverride("panel", activeStyle);
-				_initiativeTurnLabel.Text = $"CURRENT TURN: {ship.Name.ToUpper()}"; // Update label
+				_initiativeTurnLabel.Text = $"CURRENT TURN: {ship.Name.ToUpper()}"; 
 			}
 
-			// Create the icon
 			TextureRect icon = new TextureRect();
 			Texture2D tex = GD.Load<Texture2D>(GetShipTexturePath(ship.Name));
 			icon.Texture = tex;
 			icon.ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize;
 			icon.StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered;
-			
-			// Ensure icon has small padding inside the black square
 			icon.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
 			icon.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
 
-			// Modulate icon color based on type/state
-			if (i == _currentQueueIndex)
-			{
-				icon.Modulate = new Color(0.8f, 1f, 0.8f); // Slight green tint
-			}
-			else if (ship.Type == "Enemy Fleet")
-			{
-				icon.Modulate = new Color(1f, 0.5f, 0.5f); // Red tint for enemies
-			}
-			else 
-			{
-				icon.Modulate = new Color(1f, 1f, 1f, 0.6f); // Dim inactive players slightly
-			}
+			if (i == _currentQueueIndex) icon.Modulate = new Color(0.8f, 1f, 0.8f); 
+			else if (ship.Type == "Enemy Fleet") icon.Modulate = new Color(1f, 0.5f, 0.5f); 
+			else icon.Modulate = new Color(1f, 1f, 1f, 0.6f); 
 			
-			// Add icon to square, add square to UI line
 			squarePanel.AddChild(icon);
 			_initiativeUI.AddChild(squarePanel);
 		}
@@ -464,7 +492,6 @@ public partial class BattleMap : Node2D
 
 	private void StartActiveTurn()
 	{
-		// Clean up dead ships from the queue
 		_initiativeQueue.RemoveAll(s => s.IsDead);
 
 		if (_initiativeQueue.Count == 0 || !AreBothSidesAlive())
@@ -481,27 +508,22 @@ public partial class BattleMap : Node2D
 		}
 
 		_activeShip = _initiativeQueue[_currentQueueIndex];
-		
-		// Refill movement and action for the active ship ONLY
 		_activeShip.CurrentMovement = _activeShip.MaxMovement;
 		_activeShip.HasAction = true;
 
 		UpdateInitiativeUI();
 		
-		// Pan camera to the active ship
 		Tween camTween = CreateTween();
 		camTween.TweenProperty(_camera, "position", _activeShip.VisualSprite.Position, 0.5f).SetTrans(Tween.TransitionType.Sine);
 
 		if (_activeShip.Type == "Enemy Fleet")
 		{
 			GD.Print($"Enemy turn: {_activeShip.Name}");
-			// Brief delay before AI acts
 			GetTree().CreateTimer(1.0f).Timeout += () => ExecuteSingleEnemyAI(_activeShip);
 		}
 		else
 		{
 			GD.Print($"Player turn: {_activeShip.Name}");
-			// Auto-select the player ship
 			foreach (var kvp in _hexContents)
 			{
 				if (kvp.Value == _activeShip)
@@ -535,18 +557,33 @@ public partial class BattleMap : Node2D
 		return playerAlive && enemyAlive;
 	}
 
+	// --- UPDATED: Triggers the Game Over screen if the player loses! ---
 	private void EndCombat()
 	{
 		_inCombat = false;
 		_activeShip = null;
-		GD.Print("COMBAT OVER.");
-		_initiativeTurnLabel.Text = "EXPLORATION MODE";
+		
+		bool playerAlive = false;
+		foreach (var ship in _hexContents.Values)
+		{
+			if (ship.Type == "Player Fleet") playerAlive = true;
+		}
+
+		if (!playerAlive)
+		{
+			GD.Print("GAME OVER!");
+			_gameOverPanel.Visible = true;
+			_initiativeTurnLabel.Text = "FLEET DESTROYED";
+		}
+		else
+		{
+			GD.Print("COMBAT OVER - VICTORY!");
+			_initiativeTurnLabel.Text = "EXPLORATION MODE";
+		}
+		
 		foreach (Node child in _initiativeUI.GetChildren()) child.QueueFree();
 	}
 
-	// ==========================================
-	// COMBAT LOGIC (ATTACKING)
-	// ==========================================
 	private void OnAttackPressed()
 	{
 		_isTargeting = !_isTargeting;
@@ -592,6 +629,9 @@ public partial class BattleMap : Node2D
 			_hexContents.Remove(defenderHex);
 			
 			if (_inCombat) UpdateInitiativeUI();
+			
+			// Force a quick check so the game over screen pops instantly if it's the last ship!
+			if (_inCombat && !AreBothSidesAlive()) EndCombat(); 
 		}
 	}
 
@@ -804,6 +844,10 @@ public partial class BattleMap : Node2D
 		if (_globalData != null)
 		{
 			_globalData.CurrentTurn = _currentTurn;
+			
+			// --- NEW: Hand Combat State variables over to the save file ---
+			_globalData.InCombat = _inCombat;
+			_globalData.CurrentQueueIndex = _currentQueueIndex;
 
 			var playerState = new Godot.Collections.Array();
 			var enemyState = new Godot.Collections.Array(); 
@@ -819,6 +863,9 @@ public partial class BattleMap : Node2D
 					shipDict["CurrentShields"] = kvp.Value.CurrentShields; shipDict["MaxShields"] = kvp.Value.MaxShields;
 					shipDict["CurrentMovement"] = kvp.Value.CurrentMovement; shipDict["MaxMovement"] = kvp.Value.MaxMovement;
 					shipDict["HasAction"] = kvp.Value.HasAction; 
+					
+					// --- NEW: Pack the roll into the save data! ---
+					shipDict["CurrentInitiativeRoll"] = kvp.Value.CurrentInitiativeRoll; 
 					
 					if (kvp.Value.Type == "Player Fleet") playerState.Add(shipDict);
 					if (kvp.Value.Type == "Enemy Fleet") enemyState.Add(shipDict);
@@ -944,6 +991,34 @@ public partial class BattleMap : Node2D
 		CanvasLayer uiLayer = new CanvasLayer { Layer = 10 }; 
 		AddChild(uiLayer);
 
+		// --- NEW: Game Over Splash Screen Setup ---
+		Vector2 screenSize = GetViewportRect().Size;
+		
+		_gameOverPanel = new ColorRect();
+		_gameOverPanel.Color = new Color(0, 0, 0, 0.85f); 
+		_gameOverPanel.Size = screenSize;
+		_gameOverPanel.Visible = false; 
+		
+		VBoxContainer goVbox = new VBoxContainer();
+		goVbox.SetAnchorsPreset(Control.LayoutPreset.Center);
+		goVbox.Alignment = BoxContainer.AlignmentMode.Center;
+		_gameOverPanel.AddChild(goVbox);
+
+		Label goLabel = new Label();
+		goLabel.Text = "FLEET DESTROYED";
+		goLabel.AddThemeFontSizeOverride("font_size", 64);
+		goLabel.AddThemeColorOverride("font_color", new Color(1f, 0.2f, 0.2f)); 
+		goLabel.HorizontalAlignment = HorizontalAlignment.Center;
+		goVbox.AddChild(goLabel);
+
+		Button returnBtn = new Button();
+		returnBtn.Text = "RETURN TO MAIN MENU";
+		returnBtn.CustomMinimumSize = new Vector2(250, 60);
+		returnBtn.Pressed += OnMainMenuPressed;
+		goVbox.AddChild(returnBtn);
+		
+		// ------------------------------------------
+
 		VBoxContainer topContainer = new VBoxContainer();
 		topContainer.Position = new Vector2(20, 20);
 		topContainer.AddThemeConstantOverride("separation", 5);
@@ -958,7 +1033,6 @@ public partial class BattleMap : Node2D
 		_initiativeUI.AddThemeConstantOverride("separation", 10); 
 		topContainer.AddChild(_initiativeUI);
 
-		Vector2 screenSize = GetViewportRect().Size;
 		_infoPanel = new PanelContainer();
 		_infoPanel.Position = new Vector2(20, screenSize.Y - 200); 
 		
@@ -1033,6 +1107,9 @@ public partial class BattleMap : Node2D
 		_attackButton.Pressed += OnAttackPressed;
 		_attackButton.Visible = false; 
 		uiLayer.AddChild(_attackButton);
+		
+		// ALWAYS add the Game Over screen last so it draws on top of everything else!
+		uiLayer.AddChild(_gameOverPanel);
 	}
 
 	private Vector2I PixelToHex(Vector2 pt)
@@ -1139,7 +1216,9 @@ public partial class BattleMap : Node2D
 					MaxHP = (int)shipDict["MaxHP"], CurrentHP = (int)shipDict["CurrentHP"],
 					MaxShields = (int)shipDict["MaxShields"], CurrentShields = (int)shipDict["CurrentShields"],
 					InitiativeBonus = GetShipInitiativeBonus(shipName),
-					BaseRotationOffset = GetShipRotationOffset(shipName)
+					BaseRotationOffset = GetShipRotationOffset(shipName),
+					// --- NEW: Load the Initiative Roll! ---
+					CurrentInitiativeRoll = shipDict.ContainsKey("CurrentInitiativeRoll") ? (int)shipDict["CurrentInitiativeRoll"] : 0
 				};
 				SpawnEntityAtHex(spawnPos, GetShipTexturePath(shipName), shipData, 0.2f); 
 			}
@@ -1191,7 +1270,9 @@ public partial class BattleMap : Node2D
 					MaxHP = (int)shipDict["MaxHP"], CurrentHP = (int)shipDict["CurrentHP"],
 					MaxShields = (int)shipDict["MaxShields"], CurrentShields = (int)shipDict["CurrentShields"],
 					InitiativeBonus = GetShipInitiativeBonus(shipName),
-					BaseRotationOffset = GetShipRotationOffset(shipName)
+					BaseRotationOffset = GetShipRotationOffset(shipName),
+					// --- NEW: Load the Initiative Roll! ---
+					CurrentInitiativeRoll = shipDict.ContainsKey("CurrentInitiativeRoll") ? (int)shipDict["CurrentInitiativeRoll"] : 0
 				};
 				SpawnEntityAtHex(spawnPos, GetShipTexturePath(shipName), shipData, 0.2f); 
 			}
