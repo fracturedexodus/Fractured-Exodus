@@ -1413,6 +1413,12 @@ public partial class BattleMap : Node2D
 		{
 			case "The Valkyrie Wing": return "res://Sounds/ValkyrieWing.wav";
 			case "The Aegis Bastion": return "res://Sounds/HeavyThrusters.wav";
+			case "The Panacea Spire": return "res://Sounds/PanaceaSpire.wav";
+			case "The Aether Skimmer": return "res://Sounds/AetherSkimmer.wav";
+			case "The Genesis Ark": return "res://Sounds/GenesisArk.wav";
+			case "The Neptune Forge": return "res://Sounds/NeptuneForge.wav";
+			case "The Relic Harvester": return "res://Sounds/RelicHarvester.mp3";
+			
 			default: return ""; 
 		}
 	}
