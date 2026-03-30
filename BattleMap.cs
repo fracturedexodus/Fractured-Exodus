@@ -107,6 +107,13 @@ public partial class BattleMap : Node2D
 	private HBoxContainer _initiativeUI; 
 	private Label _initiativeTurnLabel; 
 	private ColorRect _gameOverPanel; 
+	
+	// --- NEW: Ship specific right-side menu ---
+	private PanelContainer _shipMenuPanel; 
+	private Label _shipMenuTitle;
+	private Label _shipMenuDetails;
+	private Button _codexButton;
+	private Button _closeMenuButton;
 
 	private Vector2I[] _hexDirections = new Vector2I[] {
 		new Vector2I(1, 0), new Vector2I(1, -1), new Vector2I(0, -1), 
@@ -179,7 +186,7 @@ public partial class BattleMap : Node2D
 		if (Input.IsKeyPressed(Key.D)) panDirection.X += 1;
 		if (panDirection != Vector2.Zero) _camera.Position += panDirection.Normalized() * _panSpeed * (float)delta * (1.0f / _camera.Zoom.X);
 		
-		// --- UPDATED: Rotate ALL selected ships towards the mouse ---
+		// Rotate ALL selected ships towards the mouse
 		foreach (Vector2I hex in _selectedHexes)
 		{
 			if (_hexContents.ContainsKey(hex))
@@ -216,7 +223,7 @@ public partial class BattleMap : Node2D
 			_attackButton.Text = "ATTACK";
 		}
 
-		// --- NEW: FOG OF WAR (Enemy Visibility Check) ---
+		// FOG OF WAR (Enemy Visibility Check)
 		List<Vector2I> playerPositions = new List<Vector2I>();
 		foreach (var kvp in _hexContents)
 		{
@@ -229,7 +236,6 @@ public partial class BattleMap : Node2D
 			{
 				bool isVisible = false;
 				
-				// Check distance to all player ships
 				foreach (Vector2I playerPos in playerPositions)
 				{
 					if (HexDistance(kvp.Key, playerPos) <= _scanningRange)
@@ -239,7 +245,6 @@ public partial class BattleMap : Node2D
 					}
 				}
 				
-				// Reveal or hide the enemy sprite
 				kvp.Value.VisualSprite.Visible = isVisible;
 			}
 		}
@@ -256,7 +261,7 @@ public partial class BattleMap : Node2D
 				_camera.Zoom = new Vector2(Mathf.Clamp(_camera.Zoom.X, _minZoom, _maxZoom), Mathf.Clamp(_camera.Zoom.Y, _minZoom, _maxZoom));
 			}
 			
-			// --- LEFT CLICK: Drag Select ---
+			// --- LEFT CLICK: Drag Select & Open Ship Menu ---
 			if (mouseButton.ButtonIndex == MouseButton.Left)
 			{
 				if (mouseButton.IsPressed())
@@ -277,10 +282,9 @@ public partial class BattleMap : Node2D
 
 					Rect2 selectionRect = new Rect2(_dragStartPos, GetGlobalMousePosition() - _dragStartPos).Abs();
 					
-					// Don't clear selection yet if we are in targeting mode
 					if (!_isTargeting) _selectedHexes.Clear();
 
-					// If it was just a quick click, select a single hex
+					// Quick click
 					if (selectionRect.Area < 100)
 					{
 						Vector2I clickedHex = PixelToHex(GetGlobalMousePosition());
@@ -309,15 +313,26 @@ public partial class BattleMap : Node2D
 							return; 
 						}
 
-						if (_hexContents.ContainsKey(clickedHex) && _hexContents[clickedHex].Type == "Player Fleet")
+						// Select a ship and open its specific menu
+						if (_hexContents.ContainsKey(clickedHex) && (_hexContents[clickedHex].Type == "Player Fleet" || _hexContents[clickedHex].Type == "Enemy Fleet"))
 						{
-							if (!_inCombat || _hexContents[clickedHex] == _activeShip)
-								_selectedHexes.Add(clickedHex);
+							// Only select players for movement out of combat, or the active ship in combat
+							if (_hexContents[clickedHex].Type == "Player Fleet")
+							{
+								if (!_inCombat || _hexContents[clickedHex] == _activeShip) _selectedHexes.Add(clickedHex);
+							}
+							
+							// If the ship is visible, slide the side menu open!
+							if (_hexContents[clickedHex].VisualSprite.Visible) ToggleShipMenu(true, _hexContents[clickedHex]);
+						}
+						else
+						{
+							ToggleShipMenu(false); // Close menu if clicking empty space
 						}
 					}
 					else 
 					{
-						// Box selection logic (Only allow group select out of combat)
+						// Box selection logic
 						if (!_inCombat) 
 						{
 							foreach (var kvp in _hexContents)
@@ -326,6 +341,7 @@ public partial class BattleMap : Node2D
 									_selectedHexes.Add(kvp.Key);
 							}
 						}
+						ToggleShipMenu(false); // Close individual ship menu on group select
 					}
 					UpdateHighlights();
 				}
@@ -392,7 +408,7 @@ public partial class BattleMap : Node2D
 			{
 				MapEntity entity = _hexContents[hoveredHex];
 
-				// --- UPDATED: Prevent tooltips from revealing hidden enemies ---
+				// Prevent tooltips from revealing hidden enemies
 				if (entity.Type == "Enemy Fleet" && !entity.VisualSprite.Visible)
 				{
 					_infoPanel.Visible = false;
@@ -414,6 +430,53 @@ public partial class BattleMap : Node2D
 			}
 			else _infoPanel.Visible = false; 
 		}
+	}
+
+	// --- NEW: Toggle the Slide-Out Ship Terminal ---
+	private void ToggleShipMenu(bool expand, MapEntity ship = null)
+	{
+		Tween tween = CreateTween();
+		Vector2 screenSize = GetViewportRect().Size;
+		
+		// Target X: If expanding, bring it in by 320px. If closing, push it off screen + 50px buffer.
+		float targetX = expand ? screenSize.X - 320 : screenSize.X + 50; 
+		
+		tween.TweenProperty(_shipMenuPanel, "position:x", targetX, 0.3f).SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.Out);
+		
+		if (expand && ship != null)
+		{
+			_shipMenuTitle.Text = $"== {ship.Name.ToUpper()} ==";
+			
+			string status = ship.Type == "Enemy Fleet" ? "[HOSTILE]" : "[ALLIED]";
+			
+			_shipMenuDetails.Text = 
+				$"Classification: {ship.Type}\n" +
+				$"Status: {status}\n\n" +
+				$"Hull Integrity: {ship.CurrentHP}/{ship.MaxHP}\n" +
+				$"Shield Capacitors: {ship.CurrentShields}/{ship.MaxShields}\n" +
+				$"Engine Output: {ship.CurrentMovement}/{ship.MaxMovement}\n\n" +
+				$"Weapon Payload: {ship.AttackDamage} Dmg\n" +
+				$"Targeting Range: {ship.AttackRange} Hexes\n\n" +
+				$"SYS_LOG:\n{ship.Details}";
+				
+			// Don't let the player open the Codex for enemy ships (unless you want them to!)
+			_codexButton.Visible = (ship.Type == "Player Fleet");
+		}
+	}
+
+	// --- NEW: Codex Scene Transition ---
+	private void OnCodexPressed()
+	{
+		GD.Print("Opening Codex Terminal...");
+		
+		// Save the exact state of the battle/exploration map before leaving so we don't lose progress!
+		OnSaveGamePressed(); 
+		
+		SceneTransition transitioner = GetNodeOrNull<SceneTransition>("/root/SceneTransition");
+		if (transitioner != null) 
+			transitioner.ChangeScene("res://codex.tscn");
+		else 
+			GetTree().ChangeSceneToFile("res://codex.tscn");
 	}
 
 	// --- EXPLORATION FLEET MOVEMENT ---
@@ -554,6 +617,9 @@ public partial class BattleMap : Node2D
 				kvp.Value.HasAction = true;
 				kvp.Value.CurrentMovement = kvp.Value.MaxMovement;
 				
+				// Make sure enemies become visible when combat starts!
+				if (IsInstanceValid(kvp.Value.VisualSprite)) kvp.Value.VisualSprite.Visible = true;
+				
 				_initiativeQueue.Add(kvp.Value);
 			}
 		}
@@ -583,6 +649,7 @@ public partial class BattleMap : Node2D
 		{
 			if (kvp.Value.Type == "Player Fleet" || kvp.Value.Type == "Enemy Fleet")
 			{
+				if (IsInstanceValid(kvp.Value.VisualSprite)) kvp.Value.VisualSprite.Visible = true;
 				_initiativeQueue.Add(kvp.Value);
 			}
 		}
@@ -712,6 +779,7 @@ public partial class BattleMap : Node2D
 				if (kvp.Value == _activeShip)
 				{
 					_selectedHexes.Add(kvp.Key);
+					ToggleShipMenu(true, _activeShip); // Auto-open menu for active ship
 					UpdateHighlights();
 					break;
 				}
@@ -723,6 +791,7 @@ public partial class BattleMap : Node2D
 	{
 		if (!_inCombat) return;
 		_selectedHexes.Clear();
+		ToggleShipMenu(false); // Close side menu on turn end
 		UpdateHighlights();
 		_currentQueueIndex++;
 		StartActiveTurn();
@@ -1008,6 +1077,7 @@ public partial class BattleMap : Node2D
 				}
 			}
 			_selectedHexes.Clear();
+			ToggleShipMenu(false);
 			UpdateHighlights();
 			_endTurnButton.Text = $"TURN {_currentTurn}";
 		}
@@ -1271,7 +1341,48 @@ public partial class BattleMap : Node2D
 		_attackButton.Visible = false; 
 		uiLayer.AddChild(_attackButton);
 		
-		uiLayer.AddChild(_gameOverPanel);
+		// --- NEW: Ship Action Terminal Setup ---
+		_shipMenuPanel = new PanelContainer();
+		_shipMenuPanel.CustomMinimumSize = new Vector2(300, 400);
+		
+		StyleBoxFlat terminalStyle = new StyleBoxFlat();
+		terminalStyle.BgColor = new Color(0.05f, 0.1f, 0.15f, 0.95f); 
+		terminalStyle.BorderWidthBottom = 2; terminalStyle.BorderWidthTop = 2; terminalStyle.BorderWidthLeft = 2; terminalStyle.BorderWidthRight = 2;
+		terminalStyle.BorderColor = new Color(0.2f, 0.8f, 1f, 1f); 
+		terminalStyle.CornerRadiusTopLeft = 10; terminalStyle.CornerRadiusBottomLeft = 10;
+		_shipMenuPanel.AddThemeStyleboxOverride("panel", terminalStyle);
+		
+		// Start it hidden off-screen to the right
+		_shipMenuPanel.Position = new Vector2(screenSize.X + 50, screenSize.Y - 450); 
+		
+		VBoxContainer shipMenuVbox = new VBoxContainer();
+		shipMenuVbox.AddThemeConstantOverride("separation", 15);
+		_shipMenuPanel.AddChild(shipMenuVbox);
+
+		_shipMenuTitle = new Label();
+		_shipMenuTitle.AddThemeFontSizeOverride("font_size", 18);
+		_shipMenuTitle.AddThemeColorOverride("font_color", new Color(0.2f, 0.8f, 1f));
+		_shipMenuTitle.HorizontalAlignment = HorizontalAlignment.Center;
+		shipMenuVbox.AddChild(_shipMenuTitle);
+
+		_shipMenuDetails = new Label();
+		_shipMenuDetails.AutowrapMode = TextServer.AutowrapMode.Word;
+		shipMenuVbox.AddChild(_shipMenuDetails);
+
+		_codexButton = new Button();
+		_codexButton.Text = "ACCESS CODEX";
+		_codexButton.CustomMinimumSize = new Vector2(0, 40);
+		_codexButton.Pressed += OnCodexPressed;
+		shipMenuVbox.AddChild(_codexButton);
+
+		_closeMenuButton = new Button();
+		_closeMenuButton.Text = "CLOSE TERMINAL";
+		_closeMenuButton.CustomMinimumSize = new Vector2(0, 40);
+		_closeMenuButton.Pressed += () => ToggleShipMenu(false);
+		shipMenuVbox.AddChild(_closeMenuButton);
+
+		uiLayer.AddChild(_shipMenuPanel);
+		uiLayer.AddChild(_gameOverPanel); // Keep this last!
 	}
 
 	private Vector2I PixelToHex(Vector2 pt)
