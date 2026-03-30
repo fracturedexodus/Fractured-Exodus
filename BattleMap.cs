@@ -2,6 +2,24 @@ using Godot;
 using System;
 using System.Collections.Generic;
 
+// --- Custom Node to draw the drag-selection box ---
+public partial class SelectionBox : Node2D
+{
+	public Vector2 StartPos;
+	public Vector2 EndPos;
+	public bool IsDragging = false;
+
+	public override void _Draw()
+	{
+		if (IsDragging)
+		{
+			Rect2 rect = new Rect2(StartPos, EndPos - StartPos).Abs();
+			DrawRect(rect, new Color(0.2f, 0.8f, 1f, 0.3f), true); // Transparent fill
+			DrawRect(rect, new Color(0.2f, 0.8f, 1f, 0.8f), false, 2f); // Solid border
+		}
+	}
+}
+
 public partial class BattleMap : Node2D
 {
 	// --- MAP SETTINGS ---
@@ -24,6 +42,7 @@ public partial class BattleMap : Node2D
 	private Node2D _gridLayer = new Node2D();  
 	private Node2D _highlightLayer = new Node2D(); 
 	private Node2D _entityLayer = new Node2D(); 
+	private SelectionBox _selectionBox; // The drag box overlay
 
 	private Dictionary<Vector2I, Node2D> _hexGrid = new Dictionary<Vector2I, Node2D>();
 	
@@ -65,13 +84,16 @@ public partial class BattleMap : Node2D
 		"Reformatter Dreadnought", "Scrap-Stick Subversion Drone"
 	};
 
-	// --- BG3 COMBAT STATE ---
+	// --- COMBAT STATE & SELECTION ---
 	private bool _inCombat = false;
 	private List<MapEntity> _initiativeQueue = new List<MapEntity>();
 	private int _currentQueueIndex = 0;
 	private MapEntity _activeShip = null;
 
-	private Vector2I? _selectedHex = null; 
+	private List<Vector2I> _selectedHexes = new List<Vector2I>(); 
+	private bool _isDragging = false;
+	private Vector2 _dragStartPos;
+	
 	private int _currentTurn = 1; 
 	private bool _isTargeting = false; 
 
@@ -84,7 +106,7 @@ public partial class BattleMap : Node2D
 	private Button _attackButton; 
 	private HBoxContainer _initiativeUI; 
 	private Label _initiativeTurnLabel; 
-	private ColorRect _gameOverPanel; // --- NEW: Game Over Screen
+	private ColorRect _gameOverPanel; 
 
 	private Vector2I[] _hexDirections = new Vector2I[] {
 		new Vector2I(1, 0), new Vector2I(1, -1), new Vector2I(0, -1), 
@@ -100,6 +122,9 @@ public partial class BattleMap : Node2D
 		AddChild(_gridLayer);
 		AddChild(_highlightLayer);
 		AddChild(_entityLayer);
+
+		_selectionBox = new SelectionBox();
+		AddChild(_selectionBox);
 
 		SetupCamera();
 		SetupSpaceBackground();
@@ -146,6 +171,7 @@ public partial class BattleMap : Node2D
 
 	public override void _Process(double delta)
 	{
+		// Camera Movement
 		Vector2 panDirection = Vector2.Zero;
 		if (Input.IsKeyPressed(Key.W)) panDirection.Y -= 1;
 		if (Input.IsKeyPressed(Key.S)) panDirection.Y += 1;
@@ -153,17 +179,26 @@ public partial class BattleMap : Node2D
 		if (Input.IsKeyPressed(Key.D)) panDirection.X += 1;
 		if (panDirection != Vector2.Zero) _camera.Position += panDirection.Normalized() * _panSpeed * (float)delta * (1.0f / _camera.Zoom.X);
 		
-		if (_selectedHex.HasValue && _hexContents.ContainsKey(_selectedHex.Value))
+		// --- UPDATED: Rotate ALL selected ships towards the mouse ---
+		foreach (Vector2I hex in _selectedHexes)
 		{
-			MapEntity selectedShip = _hexContents[_selectedHex.Value];
-			if (IsInstanceValid(selectedShip.VisualSprite))
+			if (_hexContents.ContainsKey(hex))
 			{
-				Vector2 mousePos = GetGlobalMousePosition();
-				float targetAngle = selectedShip.VisualSprite.GlobalPosition.AngleToPoint(mousePos) + selectedShip.BaseRotationOffset;
-				selectedShip.VisualSprite.Rotation = Mathf.LerpAngle(selectedShip.VisualSprite.Rotation, targetAngle, 0.15f);
+				MapEntity selectedShip = _hexContents[hex];
+				if (IsInstanceValid(selectedShip.VisualSprite))
+				{
+					Vector2 mousePos = GetGlobalMousePosition();
+					float targetAngle = selectedShip.VisualSprite.GlobalPosition.AngleToPoint(mousePos) + selectedShip.BaseRotationOffset;
+					selectedShip.VisualSprite.Rotation = Mathf.LerpAngle(selectedShip.VisualSprite.Rotation, targetAngle, 0.15f);
+				}
 			}
+		}
 
-			if (selectedShip.Type == "Player Fleet" && selectedShip.HasAction && (!_inCombat || selectedShip == _activeShip))
+		// Attack Button UI Logic (Only applies if exactly 1 ship is selected for targeting)
+		if (_selectedHexes.Count == 1 && _hexContents.ContainsKey(_selectedHexes[0]))
+		{
+			MapEntity singleShip = _hexContents[_selectedHexes[0]];
+			if (singleShip.Type == "Player Fleet" && singleShip.HasAction && (!_inCombat || singleShip == _activeShip))
 			{
 				_attackButton.Visible = true;
 			}
@@ -180,126 +215,165 @@ public partial class BattleMap : Node2D
 			_isTargeting = false;
 			_attackButton.Text = "ATTACK";
 		}
+
+		// --- NEW: FOG OF WAR (Enemy Visibility Check) ---
+		List<Vector2I> playerPositions = new List<Vector2I>();
+		foreach (var kvp in _hexContents)
+		{
+			if (kvp.Value.Type == "Player Fleet") playerPositions.Add(kvp.Key);
+		}
+
+		foreach (var kvp in _hexContents)
+		{
+			if (kvp.Value.Type == "Enemy Fleet" && IsInstanceValid(kvp.Value.VisualSprite))
+			{
+				bool isVisible = false;
+				
+				// Check distance to all player ships
+				foreach (Vector2I playerPos in playerPositions)
+				{
+					if (HexDistance(kvp.Key, playerPos) <= _scanningRange)
+					{
+						isVisible = true;
+						break;
+					}
+				}
+				
+				// Reveal or hide the enemy sprite
+				kvp.Value.VisualSprite.Visible = isVisible;
+			}
+		}
 	}
 
 	public override void _UnhandledInput(InputEvent @event)
 	{
-		if (@event is InputEventMouseButton mouseButton && mouseButton.IsPressed())
+		if (@event is InputEventMouseButton mouseButton)
 		{
-			if (mouseButton.ButtonIndex == MouseButton.WheelUp) _camera.Zoom += new Vector2(_zoomSpeed, _zoomSpeed);
-			else if (mouseButton.ButtonIndex == MouseButton.WheelDown) _camera.Zoom -= new Vector2(_zoomSpeed, _zoomSpeed);
-			_camera.Zoom = new Vector2(Mathf.Clamp(_camera.Zoom.X, _minZoom, _maxZoom), Mathf.Clamp(_camera.Zoom.Y, _minZoom, _maxZoom));
-			
-			if (mouseButton.ButtonIndex == MouseButton.Right)
+			if (mouseButton.IsPressed())
 			{
-				if (_inCombat && _activeShip != null && _activeShip.Type == "Player Fleet" && _activeShip.HasAction)
-				{
-					Vector2I clickedHex = PixelToHex(GetGlobalMousePosition());
-					
-					if (_hexContents.ContainsKey(clickedHex) && _hexContents[clickedHex].Type == "Enemy Fleet")
-					{
-						Vector2I activeShipHex = new Vector2I(0, 0);
-						foreach (var kvp in _hexContents)
-						{
-							if (kvp.Value == _activeShip)
-							{
-								activeShipHex = kvp.Key;
-								break;
-							}
-						}
-
-						int dist = HexDistance(activeShipHex, clickedHex);
-						if (dist <= _activeShip.AttackRange)
-						{
-							PerformAttack(activeShipHex, clickedHex);
-							_isTargeting = false;
-							_attackButton.Text = "ATTACK";
-							CheckForCombatTrigger();
-						}
-						else
-						{
-							GD.Print("Target out of range!");
-						}
-					}
-				}
-				return; 
+				if (mouseButton.ButtonIndex == MouseButton.WheelUp) _camera.Zoom += new Vector2(_zoomSpeed, _zoomSpeed);
+				else if (mouseButton.ButtonIndex == MouseButton.WheelDown) _camera.Zoom -= new Vector2(_zoomSpeed, _zoomSpeed);
+				_camera.Zoom = new Vector2(Mathf.Clamp(_camera.Zoom.X, _minZoom, _maxZoom), Mathf.Clamp(_camera.Zoom.Y, _minZoom, _maxZoom));
 			}
-
+			
+			// --- LEFT CLICK: Drag Select ---
 			if (mouseButton.ButtonIndex == MouseButton.Left)
 			{
-				Vector2I clickedHex = PixelToHex(GetGlobalMousePosition());
-
-				if (_isTargeting && _selectedHex.HasValue)
+				if (mouseButton.IsPressed())
 				{
-					if (_hexContents.ContainsKey(clickedHex) && _hexContents[clickedHex].Type == "Enemy Fleet")
-					{
-						int dist = HexDistance(_selectedHex.Value, clickedHex);
-						MapEntity attacker = _hexContents[_selectedHex.Value];
-						
-						if (dist <= attacker.AttackRange)
-						{
-							PerformAttack(_selectedHex.Value, clickedHex);
-							_isTargeting = false;
-							_attackButton.Text = "ATTACK";
-							CheckForCombatTrigger(); 
-						}
-						else GD.Print("Target out of range!");
-					}
-					else
-					{
-						_isTargeting = false;
-						_attackButton.Text = "ATTACK";
-					}
-					return; 
-				}
-
-				if (_selectedHex.HasValue)
-				{
-					MapEntity ship = _hexContents[_selectedHex.Value];
-					
-					if (_inCombat && ship != _activeShip)
-					{
-						_selectedHex = null;
-						ClearHighlights();
-						return; 
-					}
-
-					Dictionary<Vector2I, int> reachable = GetReachableHexes(_selectedHex.Value, ship.CurrentMovement);
-
-					if (reachable.ContainsKey(clickedHex) && clickedHex != _selectedHex.Value)
-					{
-						int movementCost = reachable[clickedHex];
-						MoveShip(_selectedHex.Value, clickedHex, movementCost);
-						_selectedHex = null;
-						ClearHighlights();
-						
-						if (!_inCombat) CheckForCombatTrigger(); 
-					}
-					else if (_hexContents.ContainsKey(clickedHex) && _hexContents[clickedHex].Type == "Player Fleet")
-					{
-						if (!_inCombat || _hexContents[clickedHex] == _activeShip)
-						{
-							_selectedHex = clickedHex;
-							reachable = GetReachableHexes(clickedHex, _hexContents[clickedHex].CurrentMovement);
-							DrawHighlights(clickedHex, reachable.Keys);
-						}
-					}
-					else
-					{
-						_selectedHex = null;
-						ClearHighlights();
-					}
+					_isDragging = true;
+					_dragStartPos = GetGlobalMousePosition();
+					_selectionBox.StartPos = _dragStartPos;
+					_selectionBox.EndPos = _dragStartPos;
+					_selectionBox.IsDragging = true;
+					_selectionBox.QueueRedraw();
 				}
 				else
 				{
-					if (_hexContents.ContainsKey(clickedHex) && _hexContents[clickedHex].Type == "Player Fleet")
+					// Mouse Released
+					_isDragging = false;
+					_selectionBox.IsDragging = false;
+					_selectionBox.QueueRedraw();
+
+					Rect2 selectionRect = new Rect2(_dragStartPos, GetGlobalMousePosition() - _dragStartPos).Abs();
+					
+					// Don't clear selection yet if we are in targeting mode
+					if (!_isTargeting) _selectedHexes.Clear();
+
+					// If it was just a quick click, select a single hex
+					if (selectionRect.Area < 100)
 					{
-						if (!_inCombat || _hexContents[clickedHex] == _activeShip)
+						Vector2I clickedHex = PixelToHex(GetGlobalMousePosition());
+
+						if (_isTargeting && _selectedHexes.Count == 1)
 						{
-							_selectedHex = clickedHex;
-							Dictionary<Vector2I, int> reachable = GetReachableHexes(clickedHex, _hexContents[clickedHex].CurrentMovement);
-							DrawHighlights(clickedHex, reachable.Keys);
+							if (_hexContents.ContainsKey(clickedHex) && _hexContents[clickedHex].Type == "Enemy Fleet")
+							{
+								int dist = HexDistance(_selectedHexes[0], clickedHex);
+								MapEntity attacker = _hexContents[_selectedHexes[0]];
+								
+								if (dist <= attacker.AttackRange)
+								{
+									PerformAttack(_selectedHexes[0], clickedHex);
+									_isTargeting = false;
+									_attackButton.Text = "ATTACK";
+									CheckForCombatTrigger(); 
+								}
+								else GD.Print("Target out of range!");
+							}
+							else
+							{
+								_isTargeting = false;
+								_attackButton.Text = "ATTACK";
+							}
+							return; 
 						}
+
+						if (_hexContents.ContainsKey(clickedHex) && _hexContents[clickedHex].Type == "Player Fleet")
+						{
+							if (!_inCombat || _hexContents[clickedHex] == _activeShip)
+								_selectedHexes.Add(clickedHex);
+						}
+					}
+					else 
+					{
+						// Box selection logic (Only allow group select out of combat)
+						if (!_inCombat) 
+						{
+							foreach (var kvp in _hexContents)
+							{
+								if (kvp.Value.Type == "Player Fleet" && selectionRect.HasPoint(HexToPixel(kvp.Key)))
+									_selectedHexes.Add(kvp.Key);
+							}
+						}
+					}
+					UpdateHighlights();
+				}
+			}
+			
+			// --- RIGHT CLICK: Issue Order (Move / Attack) ---
+			if (mouseButton.ButtonIndex == MouseButton.Right && mouseButton.IsPressed())
+			{
+				Vector2I clickedHex = PixelToHex(GetGlobalMousePosition());
+
+				if (_inCombat)
+				{
+					if (_activeShip != null && _activeShip.Type == "Player Fleet" && _selectedHexes.Count > 0)
+					{
+						Vector2I activeHex = _selectedHexes[0];
+						
+						// Attack Enemy
+						if (_hexContents.ContainsKey(clickedHex) && _hexContents[clickedHex].Type == "Enemy Fleet")
+						{
+							if (_activeShip.HasAction && HexDistance(activeHex, clickedHex) <= _activeShip.AttackRange)
+							{
+								PerformAttack(activeHex, clickedHex);
+								_isTargeting = false;
+								_attackButton.Text = "ATTACK";
+								CheckForCombatTrigger();
+							}
+							else GD.Print("Target out of range or action spent!");
+						}
+						// Move Ship
+						else
+						{
+							Dictionary<Vector2I, int> reachable = GetReachableHexes(activeHex, _activeShip.CurrentMovement);
+							if (reachable.ContainsKey(clickedHex) && clickedHex != activeHex)
+							{
+								MoveShip(activeHex, clickedHex, reachable[clickedHex]);
+								_selectedHexes.Clear();
+								_selectedHexes.Add(clickedHex);
+								UpdateHighlights();
+								CheckForCombatTrigger();
+							}
+						}
+					}
+				}
+				else // OUT OF COMBAT: Free Group Movement
+				{
+					if (_selectedHexes.Count > 0)
+					{
+						MoveGroup(_selectedHexes, clickedHex);
 					}
 				}
 			}
@@ -307,10 +381,24 @@ public partial class BattleMap : Node2D
 
 		if (@event is InputEventMouseMotion)
 		{
+			if (_isDragging)
+			{
+				_selectionBox.EndPos = GetGlobalMousePosition();
+				_selectionBox.QueueRedraw();
+			}
+
 			Vector2I hoveredHex = PixelToHex(GetGlobalMousePosition());
 			if (_hexContents.ContainsKey(hoveredHex))
 			{
 				MapEntity entity = _hexContents[hoveredHex];
+
+				// --- UPDATED: Prevent tooltips from revealing hidden enemies ---
+				if (entity.Type == "Enemy Fleet" && !entity.VisualSprite.Visible)
+				{
+					_infoPanel.Visible = false;
+					return;
+				}
+
 				string dynamicStats = "";
 				if (entity.Type == "Player Fleet" || entity.Type == "Enemy Fleet")
 				{
@@ -328,6 +416,100 @@ public partial class BattleMap : Node2D
 		}
 	}
 
+	// --- EXPLORATION FLEET MOVEMENT ---
+	private void MoveGroup(List<Vector2I> shipsToMove, Vector2I targetHex)
+	{
+		if (shipsToMove.Count == 0) return;
+
+		// The first selected ship is our "anchor" for keeping formation
+		Vector2I anchorHex = shipsToMove[0];
+		List<Vector2I> newSelection = new List<Vector2I>();
+
+		// Sort ships by distance to target so the front ships move first
+		shipsToMove.Sort((a, b) => HexDistance(a, targetHex).CompareTo(HexDistance(b, targetHex)));
+
+		foreach (Vector2I shipHex in shipsToMove)
+		{
+			Vector2I offset = new Vector2I(shipHex.X - anchorHex.X, shipHex.Y - anchorHex.Y);
+			Vector2I desiredTarget = new Vector2I(targetHex.X + offset.X, targetHex.Y + offset.Y);
+
+			Vector2I finalHex = FindNearestEmptyHex(desiredTarget);
+
+			if (finalHex != shipHex)
+			{
+				MoveShip(shipHex, finalHex, 0); // Cost is 0 out of combat
+				newSelection.Add(finalHex);
+			}
+			else
+			{
+				newSelection.Add(shipHex);
+			}
+		}
+		
+		_selectedHexes = newSelection;
+		UpdateHighlights();
+		CheckForCombatTrigger();
+	}
+
+	private Vector2I FindNearestEmptyHex(Vector2I target)
+	{
+		if (IsHexEmpty(target)) return target;
+		
+		int radius = 1;
+		while (radius < 15) // Search outward in rings
+		{
+			Vector2I current = target + _hexDirections[4] * radius;
+			for (int i = 0; i < 6; i++)
+			{
+				for (int j = 0; j < radius; j++)
+				{
+					if (IsHexEmpty(current)) return current;
+					current += _hexDirections[i];
+				}
+			}
+			radius++;
+		}
+		return target; 
+	}
+
+	private bool IsHexEmpty(Vector2I hex)
+	{
+		if (!_hexGrid.ContainsKey(hex)) return false; 
+		
+		if (_hexContents.ContainsKey(hex))
+		{
+			string type = _hexContents[hex].Type;
+			if (type == "Planet" || type == "Base Planet (Player Start)" || type == "Celestial Body" || type == "Player Fleet" || type == "Enemy Fleet")
+				return false; 
+		}
+		return true;
+	}
+
+	private void UpdateHighlights()
+	{
+		ClearHighlights(); 
+
+		// Highlight all currently selected ships in yellow
+		foreach (Vector2I hex in _selectedHexes)
+		{
+			CreateHighlightPolygon(hex, new Color(1f, 0.8f, 0f, 0.6f)); 
+		}
+
+		// Only show green pathfinding highlights during active combat
+		if (_inCombat && _selectedHexes.Count == 1 && _activeShip != null && _hexContents.ContainsKey(_selectedHexes[0]) && _hexContents[_selectedHexes[0]] == _activeShip)
+		{
+			Dictionary<Vector2I, int> reachable = GetReachableHexes(_selectedHexes[0], _activeShip.CurrentMovement);
+			foreach (Vector2I hex in reachable.Keys)
+			{
+				if (hex == _selectedHexes[0]) continue; 
+				CreateHighlightPolygon(hex, new Color(0f, 1f, 0.3f, 0.4f)); 
+			}
+		}
+	}
+
+	// ==========================================
+	// BG3 INITIATIVE & COMBAT STATE
+	// ==========================================
 	private void CheckForCombatTrigger()
 	{
 		if (_inCombat) return;
@@ -361,6 +543,7 @@ public partial class BattleMap : Node2D
 		_inCombat = true;
 		GD.Print("HOSTILES DETECTED. ROLLING INITIATIVE...");
 		_initiativeQueue.Clear();
+		_selectedHexes.Clear();
 
 		Random rng = new Random();
 		foreach (var kvp in _hexContents)
@@ -375,10 +558,9 @@ public partial class BattleMap : Node2D
 			}
 		}
 
-		// Sort by Highest Initiative (with a tiebreaker for consistency!)
 		_initiativeQueue.Sort((a, b) => {
 			int cmp = b.CurrentInitiativeRoll.CompareTo(a.CurrentInitiativeRoll);
-			if (cmp == 0) return a.Name.CompareTo(b.Name); // Stable sort fallback
+			if (cmp == 0) return a.Name.CompareTo(b.Name); 
 			return cmp;
 		});
 
@@ -395,6 +577,7 @@ public partial class BattleMap : Node2D
 		_inCombat = true;
 		_currentQueueIndex = _globalData.CurrentQueueIndex;
 		_initiativeQueue.Clear();
+		_selectedHexes.Clear();
 
 		foreach (var kvp in _hexContents)
 		{
@@ -404,7 +587,6 @@ public partial class BattleMap : Node2D
 			}
 		}
 
-		// Re-apply the EXACT same sort used when combat started
 		_initiativeQueue.Sort((a, b) => {
 			int cmp = b.CurrentInitiativeRoll.CompareTo(a.CurrentInitiativeRoll);
 			if (cmp == 0) return a.Name.CompareTo(b.Name); 
@@ -432,8 +614,8 @@ public partial class BattleMap : Node2D
 				{
 					if (kvp.Value == _activeShip)
 					{
-						_selectedHex = kvp.Key;
-						DrawHighlights(_selectedHex.Value, GetReachableHexes(_selectedHex.Value, _activeShip.CurrentMovement).Keys);
+						_selectedHexes.Add(kvp.Key);
+						UpdateHighlights();
 						break;
 					}
 				}
@@ -493,6 +675,7 @@ public partial class BattleMap : Node2D
 	private void StartActiveTurn()
 	{
 		_initiativeQueue.RemoveAll(s => s.IsDead);
+		_selectedHexes.Clear();
 
 		if (_initiativeQueue.Count == 0 || !AreBothSidesAlive())
 		{
@@ -528,8 +711,8 @@ public partial class BattleMap : Node2D
 			{
 				if (kvp.Value == _activeShip)
 				{
-					_selectedHex = kvp.Key;
-					DrawHighlights(_selectedHex.Value, GetReachableHexes(_selectedHex.Value, _activeShip.CurrentMovement).Keys);
+					_selectedHexes.Add(kvp.Key);
+					UpdateHighlights();
 					break;
 				}
 			}
@@ -539,8 +722,8 @@ public partial class BattleMap : Node2D
 	private void EndActiveTurn()
 	{
 		if (!_inCombat) return;
-		_selectedHex = null;
-		ClearHighlights();
+		_selectedHexes.Clear();
+		UpdateHighlights();
 		_currentQueueIndex++;
 		StartActiveTurn();
 	}
@@ -557,7 +740,6 @@ public partial class BattleMap : Node2D
 		return playerAlive && enemyAlive;
 	}
 
-	// --- UPDATED: Triggers the Game Over screen if the player loses! ---
 	private void EndCombat()
 	{
 		_inCombat = false;
@@ -630,7 +812,6 @@ public partial class BattleMap : Node2D
 			
 			if (_inCombat) UpdateInitiativeUI();
 			
-			// Force a quick check so the game over screen pops instantly if it's the last ship!
 			if (_inCombat && !AreBothSidesAlive()) EndCombat(); 
 		}
 	}
@@ -826,8 +1007,8 @@ public partial class BattleMap : Node2D
 					kvp.Value.HasAction = true;
 				}
 			}
-			_selectedHex = null;
-			ClearHighlights();
+			_selectedHexes.Clear();
+			UpdateHighlights();
 			_endTurnButton.Text = $"TURN {_currentTurn}";
 		}
 		else
@@ -844,8 +1025,6 @@ public partial class BattleMap : Node2D
 		if (_globalData != null)
 		{
 			_globalData.CurrentTurn = _currentTurn;
-			
-			// --- NEW: Hand Combat State variables over to the save file ---
 			_globalData.InCombat = _inCombat;
 			_globalData.CurrentQueueIndex = _currentQueueIndex;
 
@@ -863,8 +1042,6 @@ public partial class BattleMap : Node2D
 					shipDict["CurrentShields"] = kvp.Value.CurrentShields; shipDict["MaxShields"] = kvp.Value.MaxShields;
 					shipDict["CurrentMovement"] = kvp.Value.CurrentMovement; shipDict["MaxMovement"] = kvp.Value.MaxMovement;
 					shipDict["HasAction"] = kvp.Value.HasAction; 
-					
-					// --- NEW: Pack the roll into the save data! ---
 					shipDict["CurrentInitiativeRoll"] = kvp.Value.CurrentInitiativeRoll; 
 					
 					if (kvp.Value.Type == "Player Fleet") playerState.Add(shipDict);
@@ -959,17 +1136,6 @@ public partial class BattleMap : Node2D
 		return costSoFar;
 	}
 
-	private void DrawHighlights(Vector2I selectedShipHex, IEnumerable<Vector2I> reachableHexes)
-	{
-		ClearHighlights(); 
-		foreach (Vector2I hex in reachableHexes)
-		{
-			if (hex == selectedShipHex) continue; 
-			CreateHighlightPolygon(hex, new Color(0f, 1f, 0.3f, 0.4f)); 
-		}
-		CreateHighlightPolygon(selectedShipHex, new Color(1f, 0.8f, 0f, 0.6f)); 
-	}
-
 	private void ClearHighlights() { foreach (Node child in _highlightLayer.GetChildren()) child.QueueFree(); }
 
 	private void CreateHighlightPolygon(Vector2I hexCoord, Color color)
@@ -991,7 +1157,6 @@ public partial class BattleMap : Node2D
 		CanvasLayer uiLayer = new CanvasLayer { Layer = 10 }; 
 		AddChild(uiLayer);
 
-		// --- NEW: Game Over Splash Screen Setup ---
 		Vector2 screenSize = GetViewportRect().Size;
 		
 		_gameOverPanel = new ColorRect();
@@ -1016,8 +1181,6 @@ public partial class BattleMap : Node2D
 		returnBtn.CustomMinimumSize = new Vector2(250, 60);
 		returnBtn.Pressed += OnMainMenuPressed;
 		goVbox.AddChild(returnBtn);
-		
-		// ------------------------------------------
 
 		VBoxContainer topContainer = new VBoxContainer();
 		topContainer.Position = new Vector2(20, 20);
@@ -1108,7 +1271,6 @@ public partial class BattleMap : Node2D
 		_attackButton.Visible = false; 
 		uiLayer.AddChild(_attackButton);
 		
-		// ALWAYS add the Game Over screen last so it draws on top of everything else!
 		uiLayer.AddChild(_gameOverPanel);
 	}
 
@@ -1217,7 +1379,6 @@ public partial class BattleMap : Node2D
 					MaxShields = (int)shipDict["MaxShields"], CurrentShields = (int)shipDict["CurrentShields"],
 					InitiativeBonus = GetShipInitiativeBonus(shipName),
 					BaseRotationOffset = GetShipRotationOffset(shipName),
-					// --- NEW: Load the Initiative Roll! ---
 					CurrentInitiativeRoll = shipDict.ContainsKey("CurrentInitiativeRoll") ? (int)shipDict["CurrentInitiativeRoll"] : 0
 				};
 				SpawnEntityAtHex(spawnPos, GetShipTexturePath(shipName), shipData, 0.2f); 
@@ -1271,7 +1432,6 @@ public partial class BattleMap : Node2D
 					MaxShields = (int)shipDict["MaxShields"], CurrentShields = (int)shipDict["CurrentShields"],
 					InitiativeBonus = GetShipInitiativeBonus(shipName),
 					BaseRotationOffset = GetShipRotationOffset(shipName),
-					// --- NEW: Load the Initiative Roll! ---
 					CurrentInitiativeRoll = shipDict.ContainsKey("CurrentInitiativeRoll") ? (int)shipDict["CurrentInitiativeRoll"] : 0
 				};
 				SpawnEntityAtHex(spawnPos, GetShipTexturePath(shipName), shipData, 0.2f); 
