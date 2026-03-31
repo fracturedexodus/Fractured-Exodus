@@ -1,10 +1,12 @@
 [gd_scene format=3 uid="uid://giuvbptmldjs"]
 
+[ext_resource type="FontFile" uid="uid://cuic2grb7lr6j" path="res://Orbitron-VariableFont_wght.ttf" id="1_2t6ru"]
 [ext_resource type="Texture2D" uid="uid://d0urmllhu0psk" path="res://star.png" id="1_q8pje"]
 
 [node name="StarNode" type="Button" unique_id=1533541352]
 offset_right = 8.0
 offset_bottom = 8.0
+theme_override_fonts/font = ExtResource("1_2t6ru")
 theme_override_font_sizes/font_size = 10
 text = "Star"
 flat = true

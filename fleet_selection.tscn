@@ -1,6 +1,7 @@
 [gd_scene format=3 uid="uid://dd2mpvnbwpra5"]
 
 [ext_resource type="Script" uid="uid://0t084sfj14bk" path="res://FleetSelection.cs" id="1_6xdos"]
+[ext_resource type="FontFile" uid="uid://cuic2grb7lr6j" path="res://Orbitron-VariableFont_wght.ttf" id="2_75uhs"]
 [ext_resource type="AudioStream" uid="uid://d3ahvamffnu1r" path="res://Ships/Stellar_Cartography.mp3" id="2_le7cs"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_6xdos"]
@@ -50,6 +51,7 @@ text = "X"
 [node name="PlanetInfoLabel" type="Label" parent="HBoxContainer/LeftPanel/VBoxContainer" unique_id=1399842729]
 layout_mode = 2
 size_flags_horizontal = 4
+theme_override_fonts/font = ExtResource("2_75uhs")
 
 [node name="PlanetPreview" type="TextureRect" parent="HBoxContainer/LeftPanel/VBoxContainer" unique_id=1512654451]
 custom_minimum_size = Vector2(256, 256)
@@ -73,14 +75,17 @@ layout_mode = 2
 
 [node name="LoneWolfButton" type="Button" parent="HBoxContainer/RightPanel/StyleSelection" unique_id=1898734998]
 layout_mode = 2
+theme_override_fonts/font = ExtResource("2_75uhs")
 text = "Lone Wolf (1 flagship)"
 
 [node name="VanguardButton" type="Button" parent="HBoxContainer/RightPanel/StyleSelection" unique_id=1691672093]
 layout_mode = 2
+theme_override_fonts/font = ExtResource("2_75uhs")
 text = "Vanguard (Exactly 3 Ships)"
 
 [node name="BudgetButton" type="Button" parent="HBoxContainer/RightPanel/StyleSelection" unique_id=1138898608]
 layout_mode = 2
+theme_override_fonts/font = ExtResource("2_75uhs")
 text = "Fleet Budget (Variable: 1 to 5 ships)"
 
 [node name="FleetBuilder" type="VBoxContainer" parent="HBoxContainer/RightPanel" unique_id=1374347631]
@@ -102,6 +107,7 @@ layout_mode = 2
 [node name="DeployButton" type="Button" parent="HBoxContainer/RightPanel/FleetBuilder" unique_id=104140994]
 custom_minimum_size = Vector2(200, 60)
 layout_mode = 2
+theme_override_fonts/font = ExtResource("2_75uhs")
 text = "DEPLOY FLEET"
 
 [node name="BackGroundMusic" type="AudioStreamPlayer" parent="." unique_id=835005266]

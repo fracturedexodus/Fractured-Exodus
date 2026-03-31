@@ -5,6 +5,7 @@
 [ext_resource type="Texture2D" uid="uid://bvewwcbbx0h2h" path="res://region_mask.png" id="2_pd335"]
 [ext_resource type="AudioStream" uid="uid://diharanfm23q3" path="res://Custodian_s_Legacy.mp3" id="3_tkp1o"]
 [ext_resource type="Script" uid="uid://b3cxpaw43vqb7" path="res://SystemWindow.cs" id="4_w7lh3"]
+[ext_resource type="FontFile" uid="uid://cuic2grb7lr6j" path="res://Orbitron-VariableFont_wght.ttf" id="5_hafba"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_dxx2x"]
 bg_color = Color(0, 0, 0, 1)
@@ -46,11 +47,13 @@ theme_override_constants/separation = 10
 
 [node name="RandomizeButton" type="Button" parent="MapControls" unique_id=297110428]
 layout_mode = 2
+theme_override_fonts/font = ExtResource("5_hafba")
 theme_override_font_sizes/font_size = 34
 text = "Re-Scan Sector"
 
 [node name="MenuButton" type="Button" parent="MapControls" unique_id=944628211]
 layout_mode = 2
+theme_override_fonts/font = ExtResource("5_hafba")
 theme_override_font_sizes/font_size = 34
 text = "Abort To Menu"
 
@@ -79,6 +82,7 @@ offset_left = 18.0
 offset_top = 37.0
 offset_right = 158.0
 offset_bottom = 73.0
+theme_override_fonts/font = ExtResource("5_hafba")
 theme_override_font_sizes/font_size = 26
 text = "Star Name:"
 
@@ -88,6 +92,7 @@ offset_left = 21.0
 offset_top = 74.0
 offset_right = 143.0
 offset_bottom = 110.0
+theme_override_fonts/font = ExtResource("5_hafba")
 theme_override_font_sizes/font_size = 26
 text = "Planets: 0"
 
@@ -97,6 +102,7 @@ offset_left = 23.0
 offset_top = 113.0
 offset_right = 116.0
 offset_bottom = 149.0
+theme_override_fonts/font = ExtResource("5_hafba")
 theme_override_font_sizes/font_size = 26
 text = "Region:"
 
@@ -108,6 +114,7 @@ anchor_right = 1.0
 offset_left = -32.0
 offset_bottom = 43.0
 grow_horizontal = 0
+theme_override_fonts/font = ExtResource("5_hafba")
 text = "X"
 
 [node name="StartSystemButton" type="Button" parent="SystemWindow" unique_id=1882394719]
@@ -124,6 +131,7 @@ offset_bottom = -14.0
 grow_horizontal = 2
 grow_vertical = 0
 theme_override_colors/font_outline_color = Color(0.7995101, 0.996756, 0.95277053, 1)
+theme_override_fonts/font = ExtResource("5_hafba")
 text = "Enter Starting System"
 
 [connection signal="pressed" from="MapControls/RandomizeButton" to="." method="_on_randomize_button_pressed"]

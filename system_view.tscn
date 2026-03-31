@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" uid="uid://1ivinqx7y0ky" path="res://SystemView.cs" id="1_aihgg"]
 [ext_resource type="Texture2D" uid="uid://c62s7c7jt40ky" path="res://YellowSUN.png" id="2_b7847"]
+[ext_resource type="FontFile" uid="uid://cuic2grb7lr6j" path="res://Orbitron-VariableFont_wght.ttf" id="3_bngyh"]
 [ext_resource type="AudioStream" uid="uid://bshhtl28bl4ys" path="res://Nebula_Bloom.mp3" id="3_ugi38"]
 
 [node name="SystemView" type="Node2D" unique_id=1165564058]
@@ -21,6 +22,7 @@ offset_left = 929.0
 offset_top = 414.0
 offset_right = 969.0
 offset_bottom = 437.0
+theme_override_fonts/font = ExtResource("3_bngyh")
 metadata/_edit_use_anchors_ = true
 
 [node name="BackgroundMusic" type="AudioStreamPlayer" parent="." unique_id=922676453]
@@ -32,6 +34,7 @@ offset_left = 1733.0
 offset_top = 40.0
 offset_right = 1853.0
 offset_bottom = 71.0
+theme_override_fonts/font = ExtResource("3_bngyh")
 text = "Return to Map"
 
 [node name="InfoPanel" type="Panel" parent="." unique_id=1219049990]
@@ -48,13 +51,16 @@ offset_bottom = 473.0
 layout_mode = 2
 size_flags_horizontal = 8
 size_flags_vertical = 4
+theme_override_fonts/font = ExtResource("3_bngyh")
 text = "X"
 
 [node name="PlanetNameLabel" type="Label" parent="InfoPanel/VBoxContainer" unique_id=2147040558]
 layout_mode = 2
+theme_override_fonts/font = ExtResource("3_bngyh")
 
 [node name="PlanetTypeLabel" type="Label" parent="InfoPanel/VBoxContainer" unique_id=1364052169]
 layout_mode = 2
+theme_override_fonts/font = ExtResource("3_bngyh")
 
 [node name="PlanetPreview" type="TextureRect" parent="InfoPanel/VBoxContainer" unique_id=1637776946]
 custom_minimum_size = Vector2(200, 200)
@@ -64,14 +70,17 @@ stretch_mode = 5
 
 [node name="PlanetHabitabilityLabel" type="Label" parent="InfoPanel/VBoxContainer" unique_id=1409949622]
 layout_mode = 2
+theme_override_fonts/font = ExtResource("3_bngyh")
 autowrap_mode = 3
 
 [node name="PlanetResourceLabel" type="Label" parent="InfoPanel/VBoxContainer" unique_id=1964029858]
 layout_mode = 2
+theme_override_fonts/font = ExtResource("3_bngyh")
 autowrap_mode = 3
 
 [node name="StartFleetButton" type="Button" parent="InfoPanel/VBoxContainer" unique_id=121607694]
 layout_mode = 2
+theme_override_fonts/font = ExtResource("3_bngyh")
 text = "Select as Starting Fleet Base"
 
 [connection signal="pressed" from="CloseButton" to="." method="_on_close_button_pressed"]

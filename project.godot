@@ -31,6 +31,10 @@ window/stretch/mode="canvas_items"
 
 project/assembly_name="Fractured_Exodus"
 
+[gui]
+
+theme/custom_font="uid://cuic2grb7lr6j"
+
 [physics]
 
 3d/physics_engine="Jolt Physics"
