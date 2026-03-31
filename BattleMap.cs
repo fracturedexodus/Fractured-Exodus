@@ -1,6 +1,7 @@
 using Godot;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 // --- Custom Node to draw the drag-selection box ---
 public partial class SelectionBox : Node2D
@@ -14,8 +15,8 @@ public partial class SelectionBox : Node2D
 		if (IsDragging)
 		{
 			Rect2 rect = new Rect2(StartPos, EndPos - StartPos).Abs();
-			DrawRect(rect, new Color(0.2f, 0.8f, 1f, 0.3f), true); // Transparent fill
-			DrawRect(rect, new Color(0.2f, 0.8f, 1f, 0.8f), false, 2f); // Solid border
+			DrawRect(rect, new Color(0.2f, 0.8f, 1f, 0.3f), true); 
+			DrawRect(rect, new Color(0.2f, 0.8f, 1f, 0.8f), false, 2f); 
 		}
 	}
 }
@@ -25,7 +26,7 @@ public partial class BattleMap : Node2D
 	// --- MAP SETTINGS ---
 	[Export] public float HexSize = 65f; 
 	private int _maxMapRadius = 35; 
-	private int _scanningRange = 5; // How close before combat triggers!
+	private int _scanningRange = 5; 
 
 	private PackedScene _hexScene = GD.Load<PackedScene>("res://hex_tile.tscn");
 	private GlobalData _globalData;
@@ -59,7 +60,6 @@ public partial class BattleMap : Node2D
 		public string Type;
 		public string Details;
 		
-		// --- UPDATED: Action Economy System ---
 		public int MaxActions;
 		public int CurrentActions; 
 		
@@ -107,6 +107,7 @@ public partial class BattleMap : Node2D
 	
 	private int _currentTurn = 1; 
 	private bool _isTargeting = false; 
+	private bool _isJumping = false; 
 
 	// --- UI ELEMENTS ---
 	private PanelContainer _infoPanel; 
@@ -115,6 +116,7 @@ public partial class BattleMap : Node2D
 	private Button _saveGameButton;
 	private Button _mainMenuButton;
 	private Button _attackButton; 
+	private Button _jumpButton; 
 	private HBoxContainer _initiativeUI; 
 	private Label _initiativeTurnLabel; 
 	private ColorRect _gameOverPanel; 
@@ -185,12 +187,16 @@ public partial class BattleMap : Node2D
 
 	public override void _Process(double delta)
 	{
+		if (_isJumping) return;
+
 		Vector2 panDirection = Vector2.Zero;
 		if (Input.IsKeyPressed(Key.W)) panDirection.Y -= 1;
 		if (Input.IsKeyPressed(Key.S)) panDirection.Y += 1;
 		if (Input.IsKeyPressed(Key.A)) panDirection.X -= 1;
 		if (Input.IsKeyPressed(Key.D)) panDirection.X += 1;
 		if (panDirection != Vector2.Zero) _camera.Position += panDirection.Normalized() * _panSpeed * (float)delta * (1.0f / _camera.Zoom.X);
+		
+		bool isNearStargate = false;
 		
 		foreach (Vector2I hex in _selectedHexes)
 		{
@@ -203,14 +209,27 @@ public partial class BattleMap : Node2D
 					float targetAngle = selectedShip.VisualSprite.GlobalPosition.AngleToPoint(mousePos) + selectedShip.BaseRotationOffset;
 					selectedShip.VisualSprite.Rotation = Mathf.LerpAngle(selectedShip.VisualSprite.Rotation, targetAngle, 0.15f);
 				}
+
+				if (selectedShip.Type == "Player Fleet" && !_inCombat)
+				{
+					foreach(Vector2I dir in _hexDirections)
+					{
+						Vector2I neighbor = hex + dir;
+						if (_hexContents.ContainsKey(neighbor) && _hexContents[neighbor].Type == "StarGate")
+						{
+							isNearStargate = true;
+							break;
+						}
+					}
+				}
 			}
 		}
 
-		// Attack Button UI Logic 
+		_jumpButton.Visible = isNearStargate;
+
 		if (_selectedHexes.Count == 1 && _hexContents.ContainsKey(_selectedHexes[0]))
 		{
 			MapEntity singleShip = _hexContents[_selectedHexes[0]];
-			// UPDATED: Check for Actions > 0 instead of HasAction boolean
 			if (singleShip.Type == "Player Fleet" && singleShip.CurrentActions > 0 && (!_inCombat || singleShip == _activeShip))
 			{
 				_attackButton.Visible = true;
@@ -255,6 +274,8 @@ public partial class BattleMap : Node2D
 
 	public override void _UnhandledInput(InputEvent @event)
 	{
+		if (_isJumping) return;
+
 		if (@event is InputEventMouseButton mouseButton)
 		{
 			if (mouseButton.IsPressed())
@@ -351,7 +372,6 @@ public partial class BattleMap : Node2D
 						
 						if (_hexContents.ContainsKey(clickedHex) && _hexContents[clickedHex].Type == "Enemy Fleet")
 						{
-							// UPDATED: Check CurrentActions instead of HasAction
 							if (_activeShip.CurrentActions > 0 && HexDistance(activeHex, clickedHex) <= _activeShip.AttackRange)
 							{
 								PerformAttack(activeHex, clickedHex);
@@ -404,7 +424,6 @@ public partial class BattleMap : Node2D
 				if (entity.Type == "Player Fleet" || entity.Type == "Enemy Fleet")
 				{
 					string initText = _inCombat ? $" | INIT: {entity.CurrentInitiativeRoll}" : "";
-					// UPDATED HOVER UI: Shows Action Points
 					dynamicStats = $"HP: {entity.CurrentHP}/{entity.MaxHP} | SHIELD: {entity.CurrentShields}/{entity.MaxShields}\n" +
 								   $"ACTIONS: {entity.CurrentActions}/{entity.MaxActions}{initText}\n" +
 								   $"RANGE: {entity.AttackRange} | DMG: 0-{entity.AttackDamage}\n";
@@ -430,7 +449,6 @@ public partial class BattleMap : Node2D
 			_shipMenuTitle.Text = $"== {ship.Name.ToUpper()} ==";
 			string status = ship.Type == "Enemy Fleet" ? "[HOSTILE]" : "[ALLIED]";
 			
-			// UPDATED SIDE MENU: Shows Action Points
 			_shipMenuDetails.Text = 
 				$"Classification: {ship.Type}\n" +
 				$"Status: {status}\n\n" +
@@ -447,7 +465,6 @@ public partial class BattleMap : Node2D
 
 	private void OnCodexPressed()
 	{
-		GD.Print("Opening Codex Terminal...");
 		OnSaveGamePressed(); 
 		SceneTransition transitioner = GetNodeOrNull<SceneTransition>("/root/SceneTransition");
 		if (transitioner != null) transitioner.ChangeScene("res://codex.tscn");
@@ -509,7 +526,7 @@ public partial class BattleMap : Node2D
 		if (_hexContents.ContainsKey(hex))
 		{
 			string type = _hexContents[hex].Type;
-			if (type == "Planet" || type == "Base Planet (Player Start)" || type == "Celestial Body" || type == "Player Fleet" || type == "Enemy Fleet")
+			if (type == "Planet" || type == "Base Planet (Player Start)" || type == "Celestial Body" || type == "Player Fleet" || type == "Enemy Fleet" || type == "StarGate")
 				return false; 
 		}
 		return true;
@@ -572,13 +589,39 @@ public partial class BattleMap : Node2D
 		_initiativeQueue.Clear();
 		_selectedHexes.Clear();
 
+		List<Vector2I> playerHexes = new List<Vector2I>();
+		foreach (var kvp in _hexContents)
+		{
+			if (kvp.Value.Type == "Player Fleet") playerHexes.Add(kvp.Key);
+		}
+
+		int engagementRange = _scanningRange * 2; 
+
 		Random rng = new Random();
 		foreach (var kvp in _hexContents)
 		{
-			if (kvp.Value.Type == "Player Fleet" || kvp.Value.Type == "Enemy Fleet")
+			bool joinsCombat = false;
+
+			if (kvp.Value.Type == "Player Fleet")
+			{
+				joinsCombat = true; 
+			}
+			else if (kvp.Value.Type == "Enemy Fleet")
+			{
+				foreach (Vector2I pHex in playerHexes)
+				{
+					if (HexDistance(kvp.Key, pHex) <= engagementRange)
+					{
+						joinsCombat = true;
+						break;
+					}
+				}
+			}
+
+			if (joinsCombat)
 			{
 				kvp.Value.CurrentInitiativeRoll = rng.Next(1, 21) + kvp.Value.InitiativeBonus;
-				kvp.Value.CurrentActions = kvp.Value.MaxActions; // Fill AP
+				kvp.Value.CurrentActions = kvp.Value.MaxActions; 
 				
 				if (IsInstanceValid(kvp.Value.VisualSprite)) kvp.Value.VisualSprite.Visible = true;
 				_initiativeQueue.Add(kvp.Value);
@@ -610,9 +653,35 @@ public partial class BattleMap : Node2D
 		_initiativeQueue.Clear();
 		_selectedHexes.Clear();
 
+		List<Vector2I> playerHexes = new List<Vector2I>();
 		foreach (var kvp in _hexContents)
 		{
-			if (kvp.Value.Type == "Player Fleet" || kvp.Value.Type == "Enemy Fleet")
+			if (kvp.Value.Type == "Player Fleet") playerHexes.Add(kvp.Key);
+		}
+
+		int engagementRange = _scanningRange * 2; 
+
+		foreach (var kvp in _hexContents)
+		{
+			bool joinsCombat = false;
+
+			if (kvp.Value.Type == "Player Fleet")
+			{
+				joinsCombat = true; 
+			}
+			else if (kvp.Value.Type == "Enemy Fleet")
+			{
+				foreach (Vector2I pHex in playerHexes)
+				{
+					if (HexDistance(kvp.Key, pHex) <= engagementRange)
+					{
+						joinsCombat = true;
+						break;
+					}
+				}
+			}
+
+			if (joinsCombat)
 			{
 				if (IsInstanceValid(kvp.Value.VisualSprite)) kvp.Value.VisualSprite.Visible = true;
 				_initiativeQueue.Add(kvp.Value);
@@ -624,6 +693,8 @@ public partial class BattleMap : Node2D
 			if (cmp == 0) return a.Name.CompareTo(b.Name); 
 			return cmp;
 		});
+
+		if (_currentQueueIndex >= _initiativeQueue.Count) _currentQueueIndex = 0;
 
 		UpdateInitiativeUI();
 		_endTurnButton.Text = "END TURN";
@@ -718,7 +789,7 @@ public partial class BattleMap : Node2D
 		}
 
 		_activeShip = _initiativeQueue[_currentQueueIndex];
-		_activeShip.CurrentActions = _activeShip.MaxActions; // Refill AP!
+		_activeShip.CurrentActions = _activeShip.MaxActions;
 
 		UpdateInitiativeUI();
 		
@@ -803,7 +874,6 @@ public partial class BattleMap : Node2D
 		MapEntity attacker = _hexContents[attackerHex];
 		MapEntity defender = _hexContents[defenderHex];
 
-		// COST: Subtract 1 Action Point for firing the weapon
 		attacker.CurrentActions--; 
 		
 		DrawLaserBeam(HexToPixel(attackerHex), HexToPixel(defenderHex), attacker.Type);
@@ -818,7 +888,6 @@ public partial class BattleMap : Node2D
 			string missTxt = _missTexts[rng.Next(_missTexts.Length)];
 			LogCombatMessage($"[color={attackerColor}]{attacker.Name}[/color] fired at {defender.Name}... {missTxt} [color=gray](0 DMG)[/color]");
 			
-			// Update Side Menu to reflect the lost Action Point
 			if (_selectedHexes.Count == 1 && _selectedHexes[0] == attackerHex) ToggleShipMenu(true, attacker);
 			return; 
 		}
@@ -854,7 +923,6 @@ public partial class BattleMap : Node2D
 		if (hullDmg > 0) logMsg += $" ([color=#ff4444]Hull -{hullDmg}[/color])";
 		LogCombatMessage(logMsg);
 
-		// Update Side Menu to reflect the lost Action Point
 		if (_selectedHexes.Count == 1 && _selectedHexes[0] == attackerHex) ToggleShipMenu(true, attacker);
 
 		if (defender.CurrentHP <= 0)
@@ -987,7 +1055,7 @@ public partial class BattleMap : Node2D
 				if (_hexContents.ContainsKey(neighbor))
 				{
 					string type = _hexContents[neighbor].Type;
-					if (type == "Planet" || type == "Base Planet (Player Start)" || type == "Celestial Body" || type == "Player Fleet" || type == "Enemy Fleet") isBlocked = true; 
+					if (type == "Planet" || type == "Base Planet (Player Start)" || type == "Celestial Body" || type == "Player Fleet" || type == "Enemy Fleet" || type == "StarGate") isBlocked = true; 
 				}
 
 				if (!isBlocked)
@@ -1012,7 +1080,7 @@ public partial class BattleMap : Node2D
 		{
 			_hexContents.Remove(oldPos);
 			_hexContents[currentPos] = enemyShip;
-			enemyShip.CurrentActions -= stepsTaken; // Cost of movement
+			enemyShip.CurrentActions -= stepsTaken;
 
 			Tween tween = CreateTween();
 			Vector2 targetPixelPos = HexToPixel(currentPos);
@@ -1030,7 +1098,6 @@ public partial class BattleMap : Node2D
 			float targetAngle = enemyShip.VisualSprite.Position.AngleToPoint(targetPixelPos) + enemyShip.BaseRotationOffset;
 			tween.Parallel().TweenProperty(enemyShip.VisualSprite, "rotation", targetAngle, 0.2f);
 			
-			// Trigger recursive combat loop when movement is done!
 			tween.Finished += () => { EnemyActionLoop(enemyShip, currentPos, targetPlayer); };
 		}
 		else
@@ -1039,12 +1106,10 @@ public partial class BattleMap : Node2D
 		}
 	}
 
-	// --- NEW: Rapid Fire AI Loop! ---
 	private void EnemyActionLoop(MapEntity enemyShip, Vector2I currentPos, Vector2I targetPlayer)
 	{
 		if (enemyShip.IsDead || !_inCombat) return;
 
-		// If target died from a previous shot, find a new target!
 		if (!_hexContents.ContainsKey(targetPlayer) || _hexContents[targetPlayer].Type != "Player Fleet")
 		{
 			if (enemyShip.CurrentActions > 0) 
@@ -1053,14 +1118,13 @@ public partial class BattleMap : Node2D
 				return;
 			}
 		}
-		else // Target is alive
+		else 
 		{
 			int finalDist = HexDistance(currentPos, targetPlayer);
 			if (enemyShip.CurrentActions > 0 && finalDist <= enemyShip.AttackRange)
 			{
 				PerformAttack(currentPos, targetPlayer);
 				
-				// Wait 0.6 seconds, then loop again to spend next AP
 				if (enemyShip.CurrentActions > 0 && _inCombat)
 				{
 					GetTree().CreateTimer(0.6f).Timeout += () => EnemyActionLoop(enemyShip, currentPos, targetPlayer);
@@ -1069,8 +1133,56 @@ public partial class BattleMap : Node2D
 			}
 		}
 		
-		// Out of actions or targets. End turn.
 		GetTree().CreateTimer(0.8f).Timeout += () => EndActiveTurn();
+	}
+
+	private void ProcessEnemyExplorationTurns()
+	{
+		List<Vector2I> playerPositions = new List<Vector2I>();
+		foreach (var kvp in _hexContents)
+			if (kvp.Value.Type == "Player Fleet") playerPositions.Add(kvp.Key);
+
+		if (playerPositions.Count == 0) return;
+
+		List<KeyValuePair<Vector2I, MapEntity>> enemies = _hexContents.Where(kvp => kvp.Value.Type == "Enemy Fleet").ToList();
+		
+		foreach (var kvp in enemies)
+		{
+			Vector2I currentPos = kvp.Key;
+			MapEntity enemyShip = kvp.Value;
+
+			Vector2I targetPlayer = playerPositions[0];
+			int minDistance = HexDistance(currentPos, targetPlayer);
+			foreach (Vector2I playerHex in playerPositions)
+			{
+				int dist = HexDistance(currentPos, playerHex);
+				if (dist < minDistance) { minDistance = dist; targetPlayer = playerHex; }
+			}
+
+			Vector2I bestNeighbor = currentPos;
+			int bestDist = minDistance;
+
+			foreach (Vector2I dir in _hexDirections)
+			{
+				Vector2I neighbor = currentPos + dir;
+				if (!_hexGrid.ContainsKey(neighbor)) continue;
+				if (IsHexEmpty(neighbor))
+				{
+					int distToTarget = HexDistance(neighbor, targetPlayer);
+					if (distToTarget < bestDist)
+					{
+						bestDist = distToTarget; bestNeighbor = neighbor;
+					}
+				}
+			}
+
+			if (bestNeighbor != currentPos)
+			{
+				MoveShip(currentPos, bestNeighbor, 0); 
+			}
+		}
+		
+		GetTree().CreateTimer(0.5f).Timeout += () => CheckForCombatTrigger();
 	}
 
 	private void OnEndTurnPressed()
@@ -1082,9 +1194,12 @@ public partial class BattleMap : Node2D
 			{
 				if (kvp.Value.Type == "Player Fleet" || kvp.Value.Type == "Enemy Fleet")
 				{
-					kvp.Value.CurrentActions = kvp.Value.MaxActions; // Refill AP
+					kvp.Value.CurrentActions = kvp.Value.MaxActions; 
 				}
 			}
+			
+			ProcessEnemyExplorationTurns();
+
 			_selectedHexes.Clear();
 			ToggleShipMenu(false);
 			UpdateHighlights();
@@ -1099,6 +1214,74 @@ public partial class BattleMap : Node2D
 		}
 	}
 
+	private void OnJumpPressed()
+	{
+		if (_isJumping) return;
+		_isJumping = true;
+
+		_jumpButton.Visible = false;
+		_attackButton.Visible = false;
+		_infoPanel.Visible = false;
+		ToggleShipMenu(false);
+
+		Vector2I gateHex = new Vector2I(0,0);
+		bool gateFound = false;
+		foreach(var kvp in _hexContents) {
+			if (kvp.Value.Type == "StarGate") {
+				foreach (var p_hex in _selectedHexes) {
+					if (HexDistance(kvp.Key, p_hex) <= 1) {
+						gateHex = kvp.Key;
+						gateFound = true;
+						break;
+					}
+				}
+			}
+			if (gateFound) break;
+		}
+
+		if (!gateFound) return;
+
+		Vector2 gatePixelPos = HexToPixel(gateHex);
+
+		Tween warpTween = CreateTween();
+		warpTween.SetParallel(true);
+
+		foreach(var p_hex in _selectedHexes)
+		{
+			if (_hexContents.ContainsKey(p_hex) && _hexContents[p_hex].Type == "Player Fleet")
+			{
+				Sprite2D shipSprite = _hexContents[p_hex].VisualSprite;
+				if (IsInstanceValid(shipSprite))
+				{
+					warpTween.TweenProperty(shipSprite, "position", gatePixelPos, 1.5f).SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.In);
+					warpTween.TweenProperty(shipSprite, "scale", new Vector2(0.01f, 0.01f), 1.5f).SetTrans(Tween.TransitionType.Cubic);
+					warpTween.TweenProperty(shipSprite, "rotation", shipSprite.Rotation + Mathf.Pi * 4, 1.5f);
+					warpTween.TweenProperty(shipSprite, "modulate", new Color(1, 2, 3, 0), 1.5f); 
+				}
+			}
+		}
+
+		if (_sfxPlayer != null)
+		{
+			AudioStream jumpSound = GD.Load<AudioStream>("res://Sounds/laser.mp3"); 
+			if (jumpSound != null) { _sfxPlayer.Stream = jumpSound; _sfxPlayer.PitchScale = 0.5f; _sfxPlayer.Play(); }
+		}
+
+		warpTween.Chain().TweenCallback(Callable.From(() => 
+		{
+			if (_globalData != null)
+			{
+				_globalData.JustJumped = true;
+			}
+			
+			OnSaveGamePressed(); 
+			SceneTransition transitioner = GetNodeOrNull<SceneTransition>("/root/SceneTransition");
+			if (transitioner != null) transitioner.ChangeScene("res://galactic_map.tscn");
+			else GetTree().ChangeSceneToFile("res://galactic_map.tscn");
+		}));
+	}
+
+	// --- UPDATED: Save to SYSTEM Memory ---
 	private void OnSaveGamePressed()
 	{
 		if (_globalData != null)
@@ -1120,7 +1303,6 @@ public partial class BattleMap : Node2D
 					shipDict["CurrentHP"] = kvp.Value.CurrentHP; shipDict["MaxHP"] = kvp.Value.MaxHP;
 					shipDict["CurrentShields"] = kvp.Value.CurrentShields; shipDict["MaxShields"] = kvp.Value.MaxShields;
 					
-					// Save using the new AP mechanics
 					shipDict["MaxActions"] = kvp.Value.MaxActions;
 					shipDict["CurrentActions"] = kvp.Value.CurrentActions;
 					
@@ -1132,7 +1314,12 @@ public partial class BattleMap : Node2D
 			}
 			
 			_globalData.SavedFleetState = playerState;
-			_globalData.SavedEnemyFleetState = enemyState; 
+			
+			// Save the enemy fleet specific to the system we are in
+			if (!string.IsNullOrEmpty(_globalData.SavedSystem) && _globalData.ExploredSystems.ContainsKey(_globalData.SavedSystem))
+			{
+				_globalData.ExploredSystems[_globalData.SavedSystem].EnemyFleets = enemyState;
+			}
 
 			if (_globalData.HasMethod("SaveGame")) _globalData.Call("SaveGame");
 			
@@ -1159,10 +1346,8 @@ public partial class BattleMap : Node2D
 		_hexContents.Remove(fromHex);
 		_hexContents[toHex] = ship;
 		
-		// COST: Subtract Action Points for moving
 		ship.CurrentActions -= cost;
 
-		// Update Side Menu to reflect the lost Action Points
 		if (_selectedHexes.Count == 1 && _selectedHexes[0] == fromHex) ToggleShipMenu(true, ship);
 
 		string sfxPath = GetShipMovementSoundPath(ship.Name);
@@ -1204,7 +1389,7 @@ public partial class BattleMap : Node2D
 				if (_hexContents.ContainsKey(next))
 				{
 					string type = _hexContents[next].Type;
-					if (type == "Planet" || type == "Base Planet (Player Start)" || type == "Celestial Body" || type == "Player Fleet" || type == "Enemy Fleet") isBlocked = true; 
+					if (type == "Planet" || type == "Base Planet (Player Start)" || type == "Celestial Body" || type == "Player Fleet" || type == "Enemy Fleet" || type == "StarGate") isBlocked = true; 
 				}
 
 				if (isBlocked) continue;
@@ -1370,6 +1555,22 @@ public partial class BattleMap : Node2D
 		_mainMenuButton.Pressed += OnMainMenuPressed;
 		uiRoot.AddChild(_mainMenuButton);
 
+		// NEW: Jump Button UI
+		_jumpButton = new Button();
+		_jumpButton.Text = "ENTER STARGATE";
+		_jumpButton.CustomMinimumSize = new Vector2(250, 50);
+		StyleBoxFlat jumpStyle = new StyleBoxFlat();
+		jumpStyle.BgColor = new Color(0.4f, 0.1f, 0.7f, 0.9f); 
+		jumpStyle.BorderWidthBottom = 2; jumpStyle.BorderWidthTop = 2; jumpStyle.BorderWidthLeft = 2; jumpStyle.BorderWidthRight = 2;
+		jumpStyle.BorderColor = new Color(0.8f, 0.3f, 1f, 1f); 
+		jumpStyle.CornerRadiusTopLeft = 5; jumpStyle.CornerRadiusBottomRight = 5;
+		_jumpButton.AddThemeStyleboxOverride("normal", jumpStyle);
+		_jumpButton.AddThemeStyleboxOverride("hover", panelStyle); 
+		_jumpButton.Position = new Vector2(screenSize.X / 2 - 125, screenSize.Y - 140); 
+		_jumpButton.Pressed += OnJumpPressed;
+		_jumpButton.Visible = false; 
+		uiRoot.AddChild(_jumpButton);
+
 		_attackButton = new Button();
 		_attackButton.Text = "ATTACK";
 		_attackButton.CustomMinimumSize = new Vector2(160, 50);
@@ -1451,15 +1652,15 @@ public partial class BattleMap : Node2D
 	private void SetupSpaceBackground()
 	{
 		Vector2 screenSize = GetViewportRect().Size;
-		TextureRect spaceBackground = new TextureRect();
+		TextureRect spaceBackgroundRect = new TextureRect();
 		Texture2D bgTex = GD.Load<Texture2D>("res://space_bg.png"); 
 		if (bgTex != null)
 		{
-			spaceBackground.Texture = bgTex;
-			spaceBackground.ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize; 
-			spaceBackground.Size = screenSize; 
-			spaceBackground.Modulate = new Color(0.6f, 0.6f, 0.7f, 1.0f); 
-			_bgLayer.AddChild(spaceBackground);
+			spaceBackgroundRect.Texture = bgTex;
+			spaceBackgroundRect.ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize; 
+			spaceBackgroundRect.Size = screenSize; 
+			spaceBackgroundRect.Modulate = new Color(0.6f, 0.6f, 0.7f, 1.0f); 
+			_bgLayer.AddChild(spaceBackgroundRect);
 		}
 	}
 
@@ -1488,21 +1689,63 @@ public partial class BattleMap : Node2D
 		return new Vector2(x, y);
 	}
 
+	// --- UPDATED: Populate logic now checks system-specific memory ---
 	private void PopulateMapFromMemory()
 	{
+		Random rng = new Random();
+		if (_globalData != null && !string.IsNullOrEmpty(_globalData.SavedSystem))
+			rng = new Random(_globalData.SavedSystem.GetHashCode()); 
+
 		MapEntity starData = new MapEntity { Name = "Main Sequence Star", Type = "Celestial Body", Details = "Extreme Heat Signature" };
 		if (_globalData != null && !string.IsNullOrEmpty(_globalData.SavedSystem))
 			starData.Name = _globalData.SavedSystem.ToUpper() + " PRIME";
 			
 		SpawnEntityAtHex(new Vector2I(0, 0), "res://YellowSUN.png", starData, 0.75f);
 
-		if (_globalData == null || string.IsNullOrEmpty(_globalData.SavedSystem) || !_globalData.ExploredSystems.ContainsKey(_globalData.SavedSystem)) return;
+		if (_globalData == null || string.IsNullOrEmpty(_globalData.SavedSystem)) return;
+
+		// --- NEW: ON-THE-FLY SYSTEM GENERATION ---
+		// If we bypassed the UI window, the system data doesn't exist yet. Let's create it!
+		if (!_globalData.ExploredSystems.ContainsKey(_globalData.SavedSystem))
+		{
+			SystemData newSys = new SystemData();
+			newSys.SystemName = _globalData.SavedSystem;
+			
+			// Find how many planets this star is supposed to have from the Galactic Map
+			int pCount = rng.Next(1, 6);
+			if (_globalData.CurrentSectorStars != null)
+			{
+				foreach (var star in _globalData.CurrentSectorStars)
+				{
+					if (star.SystemName == _globalData.SavedSystem)
+					{
+						pCount = star.PlanetCount;
+						break;
+					}
+				}
+			}
+
+			string[] planetSuffixes = { "Prime", "Secundus", "Tertius", "Quartus", "Quintus", "Sextus", "Septimus", "Octavus" };
+
+			for (int i = 0; i < pCount; i++)
+			{
+				PlanetData newP = new PlanetData();
+				string suffix = i < planetSuffixes.Length ? planetSuffixes[i] : (i + 1).ToString();
+				newP.Name = _globalData.SavedSystem + " " + suffix;
+				newP.TypeIndex = rng.Next(0, 6);
+				newP.Scale = 0.4f + (float)rng.NextDouble() * 0.4f;
+				newP.Habitability = "Unknown";
+				newSys.Planets.Add(newP);
+			}
+
+			_globalData.ExploredSystems[_globalData.SavedSystem] = newSys;
+		}
 
 		SystemData currentSystem = _globalData.ExploredSystems[_globalData.SavedSystem];
-		Random rng = new Random(_globalData.SavedSystem.GetHashCode()); 
 		Vector2I basePlanetLocation = new Vector2I(2, -1); 
+		
+		// 1. Spawning Planets
 		int currentOrbitRing = 2; 
-
 		foreach (PlanetData pData in currentSystem.Planets)
 		{
 			Vector2I spawnHex = FindEmptyHexInRing(currentOrbitRing, rng);
@@ -1514,16 +1757,59 @@ public partial class BattleMap : Node2D
 			if (pData.Name == _globalData.SavedPlanet) basePlanetLocation = spawnHex;
 		}
 
+		// 2. Spawning Stargates (Persistent per system)
+		if (!currentSystem.HasBeenVisited)
+		{
+			int numGates = rng.Next(1, 3);
+			for (int i = 0; i < numGates; i++)
+			{
+				Vector2I gateHex = FindEmptyHexInRing(rng.Next(15, _maxMapRadius - 5), rng);
+				currentSystem.StargateLocations.Add(gateHex); // Save to system memory
+			}
+		}
+		
+		foreach (Vector2I gateHex in currentSystem.StargateLocations)
+		{
+			MapEntity gateEntity = new MapEntity { Name = "Ancient StarGate", Type = "StarGate", Details = "Trans-dimensional warp gate connecting local star systems." };
+			SpawnEntityAtHex(gateHex, "res://StarGate.png", gateEntity, 0.4f);
+		}
+
+		bool arrivedViaJump = false;
+		if (_globalData != null) 
+		{
+			arrivedViaJump = _globalData.JustJumped;
+			if (arrivedViaJump)
+			{
+				// If they just jumped in, spawn them near a random Stargate in this system
+				if (currentSystem.StargateLocations.Count > 0)
+				{
+					basePlanetLocation = currentSystem.StargateLocations[rng.Next(currentSystem.StargateLocations.Count)];
+				}
+				else
+				{
+					basePlanetLocation = FindEmptyHexInRing(rng.Next(10, _maxMapRadius - 5), rng);
+				}
+				_globalData.JustJumped = false;
+			}
+		}
+
+		// 3. Spawn Player Fleet (Global memory)
 		if (_globalData.SavedFleetState != null && _globalData.SavedFleetState.Count > 0)
 		{
+			int jumpSpawnOffset = 0; 
 			foreach (var item in _globalData.SavedFleetState)
 			{
 				var shipDict = (Godot.Collections.Dictionary)item;
 				string shipName = (string)shipDict["Name"];
-				Vector2I spawnPos = new Vector2I((int)shipDict["Q"], (int)shipDict["R"]);
 				(int range, int dmg) = GetShipWeaponStats(shipName);
+				
+				Vector2I spawnPos = new Vector2I((int)shipDict["Q"], (int)shipDict["R"]);
+				if (arrivedViaJump) 
+				{
+					spawnPos = basePlanetLocation + _hexDirections[jumpSpawnOffset % 6];
+					jumpSpawnOffset++;
+				}
 
-				// Fallback safety to load old save files smoothly into the new AP system
 				int actions = shipDict.ContainsKey("CurrentActions") ? (int)shipDict["CurrentActions"] : (int)shipDict["CurrentMovement"];
 				int maxActs = shipDict.ContainsKey("MaxActions") ? (int)shipDict["MaxActions"] : (int)shipDict["MaxMovement"];
 
@@ -1570,9 +1856,11 @@ public partial class BattleMap : Node2D
 			}
 		}
 
-		if (_globalData.SavedEnemyFleetState != null && _globalData.SavedEnemyFleetState.Count > 0)
+		// 4. Spawn Enemy Fleet (System-Specific memory)
+		if (currentSystem.HasBeenVisited && currentSystem.EnemyFleets != null && currentSystem.EnemyFleets.Count > 0)
 		{
-			foreach (var item in _globalData.SavedEnemyFleetState)
+			// Load from System Data
+			foreach (var item in currentSystem.EnemyFleets)
 			{
 				var shipDict = (Godot.Collections.Dictionary)item;
 				string shipName = (string)shipDict["Name"];
@@ -1595,50 +1883,54 @@ public partial class BattleMap : Node2D
 				SpawnEntityAtHex(spawnPos, GetShipTexturePath(shipName), shipData, 0.2f); 
 			}
 		}
-		else 
+		else if (!currentSystem.HasBeenVisited)
 		{
-			List<Vector2I> potentialEnemyBases = new List<Vector2I>();
-			foreach (var kvp in _hexContents) if (kvp.Value.Type == "Planet" && kvp.Key != basePlanetLocation) potentialEnemyBases.Add(kvp.Key);
-			Vector2I enemyBaseLocation = potentialEnemyBases.Count > 0 ? potentialEnemyBases[rng.Next(potentialEnemyBases.Count)] : new Vector2I(0, 0);
-
-			int enemyCount = rng.Next(1, 6); 
-			int enemyDirIndex = 0;
+			// Generate NEW enemies for this system, and save them to System Data immediately
+			int enemyFleetCount = rng.Next(1, 6); 
 			var savedEnemyArray = new Godot.Collections.Array();
 
-			for (int i = 0; i < enemyCount; i++)
+			for (int fleet = 0; fleet < enemyFleetCount; fleet++)
 			{
-				string enemyName = _enemyShipTypes[rng.Next(_enemyShipTypes.Length)];
-				while (enemyDirIndex < 18) 
+				Vector2I fleetBaseLocation = FindEmptyHexInRing(rng.Next(10, _maxMapRadius - 2), rng);
+				int shipsInThisFleet = rng.Next(1, 4); 
+				int enemyDirIndex = 0;
+
+				for (int i = 0; i < shipsInThisFleet; i++)
 				{
-					int ring = (enemyDirIndex / 6) + 1;
-					Vector2I spawnPos = enemyBaseLocation + _hexDirections[enemyDirIndex % 6] * ring;
-					enemyDirIndex++;
-					if (_hexGrid.ContainsKey(spawnPos) && !_hexContents.ContainsKey(spawnPos))
+					string enemyName = _enemyShipTypes[rng.Next(_enemyShipTypes.Length)];
+					while (enemyDirIndex < 18) 
 					{
-						int shipBaseActionPoints = GetShipBaseActions(enemyName); 
-						(int hp, int shields) = GetShipCombatStats(enemyName);
-						(int range, int dmg) = GetShipWeaponStats(enemyName);
+						int ring = (enemyDirIndex / 6) + 1;
+						Vector2I spawnPos = fleetBaseLocation + _hexDirections[enemyDirIndex % 6] * ring;
+						enemyDirIndex++;
+						if (_hexGrid.ContainsKey(spawnPos) && !_hexContents.ContainsKey(spawnPos))
+						{
+							int shipBaseActionPoints = GetShipBaseActions(enemyName); 
+							(int hp, int shields) = GetShipCombatStats(enemyName);
+							(int range, int dmg) = GetShipWeaponStats(enemyName);
 
-						MapEntity shipData = new MapEntity { 
-							Name = enemyName, Type = "Enemy Fleet", Details = "Status: Hostile Target",
-							MaxActions = shipBaseActionPoints, CurrentActions = shipBaseActionPoints,
-							AttackRange = range, AttackDamage = dmg,
-							MaxHP = hp, CurrentHP = hp, MaxShields = shields, CurrentShields = shields,
-							InitiativeBonus = GetShipInitiativeBonus(enemyName),
-							BaseRotationOffset = GetShipRotationOffset(enemyName)
-						};
-						SpawnEntityAtHex(spawnPos, GetShipTexturePath(enemyName), shipData, 0.2f); 
+							MapEntity shipData = new MapEntity { 
+								Name = enemyName, Type = "Enemy Fleet", Details = "Status: Hostile Target",
+								MaxActions = shipBaseActionPoints, CurrentActions = shipBaseActionPoints,
+								AttackRange = range, AttackDamage = dmg,
+								MaxHP = hp, CurrentHP = hp, MaxShields = shields, CurrentShields = shields,
+								InitiativeBonus = GetShipInitiativeBonus(enemyName),
+								BaseRotationOffset = GetShipRotationOffset(enemyName)
+							};
+							SpawnEntityAtHex(spawnPos, GetShipTexturePath(enemyName), shipData, 0.2f); 
 
-						var shipDict = new Godot.Collections.Dictionary<string, Variant>();
-						shipDict["Name"] = enemyName; shipDict["Q"] = spawnPos.X; shipDict["R"] = spawnPos.Y;
-						shipDict["CurrentHP"] = hp; shipDict["MaxHP"] = hp; shipDict["CurrentShields"] = shields; shipDict["MaxShields"] = shields;
-						shipDict["MaxActions"] = shipBaseActionPoints; shipDict["CurrentActions"] = shipBaseActionPoints;
-						savedEnemyArray.Add(shipDict);
-						break; 
+							var shipDict = new Godot.Collections.Dictionary<string, Variant>();
+							shipDict["Name"] = enemyName; shipDict["Q"] = spawnPos.X; shipDict["R"] = spawnPos.Y;
+							shipDict["CurrentHP"] = hp; shipDict["MaxHP"] = hp; shipDict["CurrentShields"] = shields; shipDict["MaxShields"] = shields;
+							shipDict["MaxActions"] = shipBaseActionPoints; shipDict["CurrentActions"] = shipBaseActionPoints;
+							savedEnemyArray.Add(shipDict);
+							break; 
+						}
 					}
 				}
 			}
-			_globalData.SavedEnemyFleetState = savedEnemyArray;
+			currentSystem.EnemyFleets = savedEnemyArray;
+			currentSystem.HasBeenVisited = true; // Mark as visited!
 		}
 	}
 

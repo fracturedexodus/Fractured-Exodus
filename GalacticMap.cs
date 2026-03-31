@@ -174,6 +174,24 @@ public partial class GalacticMap : Control
 		if (!IsInstanceValid(_systemWindow)) return;
 
 		_globalData.SavedSystem = data.SystemName; 
+		
+		// --- UPDATED: Check if we are jumping via Stargate ---
+		if (_globalData.JustJumped)
+		{
+			// Bypass the popup and warp directly to the battle map
+			var transitioner = GetNodeOrNull<SceneTransition>("/root/SceneTransition");
+			if (transitioner != null) 
+			{
+				transitioner.ChangeScene("res://exploration_battle.tscn");
+			}
+			else 
+			{
+				GetTree().ChangeSceneToFile("res://exploration_battle.tscn");
+			}
+			return; 
+		}
+
+		// --- Normal Exploration Flow: Open the System Window pop-up ---
 		_systemWindow.SetupWindow(data.SystemName, data.PlanetCount, data.Region);
 		
 		Vector2 starPos = clickedStar.Position;

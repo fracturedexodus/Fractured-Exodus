@@ -22,6 +22,11 @@ public class SystemData
 	public string SystemName { get; set; }
 	public Vector2 StarPosition { get; set; }
 	public List<PlanetData> Planets { get; set; } = new List<PlanetData>();
+	
+	// --- NEW: SYSTEM-SPECIFIC MEMORY ---
+	public bool HasBeenVisited { get; set; } = false;
+	public Godot.Collections.Array EnemyFleets { get; set; } = new Godot.Collections.Array();
+	public List<Vector2I> StargateLocations { get; set; } = new List<Vector2I>();
 }
 
 public class StarMapData
@@ -55,16 +60,12 @@ public partial class GlobalData : Node
 
 	// --- 4. BATTLE STATE MEMORY ---
 	public int CurrentTurn { get; set; } = 1;
-	
-	// --- NEW: MID-COMBAT BG3 SAVE STATES ---
 	public bool InCombat { get; set; } = false;
 	public int CurrentQueueIndex { get; set; } = 0;
+	public bool JustJumped { get; set; } = false;
 
-	// This array will hold dictionaries containing the X/Y coordinates and HP/Shield stats of every player ship
+	// Only the PLAYER fleet is saved globally because it travels with you between systems.
 	public Godot.Collections.Array SavedFleetState { get; set; } = new Godot.Collections.Array();
-	
-	// --- Enemy Fleet Memory ---
-	public Godot.Collections.Array SavedEnemyFleetState { get; set; } = new Godot.Collections.Array();
 
 	public override void _Ready()
 	{
@@ -83,12 +84,10 @@ public partial class GlobalData : Node
 		saveData["SavedSystem"] = SavedSystem;
 		saveData["SavedPlanet"] = SavedPlanet;
 		
-		// Save the Turn Number, Combat State, and the exact Ship Grid States
 		saveData["CurrentTurn"] = CurrentTurn;
 		saveData["InCombat"] = InCombat;
 		saveData["CurrentQueueIndex"] = CurrentQueueIndex;
 		saveData["SavedFleetState"] = SavedFleetState;
-		saveData["SavedEnemyFleetState"] = SavedEnemyFleetState; // Save Enemies!
 		
 		var fleetArray = new Godot.Collections.Array();
 		if (SelectedPlayerFleet != null)
@@ -105,6 +104,19 @@ public partial class GlobalData : Node
 		{
 			var sysData = new Godot.Collections.Dictionary<string, Variant>();
 			sysData["SystemName"] = sysKvp.Value.SystemName;
+			
+			// Save the new system-specific data
+			sysData["HasBeenVisited"] = sysKvp.Value.HasBeenVisited;
+			sysData["EnemyFleets"] = sysKvp.Value.EnemyFleets;
+			
+			var gateArray = new Godot.Collections.Array();
+			foreach (Vector2I gate in sysKvp.Value.StargateLocations)
+			{
+				var gateDict = new Godot.Collections.Dictionary<string, Variant>();
+				gateDict["Q"] = gate.X; gateDict["R"] = gate.Y;
+				gateArray.Add(gateDict);
+			}
+			sysData["StargateLocations"] = gateArray;
 			
 			var pArray = new Godot.Collections.Array<Variant>();
 			foreach (var p in sysKvp.Value.Planets)
@@ -151,13 +163,11 @@ public partial class GlobalData : Node
 		if (savedData.ContainsKey("SavedSystem")) SavedSystem = (string)savedData["SavedSystem"];
 		if (savedData.ContainsKey("SavedPlanet")) SavedPlanet = (string)savedData["SavedPlanet"];
 		
-		// Unpack the exact Battle State!
 		if (savedData.ContainsKey("CurrentTurn")) CurrentTurn = (int)savedData["CurrentTurn"];
 		if (savedData.ContainsKey("InCombat")) InCombat = (bool)savedData["InCombat"];
 		if (savedData.ContainsKey("CurrentQueueIndex")) CurrentQueueIndex = (int)savedData["CurrentQueueIndex"];
 		
 		if (savedData.ContainsKey("SavedFleetState")) SavedFleetState = (Godot.Collections.Array)savedData["SavedFleetState"];
-		if (savedData.ContainsKey("SavedEnemyFleetState")) SavedEnemyFleetState = (Godot.Collections.Array)savedData["SavedEnemyFleetState"]; // Load Enemies!
 		
 		if (savedData.ContainsKey("SelectedPlayerFleet"))
 		{
@@ -178,6 +188,20 @@ public partial class GlobalData : Node
 				
 				SystemData newSys = new SystemData();
 				newSys.SystemName = (string)sysDataDict["SystemName"];
+				
+				// Load new system-specific data
+				if (sysDataDict.ContainsKey("HasBeenVisited")) newSys.HasBeenVisited = (bool)sysDataDict["HasBeenVisited"];
+				if (sysDataDict.ContainsKey("EnemyFleets")) newSys.EnemyFleets = (Godot.Collections.Array)sysDataDict["EnemyFleets"];
+				
+				if (sysDataDict.ContainsKey("StargateLocations"))
+				{
+					var gateArray = (Godot.Collections.Array)sysDataDict["StargateLocations"];
+					foreach (var gateVar in gateArray)
+					{
+						var gateDict = (Godot.Collections.Dictionary)gateVar;
+						newSys.StargateLocations.Add(new Vector2I((int)gateDict["Q"], (int)gateDict["R"]));
+					}
+				}
 				
 				var pArray = (Godot.Collections.Array)sysDataDict["Planets"];
 				foreach (var pVar in pArray)
@@ -200,12 +224,8 @@ public partial class GlobalData : Node
 		return true;
 	}
 
-	// ==========================================
-	// RESET SYSTEM
-	// ==========================================
 	public void ResetForNewGame()
 	{
-		// 1. Clear all current memory variables
 		SavedSystem = "";
 		SavedPlanet = "";
 		SavedType = "";
@@ -217,17 +237,14 @@ public partial class GlobalData : Node
 		CurrentTurn = 1;
 		InCombat = false;
 		CurrentQueueIndex = 0;
+		JustJumped = false; 
 		SavedFleetState.Clear();
-		SavedEnemyFleetState.Clear(); // Reset Enemies!
 
-		// 2. Delete the physical save file from the hard drive!
 		if (FileAccess.FileExists(_savePath))
 		{
-			// Godot 4 uses DirAccess to delete files
 			DirAccess.RemoveAbsolute(_savePath);
 			GD.Print("Old save file deleted.");
 		}
-
 		GD.Print("GlobalData has been completely wiped for a new campaign.");
 	}
 }
