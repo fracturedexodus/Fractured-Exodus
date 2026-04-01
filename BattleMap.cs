@@ -167,6 +167,7 @@ public partial class BattleMap : Node2D
 		SetupUI(); 
 		GenerateGrid();
 		PopulateMapFromMemory();
+		CenterCameraOnFleet(); 
 		
 		if (_globalData != null && _globalData.InCombat) RestoreCombatState();
 		else CheckForCombatTrigger();
@@ -174,6 +175,18 @@ public partial class BattleMap : Node2D
 		_endTurnButton.Visible = _inCombat; 
 		_repairFleetButton.Visible = !_inCombat; 
 		_inventoryButton.Visible = !_inCombat;
+	}
+
+	private void CenterCameraOnFleet()
+	{
+		foreach (var kvp in _hexContents)
+		{
+			if (kvp.Value.Type == "Player Fleet")
+			{
+				_camera.Position = HexToPixel(kvp.Key);
+				break; 
+			}
+		}
 	}
 
 	private void SetupAudio() 
@@ -207,14 +220,31 @@ public partial class BattleMap : Node2D
 		if (_isJumping) return;
 
 		Vector2 panDirection = Vector2.Zero;
+		
+		// 1. WASD Input
 		if (Input.IsKeyPressed(Key.W)) panDirection.Y -= 1;
 		if (Input.IsKeyPressed(Key.S)) panDirection.Y += 1;
 		if (Input.IsKeyPressed(Key.A)) panDirection.X -= 1;
 		if (Input.IsKeyPressed(Key.D)) panDirection.X += 1;
-		if (panDirection != Vector2.Zero) _camera.Position += panDirection.Normalized() * _panSpeed * (float)delta * (1.0f / _camera.Zoom.X);
+
+		// 2. Edge Scrolling Input
+		Vector2 mousePos = GetViewport().GetMousePosition();
+		Vector2 screenSize = GetViewportRect().Size;
+		float edgeMargin = 30f; 
+
+		if (mousePos.X >= 0 && mousePos.X <= screenSize.X && mousePos.Y >= 0 && mousePos.Y <= screenSize.Y)
+		{
+			if (mousePos.X < edgeMargin) panDirection.X -= 1;
+			else if (mousePos.X > screenSize.X - edgeMargin) panDirection.X += 1;
+
+			if (mousePos.Y < edgeMargin) panDirection.Y -= 1;
+			else if (mousePos.Y > screenSize.Y - edgeMargin) panDirection.Y += 1;
+		}
+
+		if (panDirection != Vector2.Zero) 
+			_camera.Position += panDirection.Normalized() * _panSpeed * (float)delta * (1.0f / _camera.Zoom.X);
 		
-		bool isNearStargate = false;
-		
+		// Visual Rotation
 		foreach (Vector2I hex in _selectedHexes)
 		{
 			if (_hexContents.ContainsKey(hex))
@@ -222,28 +252,49 @@ public partial class BattleMap : Node2D
 				MapEntity selectedShip = _hexContents[hex];
 				if (IsInstanceValid(selectedShip.VisualSprite))
 				{
-					Vector2 mousePos = GetGlobalMousePosition();
-					float targetAngle = selectedShip.VisualSprite.GlobalPosition.AngleToPoint(mousePos) + selectedShip.BaseRotationOffset;
+					Vector2 globalMousePos = GetGlobalMousePosition();
+					float targetAngle = selectedShip.VisualSprite.GlobalPosition.AngleToPoint(globalMousePos) + selectedShip.BaseRotationOffset;
 					selectedShip.VisualSprite.Rotation = Mathf.LerpAngle(selectedShip.VisualSprite.Rotation, targetAngle, 0.15f);
-				}
-
-				if (selectedShip.Type == "Player Fleet" && !_inCombat)
-				{
-					foreach(Vector2I dir in _hexDirections)
-					{
-						Vector2I neighbor = hex + dir;
-						if (_hexContents.ContainsKey(neighbor) && _hexContents[neighbor].Type == "StarGate")
-						{
-							isNearStargate = true;
-							break;
-						}
-					}
 				}
 			}
 		}
 
+		// --- EMERGENCY JUMP LOGIC ---
+		bool isNearStargate = false;
+		
+		if (!_inCombat)
+		{
+			_jumpButton.Text = "ENTER STARGATE";
+			foreach (Vector2I hex in _selectedHexes)
+			{
+				if (_hexContents.ContainsKey(hex))
+				{
+					MapEntity selectedShip = _hexContents[hex];
+					if (selectedShip.Type == "Player Fleet")
+					{
+						foreach(Vector2I dir in _hexDirections)
+						{
+							Vector2I neighbor = hex + dir;
+							if (_hexContents.ContainsKey(neighbor) && _hexContents[neighbor].Type == "StarGate")
+							{
+								isNearStargate = true;
+								break;
+							}
+						}
+					}
+				}
+				if (isNearStargate) break;
+			}
+		}
+		else
+		{
+			_jumpButton.Text = "EMERGENCY JUMP";
+			isNearStargate = CanFleetEscape();
+		}
+
 		_jumpButton.Visible = isNearStargate;
 
+		// Attack Button Logic
 		if (_selectedHexes.Count == 1 && _hexContents.ContainsKey(_selectedHexes[0]))
 		{
 			MapEntity singleShip = _hexContents[_selectedHexes[0]];
@@ -287,6 +338,38 @@ public partial class BattleMap : Node2D
 				kvp.Value.VisualSprite.Visible = isVisible;
 			}
 		}
+	}
+
+	// --- NEW: Combat Escape Check ---
+	private bool CanFleetEscape()
+	{
+		List<Vector2I> playerHexes = new List<Vector2I>();
+		List<Vector2I> gateHexes = new List<Vector2I>();
+
+		foreach (var kvp in _hexContents)
+		{
+			if (kvp.Value.Type == "Player Fleet") playerHexes.Add(kvp.Key);
+			if (kvp.Value.Type == "StarGate") gateHexes.Add(kvp.Key);
+		}
+
+		if (playerHexes.Count == 0 || gateHexes.Count == 0) return false;
+
+		foreach (Vector2I gate in gateHexes)
+		{
+			bool allNear = true;
+			foreach (Vector2I ship in playerHexes)
+			{
+				if (HexDistance(gate, ship) > 1)
+				{
+					allNear = false;
+					break;
+				}
+			}
+			// If all surviving player ships are clustered within 1 hex of this specific gate, we can jump!
+			if (allNear) return true;
+		}
+
+		return false;
 	}
 
 	public override void _UnhandledInput(InputEvent @event)
@@ -771,7 +854,6 @@ public partial class BattleMap : Node2D
 
 		for (int i = 0; i < turnsNeeded; i++)
 		{
-			// Instead of manual duplication, call the central Turn Advance logic
 			AdvanceExplorationTurn();
 
 			foreach (var kvp in _hexContents)
@@ -826,7 +908,6 @@ public partial class BattleMap : Node2D
 		}
 	}
 
-	// --- NEW: Centralized Exploration Turn Logic ---
 	private void AdvanceExplorationTurn()
 	{
 		if (_inCombat) return;
@@ -927,7 +1008,6 @@ public partial class BattleMap : Node2D
 		_selectedHexes = newSelection;
 		UpdateHighlights();
 
-		// --- UPDATED: Movement now triggers the turn to advance automatically ---
 		AdvanceExplorationTurn();
 	}
 
@@ -1656,31 +1736,63 @@ public partial class BattleMap : Node2D
 
 		Vector2I gateHex = new Vector2I(0,0);
 		bool gateFound = false;
-		foreach(var kvp in _hexContents) {
-			if (kvp.Value.Type == "StarGate") {
-				foreach (var p_hex in _selectedHexes) {
-					if (HexDistance(kvp.Key, p_hex) <= 1) {
-						gateHex = kvp.Key;
-						gateFound = true;
-						break;
+		
+		// If in combat, find the gate that EVERYONE is at to trigger the warp animation correctly
+		if (_inCombat)
+		{
+			List<Vector2I> playerHexes = new List<Vector2I>();
+			List<Vector2I> gateHexes = new List<Vector2I>();
+			foreach(var kvp in _hexContents) {
+				if (kvp.Value.Type == "Player Fleet") playerHexes.Add(kvp.Key);
+				if (kvp.Value.Type == "StarGate") gateHexes.Add(kvp.Key);
+			}
+			foreach (Vector2I gate in gateHexes) {
+				bool allNear = true;
+				foreach (Vector2I ship in playerHexes) {
+					if (HexDistance(gate, ship) > 1) {
+						allNear = false; break;
 					}
 				}
+				if (allNear) {
+					gateHex = gate;
+					gateFound = true;
+					break;
+				}
 			}
-			if (gateFound) break;
+		}
+		else
+		{
+			foreach(var kvp in _hexContents) {
+				if (kvp.Value.Type == "StarGate") {
+					foreach (var p_hex in _selectedHexes) {
+						if (HexDistance(kvp.Key, p_hex) <= 1) {
+							gateHex = kvp.Key;
+							gateFound = true;
+							break;
+						}
+					}
+				}
+				if (gateFound) break;
+			}
 		}
 
 		if (!gateFound) return;
+
+		// Force combat to close cleanly before jumping
+		_inCombat = false;
+		if (_globalData != null) _globalData.InCombat = false;
 
 		Vector2 gatePixelPos = HexToPixel(gateHex);
 
 		Tween warpTween = CreateTween();
 		warpTween.SetParallel(true);
 
-		foreach(var p_hex in _selectedHexes)
+		// Animate the entire fleet jumping out
+		foreach(var kvp in _hexContents)
 		{
-			if (_hexContents.ContainsKey(p_hex) && _hexContents[p_hex].Type == "Player Fleet")
+			if (kvp.Value.Type == "Player Fleet")
 			{
-				Sprite2D shipSprite = _hexContents[p_hex].VisualSprite;
+				Sprite2D shipSprite = kvp.Value.VisualSprite;
 				if (IsInstanceValid(shipSprite))
 				{
 					warpTween.TweenProperty(shipSprite, "position", gatePixelPos, 1.5f).SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.In);
@@ -2111,7 +2223,7 @@ public partial class BattleMap : Node2D
 
 		btnRow1.AddChild(_btnWeapons);
 		btnRow1.AddChild(_btnShields);
-		btnRow1.AddChild(_btnRepair); // <-- This line brings it back!
+		btnRow1.AddChild(_btnRepair); 
 		shipMenuVbox.AddChild(btnRow1);
 
 		HBoxContainer btnRow2 = new HBoxContainer();
