@@ -15,6 +15,10 @@ public class PlanetData
 	public Vector2 Position { get; set; } 
 	public float Scale { get; set; } 
 	public float StartingAngle { get; set; } 
+	
+	// --- NEW: EXPLORATION TRACKING ---
+	public bool HasBeenScanned { get; set; } = false;
+	public bool HasBeenSalvaged { get; set; } = false;
 }
 
 public class SystemData 
@@ -23,7 +27,6 @@ public class SystemData
 	public Vector2 StarPosition { get; set; }
 	public List<PlanetData> Planets { get; set; } = new List<PlanetData>();
 	
-	// --- NEW: SYSTEM-SPECIFIC MEMORY ---
 	public bool HasBeenVisited { get; set; } = false;
 	public Godot.Collections.Array EnemyFleets { get; set; } = new Godot.Collections.Array();
 	public List<Vector2I> StargateLocations { get; set; } = new List<Vector2I>();
@@ -64,8 +67,16 @@ public partial class GlobalData : Node
 	public int CurrentQueueIndex { get; set; } = 0;
 	public bool JustJumped { get; set; } = false;
 
-	// Only the PLAYER fleet is saved globally because it travels with you between systems.
 	public Godot.Collections.Array SavedFleetState { get; set; } = new Godot.Collections.Array();
+
+	// --- SHARED FLEET INVENTORY ---
+	public Godot.Collections.Dictionary<string, Variant> FleetResources { get; set; } = new Godot.Collections.Dictionary<string, Variant>
+	{
+		{ "Raw Materials", 0 },
+		{ "Energy Cores", 0 },
+		{ "Ancient Tech", 0 }
+	};
+	public Godot.Collections.Array FleetEquipment { get; set; } = new Godot.Collections.Array();
 
 	public override void _Ready()
 	{
@@ -89,6 +100,9 @@ public partial class GlobalData : Node
 		saveData["CurrentQueueIndex"] = CurrentQueueIndex;
 		saveData["SavedFleetState"] = SavedFleetState;
 		
+		saveData["FleetResources"] = FleetResources;
+		saveData["FleetEquipment"] = FleetEquipment;
+
 		var fleetArray = new Godot.Collections.Array();
 		if (SelectedPlayerFleet != null)
 		{
@@ -105,7 +119,6 @@ public partial class GlobalData : Node
 			var sysData = new Godot.Collections.Dictionary<string, Variant>();
 			sysData["SystemName"] = sysKvp.Value.SystemName;
 			
-			// Save the new system-specific data
 			sysData["HasBeenVisited"] = sysKvp.Value.HasBeenVisited;
 			sysData["EnemyFleets"] = sysKvp.Value.EnemyFleets;
 			
@@ -126,6 +139,11 @@ public partial class GlobalData : Node
 				pDict["TypeIndex"] = p.TypeIndex;
 				pDict["Scale"] = p.Scale;
 				pDict["Habitability"] = p.Habitability;
+				
+				// --- NEW: Save Tracking ---
+				pDict["HasBeenScanned"] = p.HasBeenScanned;
+				pDict["HasBeenSalvaged"] = p.HasBeenSalvaged;
+				
 				pArray.Add(pDict);
 			}
 			sysData["Planets"] = pArray;
@@ -169,6 +187,9 @@ public partial class GlobalData : Node
 		
 		if (savedData.ContainsKey("SavedFleetState")) SavedFleetState = (Godot.Collections.Array)savedData["SavedFleetState"];
 		
+		if (savedData.ContainsKey("FleetResources")) FleetResources = (Godot.Collections.Dictionary<string, Variant>)savedData["FleetResources"];
+		if (savedData.ContainsKey("FleetEquipment")) FleetEquipment = (Godot.Collections.Array)savedData["FleetEquipment"];
+
 		if (savedData.ContainsKey("SelectedPlayerFleet"))
 		{
 			var fleetArray = (Godot.Collections.Array)savedData["SelectedPlayerFleet"];
@@ -189,7 +210,6 @@ public partial class GlobalData : Node
 				SystemData newSys = new SystemData();
 				newSys.SystemName = (string)sysDataDict["SystemName"];
 				
-				// Load new system-specific data
 				if (sysDataDict.ContainsKey("HasBeenVisited")) newSys.HasBeenVisited = (bool)sysDataDict["HasBeenVisited"];
 				if (sysDataDict.ContainsKey("EnemyFleets")) newSys.EnemyFleets = (Godot.Collections.Array)sysDataDict["EnemyFleets"];
 				
@@ -213,6 +233,10 @@ public partial class GlobalData : Node
 					newP.TypeIndex = (int)pDict["TypeIndex"];
 					newP.Scale = (float)pDict["Scale"];
 					newP.Habitability = (string)pDict["Habitability"];
+					
+					// --- NEW: Load Tracking ---
+					if (pDict.ContainsKey("HasBeenScanned")) newP.HasBeenScanned = (bool)pDict["HasBeenScanned"];
+					if (pDict.ContainsKey("HasBeenSalvaged")) newP.HasBeenSalvaged = (bool)pDict["HasBeenSalvaged"];
 					
 					newSys.Planets.Add(newP);
 				}
@@ -239,6 +263,14 @@ public partial class GlobalData : Node
 		CurrentQueueIndex = 0;
 		JustJumped = false; 
 		SavedFleetState.Clear();
+		
+		FleetResources = new Godot.Collections.Dictionary<string, Variant>
+		{
+			{ "Raw Materials", 0 },
+			{ "Energy Cores", 0 },
+			{ "Ancient Tech", 0 }
+		};
+		FleetEquipment.Clear();
 
 		if (FileAccess.FileExists(_savePath))
 		{
