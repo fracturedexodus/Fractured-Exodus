@@ -140,6 +140,7 @@ public partial class BattleMap : Node2D
 	private Button _btnRepair;
 	private Button _btnScan;     
 	private Button _btnSalvage;  
+	private Button _codexButton;
 	private Button _closeMenuButton;
 	private MapEntity _currentlyViewedShip = null;
 
@@ -340,7 +341,7 @@ public partial class BattleMap : Node2D
 		}
 	}
 
-	// --- NEW: Combat Escape Check ---
+	// --- Combat Escape Check ---
 	private bool CanFleetEscape()
 	{
 		List<Vector2I> playerHexes = new List<Vector2I>();
@@ -643,6 +644,7 @@ public partial class BattleMap : Node2D
 			_btnShields.Visible = isPlayer;
 			_btnRepair.Visible = isPlayer;
 			_btnRepair.Disabled = ship.CurrentActions < 2;
+			_codexButton.Visible = isPlayer;
 
 			_btnScan.Visible = false;
 			_btnSalvage.Visible = false;
@@ -771,6 +773,14 @@ public partial class BattleMap : Node2D
 		}
 
 		ToggleShipMenu(true, _currentlyViewedShip); 
+	}
+
+	private void OnCodexPressed()
+	{
+		OnSaveGamePressed(); 
+		SceneTransition transitioner = GetNodeOrNull<SceneTransition>("/root/SceneTransition");
+		if (transitioner != null) transitioner.ChangeScene("res://codex.tscn");
+		else GetTree().ChangeSceneToFile("res://codex.tscn");
 	}
 
 	private void OnInventoryPressed()
@@ -2239,6 +2249,13 @@ public partial class BattleMap : Node2D
 		btnRow2.AddChild(_btnScan);
 		btnRow2.AddChild(_btnSalvage);
 		shipMenuVbox.AddChild(btnRow2);
+
+		// --- RE-ADD CODEX BUTTON HERE ---
+		_codexButton = new Button();
+		_codexButton.Text = "ACCESS CODEX";
+		_codexButton.CustomMinimumSize = new Vector2(0, 35);
+		_codexButton.Pressed += OnCodexPressed;
+		shipMenuVbox.AddChild(_codexButton);
 
 		_closeMenuButton = new Button();
 		_closeMenuButton.Text = "CLOSE TERMINAL";
