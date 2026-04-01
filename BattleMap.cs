@@ -114,6 +114,7 @@ public partial class BattleMap : Node2D
 	private Label _infoLabel;
 	private Button _endTurnButton;
 	private Button _saveGameButton;
+	private Button _repairFleetButton; // NEW: Fast-forward heal button
 	private Button _mainMenuButton;
 	private Button _attackButton; 
 	private Button _jumpButton; 
@@ -121,14 +122,23 @@ public partial class BattleMap : Node2D
 	private Label _initiativeTurnLabel; 
 	private ColorRect _gameOverPanel; 
 	
+	private PanelContainer _combatLogPanel;
+	private RichTextLabel _combatLogText;
+
+	// --- TACTICAL SHIP MENU UI ELEMENTS ---
 	private PanelContainer _shipMenuPanel; 
 	private Label _shipMenuTitle;
 	private Label _shipMenuDetails;
-	private Button _codexButton;
+	private TextureRect _shipImageDisplay;
+	private ProgressBar _hpBar;
+	private ProgressBar _shieldBar;
+	private Label _hpLabel;
+	private Label _shieldLabel;
+	private Button _btnWeapons;
+	private Button _btnShields;
+	private Button _btnRepair;
 	private Button _closeMenuButton;
-
-	private PanelContainer _combatLogPanel;
-	private RichTextLabel _combatLogText;
+	private MapEntity _currentlyViewedShip = null;
 
 	private Vector2I[] _hexDirections = new Vector2I[] {
 		new Vector2I(1, 0), new Vector2I(1, -1), new Vector2I(0, -1), 
@@ -157,6 +167,10 @@ public partial class BattleMap : Node2D
 		
 		if (_globalData != null && _globalData.InCombat) RestoreCombatState();
 		else CheckForCombatTrigger();
+
+		// Initially toggle appropriate exploration buttons
+		_endTurnButton.Visible = true; 
+		_repairFleetButton.Visible = !_inCombat; 
 	}
 
 	private void SetupAudio() 
@@ -275,6 +289,46 @@ public partial class BattleMap : Node2D
 	public override void _UnhandledInput(InputEvent @event)
 	{
 		if (_isJumping) return;
+
+		// --- HOTKEY LOGIC ---
+		if (@event is InputEventKey keyEvent && keyEvent.Pressed && !keyEvent.Echo)
+		{
+			if (keyEvent.Keycode == Key.Space)
+			{
+				if (_inCombat && _activeShip != null && _activeShip.Type == "Player Fleet")
+				{
+					OnEndTurnPressed();
+				}
+			}
+			else if (keyEvent.Keycode == Key.R)
+			{
+				OnRepairPressed();
+			}
+			else if (keyEvent.Keycode == Key.Q)
+			{
+				if (_inCombat && _activeShip != null && _activeShip.Type == "Player Fleet" && _activeShip.CurrentActions > 0)
+				{
+					Vector2I hoveredHex = PixelToHex(GetGlobalMousePosition());
+					if (_hexContents.ContainsKey(hoveredHex) && _hexContents[hoveredHex].Type == "Enemy Fleet")
+					{
+						Vector2I activeHex = Vector2I.Zero;
+						foreach(var kvp in _hexContents) if (kvp.Value == _activeShip) activeHex = kvp.Key;
+
+						if (HexDistance(activeHex, hoveredHex) <= _activeShip.AttackRange)
+						{
+							PerformAttack(activeHex, hoveredHex);
+							_isTargeting = false;
+							_attackButton.Text = "ATTACK";
+							CheckForCombatTrigger();
+						}
+						else
+						{
+							GD.Print("Target out of range!");
+						}
+					}
+				}
+			}
+		}
 
 		if (@event is InputEventMouseButton mouseButton)
 		{
@@ -446,29 +500,219 @@ public partial class BattleMap : Node2D
 		
 		if (expand && ship != null)
 		{
+			_currentlyViewedShip = ship;
 			_shipMenuTitle.Text = $"== {ship.Name.ToUpper()} ==";
 			string status = ship.Type == "Enemy Fleet" ? "[HOSTILE]" : "[ALLIED]";
 			
+			Texture2D tex = GD.Load<Texture2D>(GetShipTexturePath(ship.Name));
+			if (tex != null) _shipImageDisplay.Texture = tex;
+			float hpPercent = (float)ship.CurrentHP / ship.MaxHP;
+			_shipImageDisplay.Modulate = new Color(1f, hpPercent, hpPercent); 
+
+			_hpBar.MaxValue = ship.MaxHP;
+			_hpBar.Value = ship.CurrentHP;
+			_hpLabel.Text = $"HULL INTEGRITY: {ship.CurrentHP}/{ship.MaxHP}";
+
+			_shieldBar.MaxValue = ship.MaxShields;
+			_shieldBar.Value = ship.CurrentShields;
+			_shieldLabel.Text = $"SHIELD CAPACITORS: {ship.CurrentShields}/{ship.MaxShields}";
+
 			_shipMenuDetails.Text = 
 				$"Classification: {ship.Type}\n" +
-				$"Status: {status}\n\n" +
-				$"Hull Integrity: {ship.CurrentHP}/{ship.MaxHP}\n" +
-				$"Shield Capacitors: {ship.CurrentShields}/{ship.MaxShields}\n" +
-				$"Action Points: {ship.CurrentActions}/{ship.MaxActions}\n\n" +
+				$"Status: {status}\n" +
+				$"Action Points: {ship.CurrentActions}/{ship.MaxActions}\n" +
 				$"Weapon Payload: 0-{ship.AttackDamage} Dmg\n" + 
-				$"Targeting Range: {ship.AttackRange} Hexes\n\n" +
-				$"SYS_LOG:\n{ship.Details}";
+				$"Targeting Range: {ship.AttackRange} Hexes\n";
 				
-			_codexButton.Visible = (ship.Type == "Player Fleet");
+			bool isPlayer = ship.Type == "Player Fleet";
+			_btnWeapons.Visible = isPlayer;
+			_btnShields.Visible = isPlayer;
+			_btnRepair.Visible = isPlayer;
+			
+			_btnRepair.Disabled = ship.CurrentActions < 2;
 		}
 	}
 
-	private void OnCodexPressed()
+	private void OnRepairPressed()
 	{
-		OnSaveGamePressed(); 
-		SceneTransition transitioner = GetNodeOrNull<SceneTransition>("/root/SceneTransition");
-		if (transitioner != null) transitioner.ChangeScene("res://codex.tscn");
-		else GetTree().ChangeSceneToFile("res://codex.tscn");
+		if (_currentlyViewedShip == null || _currentlyViewedShip.IsDead || _currentlyViewedShip.Type != "Player Fleet") return;
+		
+		if (_currentlyViewedShip.CurrentActions < 2) 
+		{
+			GD.Print("Not enough AP to repair!");
+			return;
+		}
+
+		_currentlyViewedShip.CurrentActions -= 2;
+		
+		Random rng = new Random();
+		int healAmount = rng.Next(15, 30); 
+		bool healShield = rng.Next(0, 2) == 0; 
+
+		if (healShield && _currentlyViewedShip.CurrentShields == _currentlyViewedShip.MaxShields) healShield = false;
+		if (!healShield && _currentlyViewedShip.CurrentHP == _currentlyViewedShip.MaxHP) healShield = true;
+
+		if (healShield)
+		{
+			_currentlyViewedShip.CurrentShields = Mathf.Min(_currentlyViewedShip.CurrentShields + healAmount, _currentlyViewedShip.MaxShields);
+			LogCombatMessage($"[color=#00ffff]{_currentlyViewedShip.Name} routed emergency power to Shields (+{healAmount})![/color]");
+		}
+		else
+		{
+			_currentlyViewedShip.CurrentHP = Mathf.Min(_currentlyViewedShip.CurrentHP + healAmount, _currentlyViewedShip.MaxHP);
+			LogCombatMessage($"[color=#44ff44]{_currentlyViewedShip.Name} deployed drones to patch Hull Breeches (+{healAmount})![/color]");
+		}
+
+		if (_sfxPlayer != null)
+		{
+			AudioStream repairSound = GD.Load<AudioStream>("res://Sounds/laser.mp3"); 
+			if (repairSound != null) { _sfxPlayer.Stream = repairSound; _sfxPlayer.PitchScale = 1.5f; _sfxPlayer.Play(); }
+		}
+
+		ToggleShipMenu(true, _currentlyViewedShip);
+	}
+
+	// --- NEW: Accelerated Fleet Repair (Fast Forward) ---
+	private void OnRepairFleetPressed()
+	{
+		if (_inCombat) return;
+
+		int totalMissing = 0;
+		foreach (var kvp in _hexContents)
+		{
+			if (kvp.Value.Type == "Player Fleet")
+			{
+				totalMissing += (kvp.Value.MaxHP - kvp.Value.CurrentHP) + (kvp.Value.MaxShields - kvp.Value.CurrentShields);
+			}
+		}
+
+		if (totalMissing == 0)
+		{
+			GD.Print("Fleet is already at full strength!");
+			return;
+		}
+
+		int turnsNeeded = (totalMissing / 20) + 1; // Arbitrary 20 points restored globally per turn
+		
+		_combatLogPanel.Visible = true;
+		LogCombatMessage($"\n[color=cyan]--- REPAIRING FLEET (Estimated {turnsNeeded} Turns) ---[/color]");
+
+		bool ambushed = false;
+
+		for (int i = 0; i < turnsNeeded; i++)
+		{
+			_currentTurn++;
+
+			// Partially repair each turn
+			foreach (var kvp in _hexContents)
+			{
+				if (kvp.Value.Type == "Player Fleet")
+				{
+					kvp.Value.CurrentHP = Mathf.Min(kvp.Value.CurrentHP + 15, kvp.Value.MaxHP);
+					kvp.Value.CurrentShields = Mathf.Min(kvp.Value.CurrentShields + 10, kvp.Value.MaxShields);
+				}
+			}
+
+			// Move enemies instantly while we sit still
+			MoveEnemiesInstantly();
+
+			// Check for ambush
+			List<Vector2I> players = new List<Vector2I>();
+			List<Vector2I> enemies = new List<Vector2I>();
+			foreach (var kvp in _hexContents)
+			{
+				if (kvp.Value.Type == "Player Fleet") players.Add(kvp.Key);
+				if (kvp.Value.Type == "Enemy Fleet") enemies.Add(kvp.Key);
+			}
+
+			foreach (Vector2I p in players)
+			{
+				foreach (Vector2I e in enemies)
+				{
+					if (HexDistance(p, e) <= _scanningRange)
+					{
+						ambushed = true;
+						break;
+					}
+				}
+				if (ambushed) break;
+			}
+
+			if (ambushed)
+			{
+				LogCombatMessage($"[color=red]*** REPAIRS INTERRUPTED BY ENEMY FLEET! ***[/color]");
+				CheckForCombatTrigger();
+				break;
+			}
+		}
+
+		if (!ambushed)
+		{
+			// Top them off just in case math leaves a tiny gap
+			foreach (var kvp in _hexContents)
+			{
+				if (kvp.Value.Type == "Player Fleet")
+				{
+					kvp.Value.CurrentHP = kvp.Value.MaxHP;
+					kvp.Value.CurrentShields = kvp.Value.MaxShields;
+				}
+			}
+			LogCombatMessage($"[color=green]Fleet repairs complete.[/color]");
+		}
+
+		_endTurnButton.Text = $"TURN {_currentTurn}";
+		if (_selectedHexes.Count == 1 && _hexContents.ContainsKey(_selectedHexes[0]))
+		{
+			ToggleShipMenu(true, _hexContents[_selectedHexes[0]]);
+		}
+	}
+
+	// Used by the fast-forward repair to snap enemies closer without animating
+	private void MoveEnemiesInstantly()
+	{
+		List<Vector2I> playerPositions = new List<Vector2I>();
+		foreach (var kvp in _hexContents) if (kvp.Value.Type == "Player Fleet") playerPositions.Add(kvp.Key);
+		if (playerPositions.Count == 0) return;
+
+		List<KeyValuePair<Vector2I, MapEntity>> enemies = _hexContents.Where(kvp => kvp.Value.Type == "Enemy Fleet").ToList();
+		
+		foreach (var kvp in enemies)
+		{
+			Vector2I currentPos = kvp.Key;
+			MapEntity enemyShip = kvp.Value;
+
+			Vector2I targetPlayer = playerPositions[0];
+			int minDistance = HexDistance(currentPos, targetPlayer);
+			foreach (Vector2I playerHex in playerPositions)
+			{
+				int dist = HexDistance(currentPos, playerHex);
+				if (dist < minDistance) { minDistance = dist; targetPlayer = playerHex; }
+			}
+
+			Vector2I bestNeighbor = currentPos;
+			int bestDist = minDistance;
+
+			foreach (Vector2I dir in _hexDirections)
+			{
+				Vector2I neighbor = currentPos + dir;
+				if (!_hexGrid.ContainsKey(neighbor)) continue;
+				if (IsHexEmpty(neighbor))
+				{
+					int distToTarget = HexDistance(neighbor, targetPlayer);
+					if (distToTarget < bestDist)
+					{
+						bestDist = distToTarget; bestNeighbor = neighbor;
+					}
+				}
+			}
+
+			if (bestNeighbor != currentPos)
+			{
+				_hexContents.Remove(currentPos);
+				_hexContents[bestNeighbor] = enemyShip;
+				enemyShip.VisualSprite.Position = HexToPixel(bestNeighbor);
+			}
+		}
 	}
 
 	private void MoveGroup(List<Vector2I> shipsToMove, Vector2I targetHex)
@@ -582,6 +826,8 @@ public partial class BattleMap : Node2D
 	private void StartCombat()
 	{
 		_inCombat = true;
+		_endTurnButton.Visible = true; 
+		_repairFleetButton.Visible = false; // Hide fast-forward heal during combat
 		
 		_combatLogPanel.Visible = true;
 		_combatLogText.Text = "[color=yellow]--- COMBAT INITIATED ---[/color]\n";
@@ -645,6 +891,8 @@ public partial class BattleMap : Node2D
 	private void RestoreCombatState()
 	{
 		_inCombat = true;
+		_endTurnButton.Visible = true; 
+		_repairFleetButton.Visible = false; 
 		
 		_combatLogPanel.Visible = true;
 		_combatLogText.Text = "[color=yellow]--- COMBAT RESUMED ---[/color]\n";
@@ -842,6 +1090,8 @@ public partial class BattleMap : Node2D
 		_inCombat = false;
 		_activeShip = null;
 		_combatLogPanel.Visible = false; 
+		_endTurnButton.Visible = false; 
+		_repairFleetButton.Visible = true; // Show Repair button again
 		
 		bool playerAlive = false;
 		foreach (var ship in _hexContents.Values)
@@ -1281,7 +1531,6 @@ public partial class BattleMap : Node2D
 		}));
 	}
 
-	// --- UPDATED: Save to SYSTEM Memory ---
 	private void OnSaveGamePressed()
 	{
 		if (_globalData != null)
@@ -1315,7 +1564,6 @@ public partial class BattleMap : Node2D
 			
 			_globalData.SavedFleetState = playerState;
 			
-			// Save the enemy fleet specific to the system we are in
 			if (!string.IsNullOrEmpty(_globalData.SavedSystem) && _globalData.ExploredSystems.ContainsKey(_globalData.SavedSystem))
 			{
 				_globalData.ExploredSystems[_globalData.SavedSystem].EnemyFleets = enemyState;
@@ -1541,6 +1789,21 @@ public partial class BattleMap : Node2D
 		_saveGameButton.Pressed += OnSaveGamePressed;
 		uiRoot.AddChild(_saveGameButton);
 
+		// --- NEW: Global Repair Fleet Button ---
+		_repairFleetButton = new Button();
+		_repairFleetButton.Text = "REPAIR FLEET";
+		_repairFleetButton.CustomMinimumSize = new Vector2(160, 50);
+		StyleBoxFlat repairFleetStyle = new StyleBoxFlat();
+		repairFleetStyle.BgColor = new Color(0.4f, 0.4f, 0.1f, 0.9f); 
+		repairFleetStyle.BorderWidthBottom = 2; repairFleetStyle.BorderWidthTop = 2; repairFleetStyle.BorderWidthLeft = 2; repairFleetStyle.BorderWidthRight = 2;
+		repairFleetStyle.BorderColor = new Color(1f, 1f, 0.3f, 1f); 
+		repairFleetStyle.CornerRadiusTopLeft = 5; repairFleetStyle.CornerRadiusBottomRight = 5;
+		_repairFleetButton.AddThemeStyleboxOverride("normal", repairFleetStyle);
+		_repairFleetButton.AddThemeStyleboxOverride("hover", panelStyle); 
+		_repairFleetButton.Position = new Vector2(screenSize.X - 540, 20); 
+		_repairFleetButton.Pressed += OnRepairFleetPressed;
+		uiRoot.AddChild(_repairFleetButton);
+
 		_mainMenuButton = new Button();
 		_mainMenuButton.Text = "MAIN MENU";
 		_mainMenuButton.CustomMinimumSize = new Vector2(160, 50);
@@ -1551,11 +1814,10 @@ public partial class BattleMap : Node2D
 		menuStyle.CornerRadiusTopLeft = 5; menuStyle.CornerRadiusBottomRight = 5;
 		_mainMenuButton.AddThemeStyleboxOverride("normal", menuStyle);
 		_mainMenuButton.AddThemeStyleboxOverride("hover", panelStyle); 
-		_mainMenuButton.Position = new Vector2(screenSize.X - 540, 20); 
+		_mainMenuButton.Position = new Vector2(screenSize.X - 720, 20); // Shifted over
 		_mainMenuButton.Pressed += OnMainMenuPressed;
 		uiRoot.AddChild(_mainMenuButton);
 
-		// NEW: Jump Button UI
 		_jumpButton = new Button();
 		_jumpButton.Text = "ENTER STARGATE";
 		_jumpButton.CustomMinimumSize = new Vector2(250, 50);
@@ -1587,7 +1849,7 @@ public partial class BattleMap : Node2D
 		uiRoot.AddChild(_attackButton);
 		
 		_shipMenuPanel = new PanelContainer();
-		_shipMenuPanel.CustomMinimumSize = new Vector2(300, 400);
+		_shipMenuPanel.CustomMinimumSize = new Vector2(350, 450);
 		
 		StyleBoxFlat terminalStyle = new StyleBoxFlat();
 		terminalStyle.BgColor = new Color(0.05f, 0.1f, 0.15f, 0.95f); 
@@ -1596,10 +1858,10 @@ public partial class BattleMap : Node2D
 		terminalStyle.CornerRadiusTopLeft = 10; terminalStyle.CornerRadiusBottomLeft = 10;
 		_shipMenuPanel.AddThemeStyleboxOverride("panel", terminalStyle);
 		
-		_shipMenuPanel.Position = new Vector2(screenSize.X + 50, screenSize.Y - 450); 
+		_shipMenuPanel.Position = new Vector2(screenSize.X + 50, screenSize.Y / 2 - 225); 
 		
 		VBoxContainer shipMenuVbox = new VBoxContainer();
-		shipMenuVbox.AddThemeConstantOverride("separation", 15);
+		shipMenuVbox.AddThemeConstantOverride("separation", 10);
 		_shipMenuPanel.AddChild(shipMenuVbox);
 
 		_shipMenuTitle = new Label();
@@ -1608,19 +1870,64 @@ public partial class BattleMap : Node2D
 		_shipMenuTitle.HorizontalAlignment = HorizontalAlignment.Center;
 		shipMenuVbox.AddChild(_shipMenuTitle);
 
+		_shipImageDisplay = new TextureRect();
+		_shipImageDisplay.CustomMinimumSize = new Vector2(150, 150);
+		_shipImageDisplay.ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize;
+		_shipImageDisplay.StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered;
+		shipMenuVbox.AddChild(_shipImageDisplay);
+
+		_hpLabel = new Label();
+		_hpLabel.AddThemeColorOverride("font_color", new Color(0.4f, 1f, 0.4f));
+		shipMenuVbox.AddChild(_hpLabel);
+		
+		_hpBar = new ProgressBar();
+		_hpBar.CustomMinimumSize = new Vector2(0, 15);
+		_hpBar.ShowPercentage = false;
+		StyleBoxFlat hpBg = new StyleBoxFlat { BgColor = new Color(0.2f, 0.0f, 0.0f) };
+		StyleBoxFlat hpFg = new StyleBoxFlat { BgColor = new Color(0.2f, 0.8f, 0.2f) };
+		_hpBar.AddThemeStyleboxOverride("background", hpBg);
+		_hpBar.AddThemeStyleboxOverride("fill", hpFg);
+		shipMenuVbox.AddChild(_hpBar);
+
+		_shieldLabel = new Label();
+		_shieldLabel.AddThemeColorOverride("font_color", new Color(0.2f, 0.8f, 1f));
+		shipMenuVbox.AddChild(_shieldLabel);
+		
+		_shieldBar = new ProgressBar();
+		_shieldBar.CustomMinimumSize = new Vector2(0, 15);
+		_shieldBar.ShowPercentage = false;
+		StyleBoxFlat shBg = new StyleBoxFlat { BgColor = new Color(0.0f, 0.0f, 0.2f) };
+		StyleBoxFlat shFg = new StyleBoxFlat { BgColor = new Color(0.2f, 0.8f, 1f) };
+		_shieldBar.AddThemeStyleboxOverride("background", shBg);
+		_shieldBar.AddThemeStyleboxOverride("fill", shFg);
+		shipMenuVbox.AddChild(_shieldBar);
+
 		_shipMenuDetails = new Label();
 		_shipMenuDetails.AutowrapMode = TextServer.AutowrapMode.Word;
 		shipMenuVbox.AddChild(_shipMenuDetails);
 
-		_codexButton = new Button();
-		_codexButton.Text = "ACCESS CODEX";
-		_codexButton.CustomMinimumSize = new Vector2(0, 40);
-		_codexButton.Pressed += OnCodexPressed;
-		shipMenuVbox.AddChild(_codexButton);
+		HBoxContainer btnRow1 = new HBoxContainer();
+		btnRow1.AddThemeConstantOverride("separation", 10);
+		btnRow1.Alignment = BoxContainer.AlignmentMode.Center;
+		
+		_btnWeapons = new Button { Text = "WEAPONS", CustomMinimumSize = new Vector2(100, 30) };
+		_btnShields = new Button { Text = "SHIELDS", CustomMinimumSize = new Vector2(100, 30) };
+		_btnRepair = new Button { Text = "REPAIR (2 AP)", CustomMinimumSize = new Vector2(100, 30) };
+		
+		_btnRepair.Pressed += OnRepairPressed;
+
+		btnRow1.AddChild(_btnWeapons);
+		btnRow1.AddChild(_btnShields);
+		shipMenuVbox.AddChild(btnRow1);
+
+		HBoxContainer btnRow2 = new HBoxContainer();
+		btnRow2.Alignment = BoxContainer.AlignmentMode.Center;
+		btnRow2.AddChild(_btnRepair);
+		shipMenuVbox.AddChild(btnRow2);
 
 		_closeMenuButton = new Button();
 		_closeMenuButton.Text = "CLOSE TERMINAL";
-		_closeMenuButton.CustomMinimumSize = new Vector2(0, 40);
+		_closeMenuButton.CustomMinimumSize = new Vector2(0, 35);
 		_closeMenuButton.Pressed += () => ToggleShipMenu(false);
 		shipMenuVbox.AddChild(_closeMenuButton);
 
@@ -1689,7 +1996,6 @@ public partial class BattleMap : Node2D
 		return new Vector2(x, y);
 	}
 
-	// --- UPDATED: Populate logic now checks system-specific memory ---
 	private void PopulateMapFromMemory()
 	{
 		Random rng = new Random();
@@ -1704,14 +2010,11 @@ public partial class BattleMap : Node2D
 
 		if (_globalData == null || string.IsNullOrEmpty(_globalData.SavedSystem)) return;
 
-		// --- NEW: ON-THE-FLY SYSTEM GENERATION ---
-		// If we bypassed the UI window, the system data doesn't exist yet. Let's create it!
 		if (!_globalData.ExploredSystems.ContainsKey(_globalData.SavedSystem))
 		{
 			SystemData newSys = new SystemData();
 			newSys.SystemName = _globalData.SavedSystem;
 			
-			// Find how many planets this star is supposed to have from the Galactic Map
 			int pCount = rng.Next(1, 6);
 			if (_globalData.CurrentSectorStars != null)
 			{
@@ -1744,7 +2047,6 @@ public partial class BattleMap : Node2D
 		SystemData currentSystem = _globalData.ExploredSystems[_globalData.SavedSystem];
 		Vector2I basePlanetLocation = new Vector2I(2, -1); 
 		
-		// 1. Spawning Planets
 		int currentOrbitRing = 2; 
 		foreach (PlanetData pData in currentSystem.Planets)
 		{
@@ -1757,14 +2059,13 @@ public partial class BattleMap : Node2D
 			if (pData.Name == _globalData.SavedPlanet) basePlanetLocation = spawnHex;
 		}
 
-		// 2. Spawning Stargates (Persistent per system)
 		if (!currentSystem.HasBeenVisited)
 		{
 			int numGates = rng.Next(1, 3);
 			for (int i = 0; i < numGates; i++)
 			{
 				Vector2I gateHex = FindEmptyHexInRing(rng.Next(15, _maxMapRadius - 5), rng);
-				currentSystem.StargateLocations.Add(gateHex); // Save to system memory
+				currentSystem.StargateLocations.Add(gateHex); 
 			}
 		}
 		
@@ -1780,7 +2081,6 @@ public partial class BattleMap : Node2D
 			arrivedViaJump = _globalData.JustJumped;
 			if (arrivedViaJump)
 			{
-				// If they just jumped in, spawn them near a random Stargate in this system
 				if (currentSystem.StargateLocations.Count > 0)
 				{
 					basePlanetLocation = currentSystem.StargateLocations[rng.Next(currentSystem.StargateLocations.Count)];
@@ -1793,7 +2093,6 @@ public partial class BattleMap : Node2D
 			}
 		}
 
-		// 3. Spawn Player Fleet (Global memory)
 		if (_globalData.SavedFleetState != null && _globalData.SavedFleetState.Count > 0)
 		{
 			int jumpSpawnOffset = 0; 
@@ -1856,10 +2155,8 @@ public partial class BattleMap : Node2D
 			}
 		}
 
-		// 4. Spawn Enemy Fleet (System-Specific memory)
 		if (currentSystem.HasBeenVisited && currentSystem.EnemyFleets != null && currentSystem.EnemyFleets.Count > 0)
 		{
-			// Load from System Data
 			foreach (var item in currentSystem.EnemyFleets)
 			{
 				var shipDict = (Godot.Collections.Dictionary)item;
@@ -1885,7 +2182,6 @@ public partial class BattleMap : Node2D
 		}
 		else if (!currentSystem.HasBeenVisited)
 		{
-			// Generate NEW enemies for this system, and save them to System Data immediately
 			int enemyFleetCount = rng.Next(1, 6); 
 			var savedEnemyArray = new Godot.Collections.Array();
 
@@ -1930,7 +2226,7 @@ public partial class BattleMap : Node2D
 				}
 			}
 			currentSystem.EnemyFleets = savedEnemyArray;
-			currentSystem.HasBeenVisited = true; // Mark as visited!
+			currentSystem.HasBeenVisited = true; 
 		}
 	}
 
