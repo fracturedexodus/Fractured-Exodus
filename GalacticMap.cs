@@ -13,6 +13,15 @@ public partial class GalacticMap : Control
 	private SystemWindow _systemWindow;
 	private GlobalData _globalData; 
 
+	// --- WARP TRAJECTORY DRAWING ---
+	private Vector2 _currentSystemMapPos = Vector2.Zero;
+	private bool _isHoveringStar = false;
+	private Vector2 _hoverTarget = Vector2.Zero;
+	
+	// NEW: Godot Native Nodes for drawing over the UI
+	private Line2D _warpLine;
+	private Polygon2D _originMarker;
+
 	// --- LORE DATA ---
 	private List<string> prefixes = new List<string> { 
 		"Aether", "Void", "Core", "Verdant", "Obsidian", "Ember", "Luminous", 
@@ -42,6 +51,20 @@ public partial class GalacticMap : Control
 		_systemWindow = GetNode<SystemWindow>("SystemWindow");
 		_systemWindow.Visible = false;
 
+		// --- NEW: Setup the Line and Circle nodes so they draw OVER the background ---
+		_warpLine = new Line2D();
+		_warpLine.Width = 3.0f;
+		_warpLine.DefaultColor = new Color(1f, 1f, 1f, 0.8f); // White with slight transparency
+		_warpLine.ZIndex = 100; // Forces it to draw on top of UI
+		AddChild(_warpLine);
+
+		_originMarker = new Polygon2D();
+		_originMarker.Color = new Color(0.2f, 0.8f, 1f, 1f); // Bright blue
+		_originMarker.Polygon = CreateCirclePolygon(6.0f);
+		_originMarker.ZIndex = 100;
+		_originMarker.Visible = false;
+		AddChild(_originMarker);
+
 		// Load the image data into memory so we can read its pixels
 		if (RegionMaskTexture != null)
 		{
@@ -56,6 +79,39 @@ public partial class GalacticMap : Control
 			LoadSectorFromMemory();
 		else
 			GenerateAndSaveSector(40);
+	}
+
+	// Helper to draw a perfect circle for the origin marker
+	private Vector2[] CreateCirclePolygon(float radius)
+	{
+		Vector2[] points = new Vector2[32];
+		for (int i = 0; i < 32; i++)
+		{
+			float angle = (i / 32f) * Mathf.Pi * 2f;
+			points[i] = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * radius;
+		}
+		return points;
+	}
+
+	// --- UPDATED: Use the Line2D node to draw the trajectory ---
+	public override void _Process(double delta)
+	{
+		if (_globalData != null && _globalData.JustJumped && _currentSystemMapPos != Vector2.Zero)
+		{
+			_originMarker.Position = _currentSystemMapPos;
+			_originMarker.Visible = true;
+
+			Vector2 targetPos = _isHoveringStar ? _hoverTarget : GetGlobalMousePosition();
+			
+			_warpLine.ClearPoints();
+			_warpLine.AddPoint(_currentSystemMapPos);
+			_warpLine.AddPoint(targetPos);
+		}
+		else
+		{
+			_warpLine.ClearPoints();
+			_originMarker.Visible = false;
+		}
 	}
 
 	// ==========================================
@@ -82,7 +138,6 @@ public partial class GalacticMap : Control
 			int randomY = rng.RandiRange(150, (int)screenSize.Y - 150);
 			newStarData.MapPosition = new Vector2(randomX, randomY);
 
-			// --- NEW: Ask the Image what region this is! ---
 			newStarData.Region = DetermineRegionFromImage(newStarData.MapPosition, screenSize);
 
 			newStarData.StarScale = rng.RandfRange(0.003f, 0.006f);
@@ -114,10 +169,30 @@ public partial class GalacticMap : Control
 		newStar.CustomMinimumSize = new Vector2(1, 1);
 		newStar.ClipText = false;
 
+		// --- NEW: Built-in Tooltip for hovering! ---
+		newStar.TooltipText = $"System: {data.SystemName}\nPlanets: {data.PlanetCount}\nRegion: {data.Region}";
+
 		Sprite2D starSprite = newStar.GetNode<Sprite2D>("Sprite2D");
 		starSprite.Scale = new Vector2(data.StarScale, data.StarScale);
 		starSprite.Modulate = data.StarColor;
 		starSprite.Position = new Vector2(newStar.Size.X / 2, 30);
+
+		// If this is the system we just jumped from, save its position so we know where to draw the line FROM
+		if (_globalData != null && _globalData.JustJumped && data.SystemName == _globalData.SavedSystem)
+		{
+			_currentSystemMapPos = data.MapPosition + new Vector2(50, 30); 
+		}
+
+		// Mouse hover logic to snap the Warp Line to the target star
+		newStar.MouseEntered += () => 
+		{
+			_isHoveringStar = true;
+			_hoverTarget = newStar.Position + new Vector2(50, 30);
+		};
+		newStar.MouseExited += () => 
+		{
+			_isHoveringStar = false;
+		};
 
 		newStar.Pressed += () => _on_star_clicked(data, newStar);
 	}
@@ -130,27 +205,22 @@ public partial class GalacticMap : Control
 	{
 		if (_regionImage == null) return "Unknown Sector";
 
-		// Map the star's screen position to the image's pixel coordinates
 		float ratioX = starPos.X / screenSize.X;
 		float ratioY = starPos.Y / screenSize.Y;
 		
 		int pixelX = Mathf.FloorToInt(ratioX * _regionImage.GetWidth());
 		int pixelY = Mathf.FloorToInt(ratioY * _regionImage.GetHeight());
 
-		// Make sure we don't accidentally check outside the image bounds
 		pixelX = Mathf.Clamp(pixelX, 0, _regionImage.GetWidth() - 1);
 		pixelY = Mathf.Clamp(pixelY, 0, _regionImage.GetHeight() - 1);
 
-		// Get the color of the pixel at that exact spot
 		Color pixelColor = _regionImage.GetPixel(pixelX, pixelY);
 
-		// Find which of our defined region colors is the closest match
 		string closestRegion = "Unknown Sector";
 		float minDistance = float.MaxValue;
 
 		foreach (var kvp in regionColors)
 		{
-			// Calculate color distance (how close the image pixel is to our defined colors)
 			float dist = Mathf.Pow(pixelColor.R - kvp.Value.R, 2) + 
 						 Mathf.Pow(pixelColor.G - kvp.Value.G, 2) + 
 						 Mathf.Pow(pixelColor.B - kvp.Value.B, 2);
@@ -175,7 +245,7 @@ public partial class GalacticMap : Control
 
 		_globalData.SavedSystem = data.SystemName; 
 		
-		// --- UPDATED: Check if we are jumping via Stargate ---
+		// Check if we are jumping via Stargate
 		if (_globalData.JustJumped)
 		{
 			// Bypass the popup and warp directly to the battle map
@@ -191,7 +261,7 @@ public partial class GalacticMap : Control
 			return; 
 		}
 
-		// --- Normal Exploration Flow: Open the System Window pop-up ---
+		// Normal Exploration Flow: Open the System Window pop-up
 		_systemWindow.SetupWindow(data.SystemName, data.PlanetCount, data.Region);
 		
 		Vector2 starPos = clickedStar.Position;
