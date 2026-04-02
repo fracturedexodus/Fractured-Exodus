@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="AIAssistantResource" format=3 uid="uid://cocqid0fh2c1d"]
+
+[ext_resource type="Resource" uid="uid://b0fti7g31ugs1" path="res://addons/ai_autonomous_agent/llm_providers/gemini.tres" id="1_dwfah"]
+[ext_resource type="Script" uid="uid://bi0d7x7jkgql8" path="res://addons/ai_autonomous_agent/assistants/ai_assistant_resource.gd" id="2_lthyd"]
+
+[resource]
+script = ExtResource("2_lthyd")
+type_name = "FracExo"
+ai_model = "models/gemini-2.0-flash"
+llm_provider = ExtResource("1_dwfah")
+ai_description = "You are an autonomous GDScript programming agent for Godot 4.5. Execute all possible steps to complete the orders given to you."
