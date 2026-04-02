@@ -1747,7 +1747,8 @@ public partial class BattleMap : Node2D
 		Vector2I gateHex = new Vector2I(0,0);
 		bool gateFound = false;
 		
-		// If in combat, find the gate that EVERYONE is at to trigger the warp animation correctly
+		bool isEmergencyJump = _inCombat; 
+		
 		if (_inCombat)
 		{
 			List<Vector2I> playerHexes = new List<Vector2I>();
@@ -1788,7 +1789,6 @@ public partial class BattleMap : Node2D
 
 		if (!gateFound) return;
 
-		// Force combat to close cleanly before jumping
 		_inCombat = false;
 		if (_globalData != null) _globalData.InCombat = false;
 
@@ -1797,7 +1797,6 @@ public partial class BattleMap : Node2D
 		Tween warpTween = CreateTween();
 		warpTween.SetParallel(true);
 
-		// Animate the entire fleet jumping out
 		foreach(var kvp in _hexContents)
 		{
 			if (kvp.Value.Type == "Player Fleet")
@@ -1824,12 +1823,38 @@ public partial class BattleMap : Node2D
 			if (_globalData != null)
 			{
 				_globalData.JustJumped = true;
+				
+				if (isEmergencyJump)
+				{
+					Random rng = new Random();
+					if (_globalData.CurrentSectorStars != null && _globalData.CurrentSectorStars.Count > 1)
+					{
+						var availableStars = _globalData.CurrentSectorStars.Where(s => s.SystemName != _globalData.SavedSystem).ToList();
+						if (availableStars.Count > 0)
+						{
+							_globalData.SavedSystem = availableStars[rng.Next(availableStars.Count)].SystemName;
+						}
+						else
+						{
+							_globalData.SavedSystem = "SECTOR-" + rng.Next(1000, 9999);
+						}
+					}
+					else
+					{
+						_globalData.SavedSystem = "SECTOR-" + rng.Next(1000, 9999);
+					}
+					_globalData.SavedPlanet = ""; 
+				}
 			}
 			
 			OnSaveGamePressed(); 
+			
 			SceneTransition transitioner = GetNodeOrNull<SceneTransition>("/root/SceneTransition");
-			if (transitioner != null) transitioner.ChangeScene("res://galactic_map.tscn");
-			else GetTree().ChangeSceneToFile("res://galactic_map.tscn");
+			
+			string nextScene = isEmergencyJump ? "res://exploration_battle.tscn" : "res://galactic_map.tscn";
+			
+			if (transitioner != null) transitioner.ChangeScene(nextScene);
+			else GetTree().ChangeSceneToFile(nextScene);
 		}));
 	}
 
@@ -2250,7 +2275,6 @@ public partial class BattleMap : Node2D
 		btnRow2.AddChild(_btnSalvage);
 		shipMenuVbox.AddChild(btnRow2);
 
-		// --- RE-ADD CODEX BUTTON HERE ---
 		_codexButton = new Button();
 		_codexButton.Text = "ACCESS CODEX";
 		_codexButton.CustomMinimumSize = new Vector2(0, 35);
@@ -2328,17 +2352,106 @@ public partial class BattleMap : Node2D
 		return new Vector2(x, y);
 	}
 
+	private int GetStableHash(string s)
+	{
+		if (string.IsNullOrEmpty(s)) return 0;
+		unchecked
+		{
+			int hash = 23;
+			foreach (char c in s) hash = hash * 31 + c;
+			return hash;
+		}
+	}
+
+	private void AddSunVFX(Sprite2D sunSprite)
+	{
+		// 1. Additive Glow Aura
+		Sprite2D glow = new Sprite2D();
+		glow.Texture = sunSprite.Texture; 
+		glow.Scale = new Vector2(1.2f, 1.2f); 
+		glow.Modulate = new Color(1f, 0.8f, 0.2f, 0.4f); 
+		glow.ShowBehindParent = true;
+		
+		CanvasItemMaterial mat = new CanvasItemMaterial();
+		mat.BlendMode = CanvasItemMaterial.BlendModeEnum.Add;
+		glow.Material = mat;
+		sunSprite.AddChild(glow);
+
+		Tween pulseTween = CreateTween().SetLoops(); 
+		pulseTween.TweenProperty(glow, "scale", new Vector2(1.3f, 1.3f), 2.0f).SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.InOut);
+		pulseTween.TweenProperty(glow, "scale", new Vector2(1.15f, 1.15f), 2.0f).SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.InOut);
+
+		// 2. Solar Flares (Particles)
+		CpuParticles2D flares = new CpuParticles2D();
+		flares.Amount = 40;
+		flares.Lifetime = 3.0f;
+		flares.SpeedScale = 0.5f;
+		flares.Explosiveness = 0.1f;
+		flares.Randomness = 0.5f;
+		flares.ShowBehindParent = true;
+
+		flares.EmissionShape = CpuParticles2D.EmissionShapeEnum.Sphere;
+		if (sunSprite.Texture != null)
+		{
+			flares.EmissionSphereRadius = (sunSprite.Texture.GetSize().X / 2f) * 0.9f; 
+		}
+		
+		flares.Direction = Vector2.Zero; 
+		flares.Spread = 180f;
+		flares.Gravity = Vector2.Zero;
+		flares.InitialVelocityMin = 20f;
+		flares.InitialVelocityMax = 60f;
+		flares.ScaleAmountMin = 4f;
+		flares.ScaleAmountMax = 12f;
+
+		Gradient colorGrad = new Gradient();
+		colorGrad.Offsets = new float[] { 0.0f, 0.2f, 0.6f, 1.0f };
+		colorGrad.Colors = new Color[] {
+			new Color(1f, 1f, 0.8f, 1f),     // White hot core
+			new Color(1f, 0.8f, 0.1f, 0.9f), // Yellow
+			new Color(1f, 0.4f, 0f, 0.6f),   // Orange/Red
+			new Color(0.8f, 0.1f, 0f, 0f)    // Fade out
+		};
+		flares.ColorRamp = colorGrad;
+
+		Curve sizeCurve = new Curve();
+		sizeCurve.AddPoint(new Vector2(0f, 1f));
+		sizeCurve.AddPoint(new Vector2(1f, 0.3f));
+		flares.ScaleAmountCurve = sizeCurve;
+
+		sunSprite.AddChild(flares);
+
+		// 3. Slow Rotation
+		Tween rotTween = CreateTween().SetLoops();
+		rotTween.TweenProperty(sunSprite, "rotation", Mathf.Pi * 2, 60.0f).AsRelative();
+	}
+
+	// --- NEW: Add Rotation to Planets ---
+	private void AddPlanetRotationVFX(Sprite2D planetSprite, Random rng)
+	{
+		float rotDuration = rng.Next(40, 120); // Random duration between 40s and 120s for a full rotation
+		float rotDir = rng.Next(0, 2) == 0 ? 1f : -1f; // 50/50 chance to rotate clockwise or counter-clockwise
+
+		Tween rotTween = CreateTween().SetLoops();
+		rotTween.TweenProperty(planetSprite, "rotation", Mathf.Pi * 2 * rotDir, rotDuration).AsRelative();
+	}
+
 	private void PopulateMapFromMemory()
 	{
 		Random rng = new Random();
 		if (_globalData != null && !string.IsNullOrEmpty(_globalData.SavedSystem))
-			rng = new Random(_globalData.SavedSystem.GetHashCode()); 
+			rng = new Random(GetStableHash(_globalData.SavedSystem)); 
 
 		MapEntity starData = new MapEntity { Name = "Main Sequence Star", Type = "Celestial Body", Details = "Extreme Heat Signature" };
 		if (_globalData != null && !string.IsNullOrEmpty(_globalData.SavedSystem))
 			starData.Name = _globalData.SavedSystem.ToUpper() + " PRIME";
 			
-		SpawnEntityAtHex(new Vector2I(0, 0), "res://YellowSUN.png", starData, 0.75f);
+		SpawnEntityAtHex(new Vector2I(0, 0), "res://YellowSUN.png", starData, 1.5f); 
+		
+		if (IsInstanceValid(starData.VisualSprite))
+		{
+			AddSunVFX(starData.VisualSprite);
+		}
 
 		if (_globalData == null || string.IsNullOrEmpty(_globalData.SavedSystem)) return;
 
@@ -2382,12 +2495,30 @@ public partial class BattleMap : Node2D
 		int currentOrbitRing = 2; 
 		foreach (PlanetData pData in currentSystem.Planets)
 		{
-			Vector2I spawnHex = FindEmptyHexInRing(currentOrbitRing, rng);
+			Vector2I spawnHex;
+			
+			if (pData.Position != Vector2.Zero)
+			{
+				spawnHex = new Vector2I((int)pData.Position.X, (int)pData.Position.Y);
+			}
+			else
+			{
+				spawnHex = FindEmptyHexInRing(currentOrbitRing, rng);
+				pData.Position = new Vector2(spawnHex.X, spawnHex.Y);
+			}
+			
 			currentOrbitRing += 3; 
 			string pTypeStr = GetPlanetTypeString(pData.TypeIndex);
 			string pTex = GetTexturePathForType(pTypeStr);
 			MapEntity planetEntity = new MapEntity { Name = pData.Name, Type = "Planet", Details = $"Biome Class: {pTypeStr.ToUpper()}\nHab: {pData.Habitability}" };
 			SpawnEntityAtHex(spawnHex, pTex, planetEntity, pData.Scale);
+			
+			// --- Trigger the Planet Rotation ---
+			if (IsInstanceValid(planetEntity.VisualSprite))
+			{
+				AddPlanetRotationVFX(planetEntity.VisualSprite, rng);
+			}
+
 			if (pData.Name == _globalData.SavedPlanet) basePlanetLocation = spawnHex;
 		}
 
