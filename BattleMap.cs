@@ -41,11 +41,14 @@ public partial class BattleMap : Node2D
 	// --- RENDER LAYERS ---
 	private CanvasLayer _bgLayer = new CanvasLayer { Layer = -1 }; 
 	private Node2D _gridLayer = new Node2D();  
+	private Node2D _environmentLayer = new Node2D(); 
 	private Node2D _highlightLayer = new Node2D(); 
 	private Node2D _entityLayer = new Node2D(); 
 	private SelectionBox _selectionBox; 
 
 	private Dictionary<Vector2I, Node2D> _hexGrid = new Dictionary<Vector2I, Node2D>();
+	private HashSet<Vector2I> _asteroidHexes = new HashSet<Vector2I>(); 
+	private float _asteroidTimer = 0f; 
 	
 	// --- AUDIO PLAYERS ---
 	private AudioStreamPlayer _bgmPlayer;
@@ -156,6 +159,7 @@ public partial class BattleMap : Node2D
 		
 		AddChild(_bgLayer);
 		AddChild(_gridLayer);
+		AddChild(_environmentLayer); 
 		AddChild(_highlightLayer);
 		AddChild(_entityLayer);
 
@@ -260,6 +264,26 @@ public partial class BattleMap : Node2D
 			}
 		}
 
+		// --- Asteroid Revolution & Rotation Animation ---
+		_environmentLayer.Rotation -= 0.05f * (float)delta; 
+		
+		foreach (Node child in _environmentLayer.GetChildren())
+		{
+			if (child is Polygon2D rock)
+			{
+				float spin = rock.GetMeta("spin_speed").AsSingle();
+				rock.Rotation += spin * (float)delta;
+			}
+		}
+
+		// --- Continuous Asteroid Damage Logic ---
+		_asteroidTimer += (float)delta;
+		if (_asteroidTimer >= 1.0f)
+		{
+			_asteroidTimer -= 1.0f;
+			ApplyAsteroidDamage();
+		}
+
 		// --- EMERGENCY JUMP LOGIC ---
 		bool isNearStargate = false;
 		
@@ -341,6 +365,101 @@ public partial class BattleMap : Node2D
 		}
 	}
 
+	// --- UPDATED: Apply Asteroid Damage to Shields and Hull ---
+	private void ApplyAsteroidDamage()
+	{
+		HashSet<Vector2I> liveAsteroidHexes = new HashSet<Vector2I>();
+		foreach (Node child in _environmentLayer.GetChildren())
+		{
+			if (child is Polygon2D rock)
+			{
+				liveAsteroidHexes.Add(PixelToHex(rock.GlobalPosition));
+			}
+		}
+
+		bool uiNeedsUpdate = false;
+		List<Vector2I> destroyedHexes = new List<Vector2I>();
+
+		foreach (var kvp in _hexContents)
+		{
+			if (kvp.Value.Type == "Player Fleet" || kvp.Value.Type == "Enemy Fleet")
+			{
+				if (liveAsteroidHexes.Contains(kvp.Key))
+				{
+					int damage = 5;
+					bool tookHullDamage = false;
+
+					// 1. Damage Shields First
+					if (kvp.Value.CurrentShields > 0)
+					{
+						if (kvp.Value.CurrentShields >= damage)
+						{
+							kvp.Value.CurrentShields -= damage;
+							damage = 0;
+						}
+						else
+						{
+							damage -= kvp.Value.CurrentShields;
+							kvp.Value.CurrentShields = 0;
+						}
+					}
+					
+					// 2. Bleed remaining damage to Hull
+					if (damage > 0)
+					{
+						kvp.Value.CurrentHP -= damage;
+						tookHullDamage = true;
+					}
+
+					// 3. Visual Feedback (Blue for Shields, Red for Hull)
+					if (IsInstanceValid(kvp.Value.VisualSprite))
+					{
+						Tween flash = CreateTween();
+						Color flashColor = tookHullDamage ? new Color(1f, 0.3f, 0.3f) : new Color(0.3f, 0.5f, 1f);
+						flash.TweenProperty(kvp.Value.VisualSprite, "modulate", flashColor, 0.15f);
+						flash.TweenProperty(kvp.Value.VisualSprite, "modulate", Colors.White, 0.15f);
+					}
+
+					if (_currentlyViewedShip == kvp.Value) uiNeedsUpdate = true;
+
+					// 4. Check for Destruction
+					if (kvp.Value.CurrentHP <= 0)
+					{
+						LogCombatMessage($"[color=red]*** {kvp.Value.Name.ToUpper()} DESTROYED BY ASTEROID IMPACT ***[/color]\n");
+						
+						if (_explosionPlayer.Stream != null) _explosionPlayer.Play();
+						DrawExplosion(HexToPixel(kvp.Key));
+
+						kvp.Value.IsDead = true;
+						if (IsInstanceValid(kvp.Value.VisualSprite)) kvp.Value.VisualSprite.QueueFree();
+						
+						destroyedHexes.Add(kvp.Key);
+						
+						if (_currentlyViewedShip == kvp.Value) ToggleShipMenu(false);
+					}
+				}
+			}
+		}
+		
+		// Remove dead ships safely outside the dictionary iteration
+		foreach (Vector2I deadHex in destroyedHexes)
+		{
+			_hexContents.Remove(deadHex);
+		}
+
+		if (destroyedHexes.Count > 0 && _inCombat)
+		{
+			UpdateInitiativeUI();
+			if (!AreBothSidesAlive()) EndCombat();
+		}
+
+		// Refresh UI if target is still alive
+		if (uiNeedsUpdate && _shipMenuPanel.Position.X < GetViewportRect().Size.X && _currentlyViewedShip != null && !_currentlyViewedShip.IsDead) 
+		{
+			ToggleShipMenu(true, _currentlyViewedShip);
+		}
+	}
+
 	// --- Combat Escape Check ---
 	private bool CanFleetEscape()
 	{
@@ -366,7 +485,6 @@ public partial class BattleMap : Node2D
 					break;
 				}
 			}
-			// If all surviving player ships are clustered within 1 hex of this specific gate, we can jump!
 			if (allNear) return true;
 		}
 
@@ -2426,14 +2544,45 @@ public partial class BattleMap : Node2D
 		rotTween.TweenProperty(sunSprite, "rotation", Mathf.Pi * 2, 60.0f).AsRelative();
 	}
 
-	// --- NEW: Add Rotation to Planets ---
 	private void AddPlanetRotationVFX(Sprite2D planetSprite, Random rng)
 	{
-		float rotDuration = rng.Next(40, 120); // Random duration between 40s and 120s for a full rotation
-		float rotDir = rng.Next(0, 2) == 0 ? 1f : -1f; // 50/50 chance to rotate clockwise or counter-clockwise
+		float rotDuration = rng.Next(40, 120); 
+		float rotDir = rng.Next(0, 2) == 0 ? 1f : -1f; 
 
 		Tween rotTween = CreateTween().SetLoops();
 		rotTween.TweenProperty(planetSprite, "rotation", Mathf.Pi * 2 * rotDir, rotDuration).AsRelative();
+	}
+
+	private void DrawAsteroidVisual(Vector2I hexCoord, Random rng)
+	{
+		Polygon2D rock = new Polygon2D();
+		int pointsCount = rng.Next(5, 9);
+		Vector2[] pts = new Vector2[pointsCount];
+		
+		for(int i = 0; i < pointsCount; i++) 
+		{
+			float angle = (i / (float)pointsCount) * Mathf.Pi * 2;
+			float rad = HexSize * 0.35f * (0.7f + (float)rng.NextDouble() * 0.6f);
+			pts[i] = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * rad;
+		}
+		
+		rock.Polygon = pts;
+		rock.Color = new Color(0.4f, 0.4f, 0.4f, 1f);
+		
+		// Add a darker outline
+		Line2D outline = new Line2D();
+		outline.Points = pts.Append(pts[0]).ToArray();
+		outline.Width = 2f;
+		outline.DefaultColor = new Color(0.2f, 0.2f, 0.2f, 1f);
+		rock.AddChild(outline);
+
+		rock.Position = HexToPixel(hexCoord);
+		rock.Rotation = (float)rng.NextDouble() * Mathf.Pi;
+		
+		// Add rotation speed for the _Process loop
+		rock.SetMeta("spin_speed", (float)(rng.NextDouble() * 1.5 - 0.75));
+		
+		_environmentLayer.AddChild(rock);
 	}
 
 	private void PopulateMapFromMemory()
@@ -2513,7 +2662,6 @@ public partial class BattleMap : Node2D
 			MapEntity planetEntity = new MapEntity { Name = pData.Name, Type = "Planet", Details = $"Biome Class: {pTypeStr.ToUpper()}\nHab: {pData.Habitability}" };
 			SpawnEntityAtHex(spawnHex, pTex, planetEntity, pData.Scale);
 			
-			// --- Trigger the Planet Rotation ---
 			if (IsInstanceValid(planetEntity.VisualSprite))
 			{
 				AddPlanetRotationVFX(planetEntity.VisualSprite, rng);
@@ -2536,6 +2684,38 @@ public partial class BattleMap : Node2D
 		{
 			MapEntity gateEntity = new MapEntity { Name = "Ancient StarGate", Type = "StarGate", Details = "Trans-dimensional warp gate connecting local star systems." };
 			SpawnEntityAtHex(gateHex, "res://StarGate.png", gateEntity, 0.4f);
+		}
+
+		_asteroidHexes.Clear();
+		int numAsteroidFields = rng.Next(0, 4); 
+		for(int i = 0; i < numAsteroidFields; i++)
+		{
+			int fieldSize = rng.Next(5, 101); 
+			// --- UPDATED: Distance parameter changed from 20 down to 10 minimum ---
+			Vector2I startHex = FindEmptyHexInRing(rng.Next(10, _maxMapRadius), rng);
+			List<Vector2I> cluster = new List<Vector2I> { startHex };
+			
+			_asteroidHexes.Add(startHex);
+			DrawAsteroidVisual(startHex, rng);
+
+			int attempts = 0;
+			while (cluster.Count < fieldSize && attempts < 1000) 
+			{
+				Vector2I baseHex = cluster[rng.Next(cluster.Count)];
+				Vector2I neighbor = baseHex + _hexDirections[rng.Next(6)];
+				
+				// --- UPDATED: Allow asteroids within 10 hexes of the sun ---
+				if (HexDistance(neighbor, Vector2I.Zero) >= 10 && HexDistance(neighbor, Vector2I.Zero) <= _maxMapRadius)
+				{
+					if (!_asteroidHexes.Contains(neighbor) && IsHexEmpty(neighbor))
+					{
+						cluster.Add(neighbor);
+						_asteroidHexes.Add(neighbor);
+						DrawAsteroidVisual(neighbor, rng);
+					}
+				}
+				attempts++;
+			}
 		}
 
 		bool arrivedViaJump = false;
