@@ -37,18 +37,30 @@ public partial class BattleMap : Node2D
 	private float _zoomSpeed = 0.1f;
 	private float _minZoom = 0.3f;
 	private float _maxZoom = 2.0f;
+	
+	// --- CAMERA CLAMPING LIMITS ---
+	private float _cameraMinX;
+	private float _cameraMaxX;
+	private float _cameraMinY;
+	private float _cameraMaxY;
 
 	// --- RENDER LAYERS ---
 	private CanvasLayer _bgLayer = new CanvasLayer { Layer = -1 }; 
 	private Node2D _gridLayer = new Node2D();  
+	private Node2D _radiationLayer = new Node2D(); // --- NEW: Layer for Radiation Clouds
 	private Node2D _environmentLayer = new Node2D(); 
 	private Node2D _highlightLayer = new Node2D(); 
 	private Node2D _entityLayer = new Node2D(); 
 	private SelectionBox _selectionBox; 
 
 	private Dictionary<Vector2I, Node2D> _hexGrid = new Dictionary<Vector2I, Node2D>();
+	
+	// --- HAZARD TRACKING ---
 	private HashSet<Vector2I> _asteroidHexes = new HashSet<Vector2I>(); 
 	private float _asteroidTimer = 0f; 
+	
+	private HashSet<Vector2I> _radiationHexes = new HashSet<Vector2I>(); // --- NEW: Radiation Memory
+	private float _radiationTimer = 0f; // --- NEW: Timer for 5-second radiation damage
 	
 	// --- AUDIO PLAYERS ---
 	private AudioStreamPlayer _bgmPlayer;
@@ -159,6 +171,7 @@ public partial class BattleMap : Node2D
 		
 		AddChild(_bgLayer);
 		AddChild(_gridLayer);
+		AddChild(_radiationLayer); // Add behind asteroids
 		AddChild(_environmentLayer); 
 		AddChild(_highlightLayer);
 		AddChild(_entityLayer);
@@ -171,6 +184,12 @@ public partial class BattleMap : Node2D
 		SetupAudio(); 
 		SetupUI(); 
 		GenerateGrid();
+		
+		_cameraMinX = -(_maxMapRadius * HexSize * Mathf.Sqrt(3));
+		_cameraMaxX = (_maxMapRadius * HexSize * Mathf.Sqrt(3));
+		_cameraMinY = -(_maxMapRadius * HexSize * 1.5f);
+		_cameraMaxY = (_maxMapRadius * HexSize * 1.5f);
+
 		PopulateMapFromMemory();
 		CenterCameraOnFleet(); 
 		
@@ -226,13 +245,11 @@ public partial class BattleMap : Node2D
 
 		Vector2 panDirection = Vector2.Zero;
 		
-		// 1. WASD Input
 		if (Input.IsKeyPressed(Key.W)) panDirection.Y -= 1;
 		if (Input.IsKeyPressed(Key.S)) panDirection.Y += 1;
 		if (Input.IsKeyPressed(Key.A)) panDirection.X -= 1;
 		if (Input.IsKeyPressed(Key.D)) panDirection.X += 1;
 
-		// 2. Edge Scrolling Input
 		Vector2 mousePos = GetViewport().GetMousePosition();
 		Vector2 screenSize = GetViewportRect().Size;
 		float edgeMargin = 30f; 
@@ -247,9 +264,13 @@ public partial class BattleMap : Node2D
 		}
 
 		if (panDirection != Vector2.Zero) 
-			_camera.Position += panDirection.Normalized() * _panSpeed * (float)delta * (1.0f / _camera.Zoom.X);
+		{
+			Vector2 newPos = _camera.Position + panDirection.Normalized() * _panSpeed * (float)delta * (1.0f / _camera.Zoom.X);
+			newPos.X = Mathf.Clamp(newPos.X, _cameraMinX, _cameraMaxX);
+			newPos.Y = Mathf.Clamp(newPos.Y, _cameraMinY, _cameraMaxY);
+			_camera.Position = newPos;
+		}
 		
-		// Visual Rotation
 		foreach (Vector2I hex in _selectedHexes)
 		{
 			if (_hexContents.ContainsKey(hex))
@@ -264,9 +285,7 @@ public partial class BattleMap : Node2D
 			}
 		}
 
-		// --- Asteroid Revolution & Rotation Animation ---
 		_environmentLayer.Rotation -= 0.05f * (float)delta; 
-		
 		foreach (Node child in _environmentLayer.GetChildren())
 		{
 			if (child is Polygon2D rock)
@@ -276,12 +295,20 @@ public partial class BattleMap : Node2D
 			}
 		}
 
-		// --- Continuous Asteroid Damage Logic ---
+		// --- 1 Second Asteroid Damage ---
 		_asteroidTimer += (float)delta;
 		if (_asteroidTimer >= 1.0f)
 		{
 			_asteroidTimer -= 1.0f;
 			ApplyAsteroidDamage();
+		}
+
+		// --- NEW: 5 Second Radiation Damage ---
+		_radiationTimer += (float)delta;
+		if (_radiationTimer >= 5.0f)
+		{
+			_radiationTimer -= 5.0f;
+			ApplyRadiationDamage();
 		}
 
 		// --- EMERGENCY JUMP LOGIC ---
@@ -365,7 +392,6 @@ public partial class BattleMap : Node2D
 		}
 	}
 
-	// --- UPDATED: Apply Asteroid Damage to Shields and Hull ---
 	private void ApplyAsteroidDamage()
 	{
 		HashSet<Vector2I> liveAsteroidHexes = new HashSet<Vector2I>();
@@ -389,7 +415,6 @@ public partial class BattleMap : Node2D
 					int damage = 5;
 					bool tookHullDamage = false;
 
-					// 1. Damage Shields First
 					if (kvp.Value.CurrentShields > 0)
 					{
 						if (kvp.Value.CurrentShields >= damage)
@@ -404,14 +429,12 @@ public partial class BattleMap : Node2D
 						}
 					}
 					
-					// 2. Bleed remaining damage to Hull
 					if (damage > 0)
 					{
 						kvp.Value.CurrentHP -= damage;
 						tookHullDamage = true;
 					}
 
-					// 3. Visual Feedback (Blue for Shields, Red for Hull)
 					if (IsInstanceValid(kvp.Value.VisualSprite))
 					{
 						Tween flash = CreateTween();
@@ -422,7 +445,6 @@ public partial class BattleMap : Node2D
 
 					if (_currentlyViewedShip == kvp.Value) uiNeedsUpdate = true;
 
-					// 4. Check for Destruction
 					if (kvp.Value.CurrentHP <= 0)
 					{
 						LogCombatMessage($"[color=red]*** {kvp.Value.Name.ToUpper()} DESTROYED BY ASTEROID IMPACT ***[/color]\n");
@@ -441,11 +463,7 @@ public partial class BattleMap : Node2D
 			}
 		}
 		
-		// Remove dead ships safely outside the dictionary iteration
-		foreach (Vector2I deadHex in destroyedHexes)
-		{
-			_hexContents.Remove(deadHex);
-		}
+		foreach (Vector2I deadHex in destroyedHexes) _hexContents.Remove(deadHex);
 
 		if (destroyedHexes.Count > 0 && _inCombat)
 		{
@@ -453,14 +471,80 @@ public partial class BattleMap : Node2D
 			if (!AreBothSidesAlive()) EndCombat();
 		}
 
-		// Refresh UI if target is still alive
 		if (uiNeedsUpdate && _shipMenuPanel.Position.X < GetViewportRect().Size.X && _currentlyViewedShip != null && !_currentlyViewedShip.IsDead) 
 		{
 			ToggleShipMenu(true, _currentlyViewedShip);
 		}
 	}
 
-	// --- Combat Escape Check ---
+	// --- NEW: Apply Radiation Cloud Damage ---
+	private void ApplyRadiationDamage()
+	{
+		bool uiNeedsUpdate = false;
+		List<Vector2I> destroyedHexes = new List<Vector2I>();
+
+		foreach (var kvp in _hexContents)
+		{
+			if (kvp.Value.Type == "Player Fleet" || kvp.Value.Type == "Enemy Fleet")
+			{
+				if (_radiationHexes.Contains(kvp.Key))
+				{
+					bool tookHullDamage = false;
+
+					// Drain 1 Shield, OR 2 Hull HP
+					if (kvp.Value.CurrentShields > 0)
+					{
+						kvp.Value.CurrentShields = Mathf.Max(0, kvp.Value.CurrentShields - 1);
+					}
+					else
+					{
+						kvp.Value.CurrentHP -= 2;
+						tookHullDamage = true;
+					}
+
+					// Visual Feedback (Neon green for shields, Red for hull)
+					if (IsInstanceValid(kvp.Value.VisualSprite))
+					{
+						Tween flash = CreateTween();
+						Color flashColor = tookHullDamage ? new Color(1f, 0.3f, 0.3f) : new Color(0.5f, 1f, 0.2f);
+						flash.TweenProperty(kvp.Value.VisualSprite, "modulate", flashColor, 0.15f);
+						flash.TweenProperty(kvp.Value.VisualSprite, "modulate", Colors.White, 0.15f);
+					}
+
+					if (_currentlyViewedShip == kvp.Value) uiNeedsUpdate = true;
+
+					if (kvp.Value.CurrentHP <= 0)
+					{
+						LogCombatMessage($"[color=red]*** {kvp.Value.Name.ToUpper()} DESTROYED BY RADIATION EXPOSURE ***[/color]\n");
+						
+						if (_explosionPlayer.Stream != null) _explosionPlayer.Play();
+						DrawExplosion(HexToPixel(kvp.Key));
+
+						kvp.Value.IsDead = true;
+						if (IsInstanceValid(kvp.Value.VisualSprite)) kvp.Value.VisualSprite.QueueFree();
+						
+						destroyedHexes.Add(kvp.Key);
+						
+						if (_currentlyViewedShip == kvp.Value) ToggleShipMenu(false);
+					}
+				}
+			}
+		}
+		
+		foreach (Vector2I deadHex in destroyedHexes) _hexContents.Remove(deadHex);
+
+		if (destroyedHexes.Count > 0 && _inCombat)
+		{
+			UpdateInitiativeUI();
+			if (!AreBothSidesAlive()) EndCombat();
+		}
+
+		if (uiNeedsUpdate && _shipMenuPanel.Position.X < GetViewportRect().Size.X && _currentlyViewedShip != null && !_currentlyViewedShip.IsDead) 
+		{
+			ToggleShipMenu(true, _currentlyViewedShip);
+		}
+	}
+
 	private bool CanFleetEscape()
 	{
 		List<Vector2I> playerHexes = new List<Vector2I>();
@@ -2483,7 +2567,6 @@ public partial class BattleMap : Node2D
 
 	private void AddSunVFX(Sprite2D sunSprite)
 	{
-		// 1. Additive Glow Aura
 		Sprite2D glow = new Sprite2D();
 		glow.Texture = sunSprite.Texture; 
 		glow.Scale = new Vector2(1.2f, 1.2f); 
@@ -2499,7 +2582,6 @@ public partial class BattleMap : Node2D
 		pulseTween.TweenProperty(glow, "scale", new Vector2(1.3f, 1.3f), 2.0f).SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.InOut);
 		pulseTween.TweenProperty(glow, "scale", new Vector2(1.15f, 1.15f), 2.0f).SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.InOut);
 
-		// 2. Solar Flares (Particles)
 		CpuParticles2D flares = new CpuParticles2D();
 		flares.Amount = 40;
 		flares.Lifetime = 3.0f;
@@ -2525,10 +2607,10 @@ public partial class BattleMap : Node2D
 		Gradient colorGrad = new Gradient();
 		colorGrad.Offsets = new float[] { 0.0f, 0.2f, 0.6f, 1.0f };
 		colorGrad.Colors = new Color[] {
-			new Color(1f, 1f, 0.8f, 1f),     // White hot core
-			new Color(1f, 0.8f, 0.1f, 0.9f), // Yellow
-			new Color(1f, 0.4f, 0f, 0.6f),   // Orange/Red
-			new Color(0.8f, 0.1f, 0f, 0f)    // Fade out
+			new Color(1f, 1f, 0.8f, 1f),     
+			new Color(1f, 0.8f, 0.1f, 0.9f), 
+			new Color(1f, 0.4f, 0f, 0.6f),   
+			new Color(0.8f, 0.1f, 0f, 0f)    
 		};
 		flares.ColorRamp = colorGrad;
 
@@ -2539,7 +2621,6 @@ public partial class BattleMap : Node2D
 
 		sunSprite.AddChild(flares);
 
-		// 3. Slow Rotation
 		Tween rotTween = CreateTween().SetLoops();
 		rotTween.TweenProperty(sunSprite, "rotation", Mathf.Pi * 2, 60.0f).AsRelative();
 	}
@@ -2551,6 +2632,36 @@ public partial class BattleMap : Node2D
 
 		Tween rotTween = CreateTween().SetLoops();
 		rotTween.TweenProperty(planetSprite, "rotation", Mathf.Pi * 2 * rotDir, rotDuration).AsRelative();
+	}
+
+	// --- NEW: Draw Visual for Radiation Clouds ---
+	private void DrawRadiationVisual(Vector2I hexCoord, Random rng)
+	{
+		Polygon2D cloud = new Polygon2D();
+		Vector2[] points = new Vector2[6];
+		for (int i = 0; i < 6; i++)
+		{
+			float angle_deg = 60 * i - 30;
+			float angle_rad = Mathf.DegToRad(angle_deg);
+			// Slightly oversized to blend with adjacent hexes
+			points[i] = new Vector2(HexSize * 1.05f * Mathf.Cos(angle_rad), HexSize * 1.05f * Mathf.Sin(angle_rad));
+		}
+		cloud.Polygon = points;
+		
+		// Randomize the yellow/green tint
+		float g = 0.8f + (float)rng.NextDouble() * 0.2f;
+		cloud.Color = new Color(0.2f, g, 0.1f, 0.15f); 
+		
+		CanvasItemMaterial mat = new CanvasItemMaterial();
+		mat.BlendMode = CanvasItemMaterial.BlendModeEnum.Add;
+		cloud.Material = mat;
+
+		cloud.Position = HexToPixel(hexCoord);
+		_radiationLayer.AddChild(cloud);
+		
+		Tween pulseTween = CreateTween().SetLoops();
+		pulseTween.TweenProperty(cloud, "modulate:a", 0.05f, rng.Next(2, 5)).SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.InOut);
+		pulseTween.TweenProperty(cloud, "modulate:a", 1.0f, rng.Next(2, 5)).SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.InOut);
 	}
 
 	private void DrawAsteroidVisual(Vector2I hexCoord, Random rng)
@@ -2569,7 +2680,6 @@ public partial class BattleMap : Node2D
 		rock.Polygon = pts;
 		rock.Color = new Color(0.4f, 0.4f, 0.4f, 1f);
 		
-		// Add a darker outline
 		Line2D outline = new Line2D();
 		outline.Points = pts.Append(pts[0]).ToArray();
 		outline.Width = 2f;
@@ -2579,7 +2689,6 @@ public partial class BattleMap : Node2D
 		rock.Position = HexToPixel(hexCoord);
 		rock.Rotation = (float)rng.NextDouble() * Mathf.Pi;
 		
-		// Add rotation speed for the _Process loop
 		rock.SetMeta("spin_speed", (float)(rng.NextDouble() * 1.5 - 0.75));
 		
 		_environmentLayer.AddChild(rock);
@@ -2691,7 +2800,6 @@ public partial class BattleMap : Node2D
 		for(int i = 0; i < numAsteroidFields; i++)
 		{
 			int fieldSize = rng.Next(5, 101); 
-			// --- UPDATED: Distance parameter changed from 20 down to 10 minimum ---
 			Vector2I startHex = FindEmptyHexInRing(rng.Next(10, _maxMapRadius), rng);
 			List<Vector2I> cluster = new List<Vector2I> { startHex };
 			
@@ -2704,7 +2812,6 @@ public partial class BattleMap : Node2D
 				Vector2I baseHex = cluster[rng.Next(cluster.Count)];
 				Vector2I neighbor = baseHex + _hexDirections[rng.Next(6)];
 				
-				// --- UPDATED: Allow asteroids within 10 hexes of the sun ---
 				if (HexDistance(neighbor, Vector2I.Zero) >= 10 && HexDistance(neighbor, Vector2I.Zero) <= _maxMapRadius)
 				{
 					if (!_asteroidHexes.Contains(neighbor) && IsHexEmpty(neighbor))
@@ -2712,6 +2819,38 @@ public partial class BattleMap : Node2D
 						cluster.Add(neighbor);
 						_asteroidHexes.Add(neighbor);
 						DrawAsteroidVisual(neighbor, rng);
+					}
+				}
+				attempts++;
+			}
+		}
+
+		// --- NEW: Generate Radiation Clouds (0 to 3 per system) ---
+		_radiationHexes.Clear();
+		int numRadiationFields = rng.Next(0, 4); 
+		for(int i = 0; i < numRadiationFields; i++)
+		{
+			int fieldSize = rng.Next(20, 80); // Can be large nebulas
+			Vector2I startHex = FindEmptyHexInRing(rng.Next(10, _maxMapRadius), rng);
+			List<Vector2I> cluster = new List<Vector2I> { startHex };
+			
+			_radiationHexes.Add(startHex);
+			DrawRadiationVisual(startHex, rng);
+
+			int attempts = 0;
+			while (cluster.Count < fieldSize && attempts < 1000) 
+			{
+				Vector2I baseHex = cluster[rng.Next(cluster.Count)];
+				Vector2I neighbor = baseHex + _hexDirections[rng.Next(6)];
+				
+				if (HexDistance(neighbor, Vector2I.Zero) <= _maxMapRadius)
+				{
+					// Notice we do NOT check IsHexEmpty here. Radiation can safely overlap planets and asteroids!
+					if (!_radiationHexes.Contains(neighbor))
+					{
+						cluster.Add(neighbor);
+						_radiationHexes.Add(neighbor);
+						DrawRadiationVisual(neighbor, rng);
 					}
 				}
 				attempts++;
