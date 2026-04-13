@@ -7,6 +7,7 @@ public partial class BattleMap : Node2D
 {
 	[Export] public float HexSize = 65f; 
 	[Export] public BattleUI UI;
+	[Export] public DialogueUI ConversationUI; 
 
 	internal int ScanningRange = 3; 
 	internal int CurrentTurn = 1; 
@@ -34,7 +35,6 @@ public partial class BattleMap : Node2D
 	public HazardManager Hazards { get; private set; }
 	public FogOfWarManager Fog { get; private set; }
 
-	// --- FIX 1: Variables to track movement locks ---
 	public int ActiveMovementTweens = 0;
 	public bool IsFleetMoving => ActiveMovementTweens > 0;
 
@@ -45,6 +45,10 @@ public partial class BattleMap : Node2D
 	private Node2D _gridLayer = new Node2D();  
 	private Node2D _highlightLayer = new Node2D(); 
 	
+	// --- NEW: Hover Highlight ---
+	private Polygon2D _hoverHighlight;
+	private Vector2I _currentHoveredHex;
+
 	internal SelectionBox SelectionBoxUI; 
 	private AudioStreamPlayer _bgmPlayer;
 
@@ -56,6 +60,15 @@ public partial class BattleMap : Node2D
 		_globalData = GetNodeOrNull<GlobalData>("/root/GlobalData");
 		if (_globalData != null && _globalData.CurrentTurn > 0) CurrentTurn = _globalData.CurrentTurn;
 		
+		// --- NEW: Set Custom Cursor ---
+		// Godot looks for the hot spot to be the top left (0,0). If your cursor is a crosshair, 
+		// you might want to change Vector2.Zero to something like new Vector2(16, 16) to center the click point.
+		Texture2D cursorTex = GD.Load<Texture2D>("res://cursor.png");
+		if (cursorTex != null)
+		{
+			Input.SetCustomMouseCursor(cursorTex, Input.CursorShape.Arrow, Vector2.Zero);
+		}
+
 		Combat = new CombatManager(this);
 		Hazards = new HazardManager(this);
 		Fog = new FogOfWarManager(this);
@@ -70,6 +83,21 @@ public partial class BattleMap : Node2D
 
 		SelectionBoxUI = new SelectionBox();
 		AddChild(SelectionBoxUI);
+
+		// --- NEW: Setup Hover Highlight Polygon ---
+		_hoverHighlight = new Polygon2D();
+		Vector2[] points = new Vector2[6];
+		for (int i = 0; i < 6; i++)
+		{
+			float angle_deg = 60 * i - 30;
+			float angle_rad = Mathf.DegToRad(angle_deg);
+			points[i] = new Vector2(HexSize * Mathf.Cos(angle_rad), HexSize * Mathf.Sin(angle_rad));
+		}
+		// A slightly smaller, thick, semi-transparent outline
+		_hoverHighlight.Polygon = points;
+		_hoverHighlight.Color = new Color(0f, 1f, 1f, 0.4f); // Cyan glow
+		_hoverHighlight.Visible = false; // Hide until mouse is over a valid hex
+		AddChild(_hoverHighlight);
 
 		SetupCamera();
 		SetupAudio(); 
@@ -172,12 +200,79 @@ public partial class BattleMap : Node2D
 		MapCamera.Initialize(this, SelectionBoxUI, -w - padding, w + padding, -h - padding, h + padding);
 	}
 
+	public override void _UnhandledInput(InputEvent @event)
+	{
+		// --- NEW: The 'M' Hotkey for Movement ---
+		if (@event is InputEventKey keyEvent && keyEvent.Pressed && !keyEvent.Echo)
+		{
+			if (keyEvent.Keycode == Key.M && !IsFleetMoving)
+			{
+				if (SelectedHexes.Count > 0 && HexGrid.ContainsKey(_currentHoveredHex))
+				{
+					// If only one ship is selected, move it directly
+					if (SelectedHexes.Count == 1)
+					{
+						Vector2I shipHex = SelectedHexes[0];
+						if (HexContents.ContainsKey(shipHex) && HexContents[shipHex].Type == "Player Fleet")
+						{
+							MapEntity ship = HexContents[shipHex];
+							
+							// If in combat, check range and AP. If out of combat, just move.
+							if (!Combat.InCombat)
+							{
+								if (MapSpawner.IsHexEmpty(_currentHoveredHex, HexGrid, HexContents))
+								{
+									MoveShip(shipHex, _currentHoveredHex, 0);
+									SelectedHexes[0] = _currentHoveredHex;
+									UpdateHighlights();
+								}
+							}
+							else
+							{
+								Dictionary<Vector2I, int> reachable = GetReachableHexes(shipHex, ship.CurrentActions);
+								if (reachable.ContainsKey(_currentHoveredHex))
+								{
+									int cost = reachable[_currentHoveredHex];
+									MoveShip(shipHex, _currentHoveredHex, cost);
+									SelectedHexes[0] = _currentHoveredHex;
+									UpdateHighlights();
+								}
+								else
+								{
+									GD.Print("Hex out of movement range or blocked.");
+								}
+							}
+						}
+					}
+					// If multiple ships are selected, move the group
+					else if (!Combat.InCombat) 
+					{
+						MoveGroup(SelectedHexes, _currentHoveredHex);
+					}
+				}
+			}
+		}
+	}
+
 	public override void _Process(double delta)
 	{
 		if (IsJumping || UI == null) return;
 		
-		// --- DYNAMIC FOG REVEAL ---
 		if (IsFleetMoving) Fog.UpdateVisibility();
+
+		// --- NEW: Update Hover Highlight Position ---
+		Vector2 globalMousePos = GetGlobalMousePosition();
+		_currentHoveredHex = HexMath.PixelToHex(globalMousePos, HexSize);
+		
+		if (HexGrid.ContainsKey(_currentHoveredHex))
+		{
+			_hoverHighlight.Visible = true;
+			_hoverHighlight.Position = HexMath.HexToPixel(_currentHoveredHex, HexSize);
+		}
+		else
+		{
+			_hoverHighlight.Visible = false;
+		}
 
 		foreach (Vector2I hex in SelectedHexes)
 		{
@@ -186,7 +281,6 @@ public partial class BattleMap : Node2D
 				MapEntity selectedShip = HexContents[hex];
 				if (GodotObject.IsInstanceValid(selectedShip.VisualSprite))
 				{
-					Vector2 globalMousePos = GetGlobalMousePosition();
 					float targetAngle = selectedShip.VisualSprite.GlobalPosition.AngleToPoint(globalMousePos) + selectedShip.BaseRotationOffset;
 					selectedShip.VisualSprite.Rotation = Mathf.LerpAngle(selectedShip.VisualSprite.Rotation, targetAngle, 0.15f);
 				}
@@ -398,6 +492,19 @@ public partial class BattleMap : Node2D
 
 		CurrentlyViewedShip.CurrentActions -= 1;
 		if (pData != null) pData.HasBeenScanned = true;
+
+		Random rng = new Random();
+		
+		if (rng.Next(0, 100) < 30 && ConversationUI != null) 
+		{
+			UI.CombatLogPanel.Visible = true;
+			LogCombatMessage($"\n[color=yellow]*** INCOMING TRANSMISSION FROM SURFACE ***[/color]");
+			
+			ConversationUI.StartConversation("Stranded_Miner"); 
+			
+			ToggleShipMenu(true, CurrentlyViewedShip);
+			return; 
+		}
 
 		float scale = planet.VisualSprite.Scale.X;
 		string sizeClass = scale > 0.6f ? "Massive" : (scale > 0.5f ? "Standard" : "Dwarf");
@@ -842,7 +949,6 @@ public partial class BattleMap : Node2D
 			if (sfx != null) { SfxPlayer.Stream = sfx; SfxPlayer.Play(); }
 		}
 
-		// --- FIX 1: Lock system incremented ---
 		ActiveMovementTweens++;
 
 		Tween tween = CreateTween();
@@ -851,20 +957,19 @@ public partial class BattleMap : Node2D
 		float duration = Mathf.Max(0.3f, distance / 500f); 
 		tween.TweenProperty(ship.VisualSprite, "position", targetPixelPos, duration).SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.InOut);
 		
-		// --- FIX 1: Lock system decremented when flight completes ---
 		tween.TweenCallback(Callable.From(() => 
 		{
 			ActiveMovementTweens--;
 			if (ActiveMovementTweens <= 0) 
 			{
-				Fog.UpdateVisibility(); // Crisp final calculation
+				Fog.UpdateVisibility(); 
 			}
 		}));
 	}
 
 	internal void MoveGroup(List<Vector2I> shipsToMove, Vector2I targetHex)
 	{
-		if (IsFleetMoving) return; // --- FIX 1: Prevent issuing new move commands while flying
+		if (IsFleetMoving) return; 
 
 		shipsToMove = shipsToMove.Where(h => HexContents.ContainsKey(h)).ToList();
 		if (shipsToMove.Count == 0) return;

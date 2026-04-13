@@ -2,9 +2,13 @@
 
 [ext_resource type="Script" uid="uid://dscosif5s5xxv" path="res://BattleMap.cs" id="1_y3rr4"]
 [ext_resource type="PackedScene" uid="uid://cixla3d31mpt0" path="res://BattleUI.tscn" id="2_6js3c"]
+[ext_resource type="PackedScene" uid="uid://dfa0g7s2l4sdh" path="res://DialogueUI.tscn" id="3_4dnia"]
 
-[node name="BattleMap" type="Node2D" unique_id=1845389432 node_paths=PackedStringArray("UI")]
+[node name="BattleMap" type="Node2D" unique_id=1845389432 node_paths=PackedStringArray("UI", "ConversationUI")]
 script = ExtResource("1_y3rr4")
 UI = NodePath("BattleUI")
+ConversationUI = NodePath("DialogueUI")
 
 [node name="BattleUI" parent="." unique_id=654862988 instance=ExtResource("2_6js3c")]
+
+[node name="DialogueUI" parent="." unique_id=1101612214 instance=ExtResource("3_4dnia")]

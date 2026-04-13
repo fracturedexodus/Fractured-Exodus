@@ -47,6 +47,16 @@ public class StarMapData
 	public string Region { get; set; }
 }
 
+// --- NEW: Quest Data Container ---
+public class QuestData
+{
+	public string QuestID { get; set; }
+	public string Title { get; set; }
+	public string Description { get; set; }
+	public string TargetSystem { get; set; }
+	public bool IsComplete { get; set; } = false;
+}
+
 // ==========================================
 // THE SINGLETON
 // ==========================================
@@ -77,6 +87,10 @@ public partial class GlobalData : Node
 		{ "Ancient Tech", 0 }
 	};
 	public Godot.Collections.Array FleetEquipment { get; set; } = new Godot.Collections.Array();
+
+	// --- NEW: Quest Memory ---
+	public List<QuestData> ActiveQuests { get; set; } = new List<QuestData>();
+	public Godot.Collections.Array CompletedQuestIDs { get; set; } = new Godot.Collections.Array();
 
 	private string _savePath = "user://savegame.json"; 
 
