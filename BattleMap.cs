@@ -47,7 +47,7 @@ public partial class BattleMap : Node2D
 	// --- RENDER LAYERS ---
 	private CanvasLayer _bgLayer = new CanvasLayer { Layer = -1 }; 
 	private Node2D _gridLayer = new Node2D();  
-	private Node2D _radiationLayer = new Node2D(); // --- NEW: Layer for Radiation Clouds
+	private Node2D _radiationLayer = new Node2D(); 
 	private Node2D _environmentLayer = new Node2D(); 
 	private Node2D _highlightLayer = new Node2D(); 
 	private Node2D _entityLayer = new Node2D(); 
@@ -59,8 +59,8 @@ public partial class BattleMap : Node2D
 	private HashSet<Vector2I> _asteroidHexes = new HashSet<Vector2I>(); 
 	private float _asteroidTimer = 0f; 
 	
-	private HashSet<Vector2I> _radiationHexes = new HashSet<Vector2I>(); // --- NEW: Radiation Memory
-	private float _radiationTimer = 0f; // --- NEW: Timer for 5-second radiation damage
+	private HashSet<Vector2I> _radiationHexes = new HashSet<Vector2I>(); 
+	private float _radiationTimer = 0f; 
 	
 	// --- AUDIO PLAYERS ---
 	private AudioStreamPlayer _bgmPlayer;
@@ -94,20 +94,6 @@ public partial class BattleMap : Node2D
 		public float BaseRotationOffset; 
 	}
 	private Dictionary<Vector2I, MapEntity> _hexContents = new Dictionary<Vector2I, MapEntity>();
-
-	private string[] _enemyShipTypes = new string[] {
-		"Aether Censor Obelisk", "Custodian Logic Barge", "Ignis Repurposed Terraformer",
-		"Reformatter Dreadnought", "Scrap-Stick Subversion Drone"
-	};
-
-	private string[] _shipParts = new string[] {
-		"Port Thrusters", "Starboard Hull", "Main Bridge", "Weapon Arrays", 
-		"Shield Generators", "Aft Cargo Bay", "Navigational Sensors", "Life Support Systems"
-	};
-	private string[] _missTexts = new string[] {
-		"Shot went wide!", "Evasive maneuvers successful!", 
-		"Glanced harmlessly off the deflectors!", "Missed by a hair!"
-	};
 
 	// --- COMBAT STATE & SELECTION ---
 	private bool _inCombat = false;
@@ -171,7 +157,7 @@ public partial class BattleMap : Node2D
 		
 		AddChild(_bgLayer);
 		AddChild(_gridLayer);
-		AddChild(_radiationLayer); // Add behind asteroids
+		AddChild(_radiationLayer); 
 		AddChild(_environmentLayer); 
 		AddChild(_highlightLayer);
 		AddChild(_entityLayer);
@@ -295,7 +281,7 @@ public partial class BattleMap : Node2D
 			}
 		}
 
-		// --- 1 Second Asteroid Damage ---
+		// --- Continuous Hazard Logic ---
 		_asteroidTimer += (float)delta;
 		if (_asteroidTimer >= 1.0f)
 		{
@@ -303,7 +289,6 @@ public partial class BattleMap : Node2D
 			ApplyAsteroidDamage();
 		}
 
-		// --- NEW: 5 Second Radiation Damage ---
 		_radiationTimer += (float)delta;
 		if (_radiationTimer >= 5.0f)
 		{
@@ -450,7 +435,7 @@ public partial class BattleMap : Node2D
 						LogCombatMessage($"[color=red]*** {kvp.Value.Name.ToUpper()} DESTROYED BY ASTEROID IMPACT ***[/color]\n");
 						
 						if (_explosionPlayer.Stream != null) _explosionPlayer.Play();
-						DrawExplosion(HexToPixel(kvp.Key));
+						BattleVFX.DrawExplosion(_entityLayer, HexToPixel(kvp.Key), HexSize);
 
 						kvp.Value.IsDead = true;
 						if (IsInstanceValid(kvp.Value.VisualSprite)) kvp.Value.VisualSprite.QueueFree();
@@ -477,7 +462,6 @@ public partial class BattleMap : Node2D
 		}
 	}
 
-	// --- NEW: Apply Radiation Cloud Damage ---
 	private void ApplyRadiationDamage()
 	{
 		bool uiNeedsUpdate = false;
@@ -491,7 +475,6 @@ public partial class BattleMap : Node2D
 				{
 					bool tookHullDamage = false;
 
-					// Drain 1 Shield, OR 2 Hull HP
 					if (kvp.Value.CurrentShields > 0)
 					{
 						kvp.Value.CurrentShields = Mathf.Max(0, kvp.Value.CurrentShields - 1);
@@ -502,7 +485,6 @@ public partial class BattleMap : Node2D
 						tookHullDamage = true;
 					}
 
-					// Visual Feedback (Neon green for shields, Red for hull)
 					if (IsInstanceValid(kvp.Value.VisualSprite))
 					{
 						Tween flash = CreateTween();
@@ -518,7 +500,7 @@ public partial class BattleMap : Node2D
 						LogCombatMessage($"[color=red]*** {kvp.Value.Name.ToUpper()} DESTROYED BY RADIATION EXPOSURE ***[/color]\n");
 						
 						if (_explosionPlayer.Stream != null) _explosionPlayer.Play();
-						DrawExplosion(HexToPixel(kvp.Key));
+						BattleVFX.DrawExplosion(_entityLayer, HexToPixel(kvp.Key), HexSize);
 
 						kvp.Value.IsDead = true;
 						if (IsInstanceValid(kvp.Value.VisualSprite)) kvp.Value.VisualSprite.QueueFree();
@@ -821,7 +803,8 @@ public partial class BattleMap : Node2D
 			_shipMenuTitle.Text = $"== {ship.Name.ToUpper()} ==";
 			string status = ship.Type == "Enemy Fleet" ? "[HOSTILE]" : "[ALLIED]";
 			
-			Texture2D tex = GD.Load<Texture2D>(GetShipTexturePath(ship.Name));
+			// --- UPDATED: Uses new Database class ---
+			Texture2D tex = GD.Load<Texture2D>(Database.GetShipTexturePath(ship.Name));
 			if (tex != null) _shipImageDisplay.Texture = tex;
 			float hpPercent = (float)ship.CurrentHP / ship.MaxHP;
 			_shipImageDisplay.Modulate = new Color(1f, hpPercent, hpPercent); 
@@ -1347,7 +1330,8 @@ public partial class BattleMap : Node2D
 
 			if (joinsCombat)
 			{
-				kvp.Value.CurrentInitiativeRoll = rng.Next(1, 21) + kvp.Value.InitiativeBonus;
+				// --- UPDATED: Uses new Database class ---
+				kvp.Value.CurrentInitiativeRoll = rng.Next(1, 21) + Database.GetShipInitiativeBonus(kvp.Value.Name);
 				kvp.Value.CurrentActions = kvp.Value.MaxActions; 
 				
 				if (IsInstanceValid(kvp.Value.VisualSprite)) kvp.Value.VisualSprite.Visible = true;
@@ -1484,7 +1468,8 @@ public partial class BattleMap : Node2D
 			}
 
 			TextureRect icon = new TextureRect();
-			Texture2D tex = GD.Load<Texture2D>(GetShipTexturePath(ship.Name));
+			// --- UPDATED: Uses new Database class ---
+			Texture2D tex = GD.Load<Texture2D>(Database.GetShipTexturePath(ship.Name));
 			icon.Texture = tex;
 			icon.ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize;
 			icon.StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered;
@@ -1609,7 +1594,8 @@ public partial class BattleMap : Node2D
 
 		attacker.CurrentActions--; 
 		
-		DrawLaserBeam(HexToPixel(attackerHex), HexToPixel(defenderHex), attacker.Type);
+		// --- UPDATED: Uses new BattleVFX class ---
+		BattleVFX.DrawLaserBeam(_entityLayer, HexToPixel(attackerHex), HexToPixel(defenderHex), attacker.Type);
 		if (_laserPlayer.Stream != null) _laserPlayer.Play();
 
 		Random rng = new Random();
@@ -1618,7 +1604,8 @@ public partial class BattleMap : Node2D
 
 		if (damageRolled == 0)
 		{
-			string missTxt = _missTexts[rng.Next(_missTexts.Length)];
+			// --- UPDATED: Uses new Database class ---
+			string missTxt = Database.MissTexts[rng.Next(Database.MissTexts.Length)];
 			LogCombatMessage($"[color={attackerColor}]{attacker.Name}[/color] fired at {defender.Name}... {missTxt} [color=gray](0 DMG)[/color]");
 			
 			if (_selectedHexes.Count == 1 && _selectedHexes[0] == attackerHex) ToggleShipMenu(true, attacker);
@@ -1648,7 +1635,8 @@ public partial class BattleMap : Node2D
 		hullDmg = damageRemaining;
 		defender.CurrentHP -= hullDmg;
 
-		string hitPart = _shipParts[rng.Next(_shipParts.Length)];
+		// --- UPDATED: Uses new Database class ---
+		string hitPart = Database.ShipParts[rng.Next(Database.ShipParts.Length)];
 		string logMsg = $"[color={attackerColor}]{attacker.Name}[/color] fires on {defender.Name}!\n";
 		logMsg += $"-> Hit to the {hitPart} for [color=yellow]{damageRolled} DMG[/color]!";
 		
@@ -1663,7 +1651,8 @@ public partial class BattleMap : Node2D
 			LogCombatMessage($"[color=red]*** {defender.Name.ToUpper()} DESTROYED ***[/color]\n");
 			
 			if (_explosionPlayer.Stream != null) _explosionPlayer.Play();
-			DrawExplosion(HexToPixel(defenderHex));
+			// --- UPDATED: Uses new BattleVFX class ---
+			BattleVFX.DrawExplosion(_entityLayer, HexToPixel(defenderHex), HexSize);
 
 			defender.IsDead = true;
 			defender.VisualSprite.QueueFree();
@@ -1672,81 +1661,6 @@ public partial class BattleMap : Node2D
 			if (_inCombat) UpdateInitiativeUI();
 			if (_inCombat && !AreBothSidesAlive()) EndCombat(); 
 		}
-	}
-
-	private void DrawLaserBeam(Vector2 startPos, Vector2 endPos, string attackerType)
-	{
-		Line2D laser = new Line2D();
-		laser.AddPoint(startPos);
-		laser.AddPoint(endPos);
-		laser.Width = 4.0f;
-		
-		if (attackerType == "Player Fleet") laser.DefaultColor = new Color(0.2f, 1f, 0.2f, 1f); 
-		else laser.DefaultColor = new Color(1f, 0.2f, 0.2f, 1f); 
-		
-		_entityLayer.AddChild(laser);
-
-		Tween tween = CreateTween();
-		tween.TweenProperty(laser, "modulate", new Color(1, 1, 1, 0), 0.4f);
-		tween.TweenCallback(Callable.From(laser.QueueFree)); 
-	}
-
-	private void DrawExplosion(Vector2 pos)
-	{
-		Polygon2D shockwave = new Polygon2D();
-		Vector2[] points = new Vector2[32];
-		for (int i = 0; i < 32; i++)
-		{
-			float angle = (i / 32f) * Mathf.Pi * 2f;
-			points[i] = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * HexSize * 0.5f;
-		}
-		shockwave.Polygon = points;
-		shockwave.Color = new Color(1f, 1f, 1f, 0.8f); 
-		shockwave.Position = pos;
-		_entityLayer.AddChild(shockwave);
-
-		Tween flashTween = CreateTween();
-		flashTween.TweenProperty(shockwave, "scale", new Vector2(3.0f, 3.0f), 0.8f).SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.Out);
-		flashTween.Parallel().TweenProperty(shockwave, "color", new Color(1f, 0.4f, 0f, 0f), 0.8f); 
-		flashTween.TweenCallback(Callable.From(shockwave.QueueFree)); 
-
-		CpuParticles2D particles = new CpuParticles2D();
-		particles.Position = pos;
-		particles.Emitting = false;
-		particles.OneShot = true;
-		particles.Explosiveness = 0.6f; 
-		particles.Lifetime = 2.5f; 
-		particles.Amount = 60; 
-		particles.Spread = 180f;
-		particles.Gravity = Vector2.Zero; 
-		particles.InitialVelocityMin = 20f; 
-		particles.InitialVelocityMax = 80f; 
-		particles.ScaleAmountMin = 8f;
-		particles.ScaleAmountMax = 24f;
-		
-		Gradient grad = new Gradient();
-		grad.Offsets = new float[] { 0.0f, 0.1f, 0.3f, 0.6f, 1.0f };
-		grad.Colors = new Color[] {
-			new Color(1f, 1f, 1f, 1f),       
-			new Color(1f, 0.9f, 0.2f, 1f),   
-			new Color(1f, 0.4f, 0f, 1f),     
-			new Color(0.2f, 0.2f, 0.2f, 1f), 
-			new Color(0.2f, 0.2f, 0.2f, 0f)  
-		};
-		particles.ColorRamp = grad;
-
-		Curve sizeCurve = new Curve();
-		sizeCurve.AddPoint(new Vector2(0f, 1f));
-		sizeCurve.AddPoint(new Vector2(1f, 0f));
-		particles.ScaleAmountCurve = sizeCurve;
-
-		_entityLayer.AddChild(particles);
-		particles.Emitting = true; 
-
-		GetTree().CreateTimer(3.0f).Timeout += () => 
-		{
-			if (IsInstanceValid(particles)) particles.QueueFree();
-		};
 	}
 
 	private void ExecuteSingleEnemyAI(MapEntity enemyShip)
@@ -1820,7 +1734,8 @@ public partial class BattleMap : Node2D
 			float distance = enemyShip.VisualSprite.Position.DistanceTo(targetPixelPos);
 			float duration = Mathf.Max(0.3f, distance / 500f); 
 
-			string sfxPath = GetShipMovementSoundPath(enemyShip.Name);
+			// --- UPDATED: Uses new Database class ---
+			string sfxPath = Database.GetShipMovementSoundPath(enemyShip.Name);
 			if (!string.IsNullOrEmpty(sfxPath))
 			{
 				AudioStream sfx = GD.Load<AudioStream>(sfxPath);
@@ -2127,7 +2042,8 @@ public partial class BattleMap : Node2D
 
 		if (_selectedHexes.Count == 1 && _selectedHexes[0] == fromHex) ToggleShipMenu(true, ship);
 
-		string sfxPath = GetShipMovementSoundPath(ship.Name);
+		// --- UPDATED: Uses new Database class ---
+		string sfxPath = Database.GetShipMovementSoundPath(ship.Name);
 		if (!string.IsNullOrEmpty(sfxPath))
 		{
 			AudioStream sfx = GD.Load<AudioStream>(sfxPath);
@@ -2565,135 +2481,6 @@ public partial class BattleMap : Node2D
 		}
 	}
 
-	private void AddSunVFX(Sprite2D sunSprite)
-	{
-		Sprite2D glow = new Sprite2D();
-		glow.Texture = sunSprite.Texture; 
-		glow.Scale = new Vector2(1.2f, 1.2f); 
-		glow.Modulate = new Color(1f, 0.8f, 0.2f, 0.4f); 
-		glow.ShowBehindParent = true;
-		
-		CanvasItemMaterial mat = new CanvasItemMaterial();
-		mat.BlendMode = CanvasItemMaterial.BlendModeEnum.Add;
-		glow.Material = mat;
-		sunSprite.AddChild(glow);
-
-		Tween pulseTween = CreateTween().SetLoops(); 
-		pulseTween.TweenProperty(glow, "scale", new Vector2(1.3f, 1.3f), 2.0f).SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.InOut);
-		pulseTween.TweenProperty(glow, "scale", new Vector2(1.15f, 1.15f), 2.0f).SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.InOut);
-
-		CpuParticles2D flares = new CpuParticles2D();
-		flares.Amount = 40;
-		flares.Lifetime = 3.0f;
-		flares.SpeedScale = 0.5f;
-		flares.Explosiveness = 0.1f;
-		flares.Randomness = 0.5f;
-		flares.ShowBehindParent = true;
-
-		flares.EmissionShape = CpuParticles2D.EmissionShapeEnum.Sphere;
-		if (sunSprite.Texture != null)
-		{
-			flares.EmissionSphereRadius = (sunSprite.Texture.GetSize().X / 2f) * 0.9f; 
-		}
-		
-		flares.Direction = Vector2.Zero; 
-		flares.Spread = 180f;
-		flares.Gravity = Vector2.Zero;
-		flares.InitialVelocityMin = 20f;
-		flares.InitialVelocityMax = 60f;
-		flares.ScaleAmountMin = 4f;
-		flares.ScaleAmountMax = 12f;
-
-		Gradient colorGrad = new Gradient();
-		colorGrad.Offsets = new float[] { 0.0f, 0.2f, 0.6f, 1.0f };
-		colorGrad.Colors = new Color[] {
-			new Color(1f, 1f, 0.8f, 1f),     
-			new Color(1f, 0.8f, 0.1f, 0.9f), 
-			new Color(1f, 0.4f, 0f, 0.6f),   
-			new Color(0.8f, 0.1f, 0f, 0f)    
-		};
-		flares.ColorRamp = colorGrad;
-
-		Curve sizeCurve = new Curve();
-		sizeCurve.AddPoint(new Vector2(0f, 1f));
-		sizeCurve.AddPoint(new Vector2(1f, 0.3f));
-		flares.ScaleAmountCurve = sizeCurve;
-
-		sunSprite.AddChild(flares);
-
-		Tween rotTween = CreateTween().SetLoops();
-		rotTween.TweenProperty(sunSprite, "rotation", Mathf.Pi * 2, 60.0f).AsRelative();
-	}
-
-	private void AddPlanetRotationVFX(Sprite2D planetSprite, Random rng)
-	{
-		float rotDuration = rng.Next(40, 120); 
-		float rotDir = rng.Next(0, 2) == 0 ? 1f : -1f; 
-
-		Tween rotTween = CreateTween().SetLoops();
-		rotTween.TweenProperty(planetSprite, "rotation", Mathf.Pi * 2 * rotDir, rotDuration).AsRelative();
-	}
-
-	// --- NEW: Draw Visual for Radiation Clouds ---
-	private void DrawRadiationVisual(Vector2I hexCoord, Random rng)
-	{
-		Polygon2D cloud = new Polygon2D();
-		Vector2[] points = new Vector2[6];
-		for (int i = 0; i < 6; i++)
-		{
-			float angle_deg = 60 * i - 30;
-			float angle_rad = Mathf.DegToRad(angle_deg);
-			// Slightly oversized to blend with adjacent hexes
-			points[i] = new Vector2(HexSize * 1.05f * Mathf.Cos(angle_rad), HexSize * 1.05f * Mathf.Sin(angle_rad));
-		}
-		cloud.Polygon = points;
-		
-		// Randomize the yellow/green tint
-		float g = 0.8f + (float)rng.NextDouble() * 0.2f;
-		cloud.Color = new Color(0.2f, g, 0.1f, 0.15f); 
-		
-		CanvasItemMaterial mat = new CanvasItemMaterial();
-		mat.BlendMode = CanvasItemMaterial.BlendModeEnum.Add;
-		cloud.Material = mat;
-
-		cloud.Position = HexToPixel(hexCoord);
-		_radiationLayer.AddChild(cloud);
-		
-		Tween pulseTween = CreateTween().SetLoops();
-		pulseTween.TweenProperty(cloud, "modulate:a", 0.05f, rng.Next(2, 5)).SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.InOut);
-		pulseTween.TweenProperty(cloud, "modulate:a", 1.0f, rng.Next(2, 5)).SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.InOut);
-	}
-
-	private void DrawAsteroidVisual(Vector2I hexCoord, Random rng)
-	{
-		Polygon2D rock = new Polygon2D();
-		int pointsCount = rng.Next(5, 9);
-		Vector2[] pts = new Vector2[pointsCount];
-		
-		for(int i = 0; i < pointsCount; i++) 
-		{
-			float angle = (i / (float)pointsCount) * Mathf.Pi * 2;
-			float rad = HexSize * 0.35f * (0.7f + (float)rng.NextDouble() * 0.6f);
-			pts[i] = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * rad;
-		}
-		
-		rock.Polygon = pts;
-		rock.Color = new Color(0.4f, 0.4f, 0.4f, 1f);
-		
-		Line2D outline = new Line2D();
-		outline.Points = pts.Append(pts[0]).ToArray();
-		outline.Width = 2f;
-		outline.DefaultColor = new Color(0.2f, 0.2f, 0.2f, 1f);
-		rock.AddChild(outline);
-
-		rock.Position = HexToPixel(hexCoord);
-		rock.Rotation = (float)rng.NextDouble() * Mathf.Pi;
-		
-		rock.SetMeta("spin_speed", (float)(rng.NextDouble() * 1.5 - 0.75));
-		
-		_environmentLayer.AddChild(rock);
-	}
-
 	private void PopulateMapFromMemory()
 	{
 		Random rng = new Random();
@@ -2708,7 +2495,8 @@ public partial class BattleMap : Node2D
 		
 		if (IsInstanceValid(starData.VisualSprite))
 		{
-			AddSunVFX(starData.VisualSprite);
+			// --- UPDATED: Uses new BattleVFX class ---
+			BattleVFX.AddSunVFX(starData.VisualSprite);
 		}
 
 		if (_globalData == null || string.IsNullOrEmpty(_globalData.SavedSystem)) return;
@@ -2773,7 +2561,8 @@ public partial class BattleMap : Node2D
 			
 			if (IsInstanceValid(planetEntity.VisualSprite))
 			{
-				AddPlanetRotationVFX(planetEntity.VisualSprite, rng);
+				// --- UPDATED: Uses new BattleVFX class ---
+				BattleVFX.AddPlanetRotationVFX(planetEntity.VisualSprite, rng);
 			}
 
 			if (pData.Name == _globalData.SavedPlanet) basePlanetLocation = spawnHex;
@@ -2804,7 +2593,8 @@ public partial class BattleMap : Node2D
 			List<Vector2I> cluster = new List<Vector2I> { startHex };
 			
 			_asteroidHexes.Add(startHex);
-			DrawAsteroidVisual(startHex, rng);
+			// --- UPDATED: Uses new BattleVFX class ---
+			BattleVFX.DrawAsteroidVisual(_environmentLayer, startHex, rng, HexSize, HexToPixel(startHex));
 
 			int attempts = 0;
 			while (cluster.Count < fieldSize && attempts < 1000) 
@@ -2818,24 +2608,25 @@ public partial class BattleMap : Node2D
 					{
 						cluster.Add(neighbor);
 						_asteroidHexes.Add(neighbor);
-						DrawAsteroidVisual(neighbor, rng);
+						// --- UPDATED: Uses new BattleVFX class ---
+						BattleVFX.DrawAsteroidVisual(_environmentLayer, neighbor, rng, HexSize, HexToPixel(neighbor));
 					}
 				}
 				attempts++;
 			}
 		}
 
-		// --- NEW: Generate Radiation Clouds (0 to 3 per system) ---
 		_radiationHexes.Clear();
 		int numRadiationFields = rng.Next(0, 4); 
 		for(int i = 0; i < numRadiationFields; i++)
 		{
-			int fieldSize = rng.Next(20, 80); // Can be large nebulas
+			int fieldSize = rng.Next(20, 80); 
 			Vector2I startHex = FindEmptyHexInRing(rng.Next(10, _maxMapRadius), rng);
 			List<Vector2I> cluster = new List<Vector2I> { startHex };
 			
 			_radiationHexes.Add(startHex);
-			DrawRadiationVisual(startHex, rng);
+			// --- UPDATED: Uses new BattleVFX class ---
+			BattleVFX.DrawRadiationVisual(_radiationLayer, startHex, rng, HexSize, HexToPixel(startHex));
 
 			int attempts = 0;
 			while (cluster.Count < fieldSize && attempts < 1000) 
@@ -2845,12 +2636,12 @@ public partial class BattleMap : Node2D
 				
 				if (HexDistance(neighbor, Vector2I.Zero) <= _maxMapRadius)
 				{
-					// Notice we do NOT check IsHexEmpty here. Radiation can safely overlap planets and asteroids!
 					if (!_radiationHexes.Contains(neighbor))
 					{
 						cluster.Add(neighbor);
 						_radiationHexes.Add(neighbor);
-						DrawRadiationVisual(neighbor, rng);
+						// --- UPDATED: Uses new BattleVFX class ---
+						BattleVFX.DrawRadiationVisual(_radiationLayer, neighbor, rng, HexSize, HexToPixel(neighbor));
 					}
 				}
 				attempts++;
@@ -2882,7 +2673,9 @@ public partial class BattleMap : Node2D
 			{
 				var shipDict = (Godot.Collections.Dictionary)item;
 				string shipName = (string)shipDict["Name"];
-				(int range, int dmg) = GetShipWeaponStats(shipName);
+				
+				// --- UPDATED: Uses new Database class ---
+				(int range, int dmg) = Database.GetShipWeaponStats(shipName);
 				
 				Vector2I spawnPos = new Vector2I((int)shipDict["Q"], (int)shipDict["R"]);
 				if (arrivedViaJump) 
@@ -2900,11 +2693,16 @@ public partial class BattleMap : Node2D
 					AttackRange = range, AttackDamage = dmg,
 					MaxHP = (int)shipDict["MaxHP"], CurrentHP = (int)shipDict["CurrentHP"],
 					MaxShields = (int)shipDict["MaxShields"], CurrentShields = (int)shipDict["CurrentShields"],
-					InitiativeBonus = GetShipInitiativeBonus(shipName),
-					BaseRotationOffset = GetShipRotationOffset(shipName),
+					
+					// --- UPDATED: Uses new Database class ---
+					InitiativeBonus = Database.GetShipInitiativeBonus(shipName),
+					BaseRotationOffset = Database.GetShipRotationOffset(shipName),
+					
 					CurrentInitiativeRoll = shipDict.ContainsKey("CurrentInitiativeRoll") ? (int)shipDict["CurrentInitiativeRoll"] : 0
 				};
-				SpawnEntityAtHex(spawnPos, GetShipTexturePath(shipName), shipData, 0.2f); 
+				
+				// --- UPDATED: Uses new Database class ---
+				SpawnEntityAtHex(spawnPos, Database.GetShipTexturePath(shipName), shipData, 0.2f); 
 			}
 		}
 		else if (_globalData.SelectedPlayerFleet != null && _globalData.SelectedPlayerFleet.Count > 0)
@@ -2918,19 +2716,24 @@ public partial class BattleMap : Node2D
 					currentDirIndex++;
 					if (_hexGrid.ContainsKey(spawnPos) && !_hexContents.ContainsKey(spawnPos))
 					{
-						int shipBaseActionPoints = GetShipBaseActions(shipName); 
-						(int hp, int shields) = GetShipCombatStats(shipName);
-						(int range, int dmg) = GetShipWeaponStats(shipName);
+						// --- UPDATED: Uses new Database class ---
+						int shipBaseActionPoints = Database.GetShipBaseActions(shipName); 
+						(int hp, int shields) = Database.GetShipCombatStats(shipName);
+						(int range, int dmg) = Database.GetShipWeaponStats(shipName);
 
 						MapEntity shipData = new MapEntity { 
 							Name = shipName, Type = "Player Fleet", Details = "Status: Online",
 							MaxActions = shipBaseActionPoints, CurrentActions = shipBaseActionPoints,
 							AttackRange = range, AttackDamage = dmg,
 							MaxHP = hp, CurrentHP = hp, MaxShields = shields, CurrentShields = shields,
-							InitiativeBonus = GetShipInitiativeBonus(shipName),
-							BaseRotationOffset = GetShipRotationOffset(shipName)
+							
+							// --- UPDATED: Uses new Database class ---
+							InitiativeBonus = Database.GetShipInitiativeBonus(shipName),
+							BaseRotationOffset = Database.GetShipRotationOffset(shipName)
 						};
-						SpawnEntityAtHex(spawnPos, GetShipTexturePath(shipName), shipData, 0.2f); 
+						
+						// --- UPDATED: Uses new Database class ---
+						SpawnEntityAtHex(spawnPos, Database.GetShipTexturePath(shipName), shipData, 0.2f); 
 						break; 
 					}
 				}
@@ -2944,7 +2747,9 @@ public partial class BattleMap : Node2D
 				var shipDict = (Godot.Collections.Dictionary)item;
 				string shipName = (string)shipDict["Name"];
 				Vector2I spawnPos = new Vector2I((int)shipDict["Q"], (int)shipDict["R"]);
-				(int range, int dmg) = GetShipWeaponStats(shipName);
+				
+				// --- UPDATED: Uses new Database class ---
+				(int range, int dmg) = Database.GetShipWeaponStats(shipName);
 
 				int actions = shipDict.ContainsKey("CurrentActions") ? (int)shipDict["CurrentActions"] : (int)shipDict["CurrentMovement"];
 				int maxActs = shipDict.ContainsKey("MaxActions") ? (int)shipDict["MaxActions"] : (int)shipDict["MaxMovement"];
@@ -2955,11 +2760,16 @@ public partial class BattleMap : Node2D
 					AttackRange = range, AttackDamage = dmg,
 					MaxHP = (int)shipDict["MaxHP"], CurrentHP = (int)shipDict["CurrentHP"],
 					MaxShields = (int)shipDict["MaxShields"], CurrentShields = (int)shipDict["CurrentShields"],
-					InitiativeBonus = GetShipInitiativeBonus(shipName),
-					BaseRotationOffset = GetShipRotationOffset(shipName),
+					
+					// --- UPDATED: Uses new Database class ---
+					InitiativeBonus = Database.GetShipInitiativeBonus(shipName),
+					BaseRotationOffset = Database.GetShipRotationOffset(shipName),
+					
 					CurrentInitiativeRoll = shipDict.ContainsKey("CurrentInitiativeRoll") ? (int)shipDict["CurrentInitiativeRoll"] : 0
 				};
-				SpawnEntityAtHex(spawnPos, GetShipTexturePath(shipName), shipData, 0.2f); 
+				
+				// --- UPDATED: Uses new Database class ---
+				SpawnEntityAtHex(spawnPos, Database.GetShipTexturePath(shipName), shipData, 0.2f); 
 			}
 		}
 		else if (!currentSystem.HasBeenVisited)
@@ -2975,7 +2785,8 @@ public partial class BattleMap : Node2D
 
 				for (int i = 0; i < shipsInThisFleet; i++)
 				{
-					string enemyName = _enemyShipTypes[rng.Next(_enemyShipTypes.Length)];
+					// --- UPDATED: Uses new Database class ---
+					string enemyName = Database.EnemyShipTypes[rng.Next(Database.EnemyShipTypes.Length)];
 					while (enemyDirIndex < 18) 
 					{
 						int ring = (enemyDirIndex / 6) + 1;
@@ -2983,19 +2794,24 @@ public partial class BattleMap : Node2D
 						enemyDirIndex++;
 						if (_hexGrid.ContainsKey(spawnPos) && !_hexContents.ContainsKey(spawnPos))
 						{
-							int shipBaseActionPoints = GetShipBaseActions(enemyName); 
-							(int hp, int shields) = GetShipCombatStats(enemyName);
-							(int range, int dmg) = GetShipWeaponStats(enemyName);
+							// --- UPDATED: Uses new Database class ---
+							int shipBaseActionPoints = Database.GetShipBaseActions(enemyName); 
+							(int hp, int shields) = Database.GetShipCombatStats(enemyName);
+							(int range, int dmg) = Database.GetShipWeaponStats(enemyName);
 
 							MapEntity shipData = new MapEntity { 
 								Name = enemyName, Type = "Enemy Fleet", Details = "Status: Hostile Target",
 								MaxActions = shipBaseActionPoints, CurrentActions = shipBaseActionPoints,
 								AttackRange = range, AttackDamage = dmg,
 								MaxHP = hp, CurrentHP = hp, MaxShields = shields, CurrentShields = shields,
-								InitiativeBonus = GetShipInitiativeBonus(enemyName),
-								BaseRotationOffset = GetShipRotationOffset(enemyName)
+								
+								// --- UPDATED: Uses new Database class ---
+								InitiativeBonus = Database.GetShipInitiativeBonus(enemyName),
+								BaseRotationOffset = Database.GetShipRotationOffset(enemyName)
 							};
-							SpawnEntityAtHex(spawnPos, GetShipTexturePath(enemyName), shipData, 0.2f); 
+							
+							// --- UPDATED: Uses new Database class ---
+							SpawnEntityAtHex(spawnPos, Database.GetShipTexturePath(enemyName), shipData, 0.2f); 
 
 							var shipDict = new Godot.Collections.Dictionary<string, Variant>();
 							shipDict["Name"] = enemyName; shipDict["Q"] = spawnPos.X; shipDict["R"] = spawnPos.Y;
@@ -3071,160 +2887,6 @@ public partial class BattleMap : Node2D
 			case "FROZEN": return "res://Planets/frozen_planet.png";
 			case "LAVA": return "res://Planets/lava_planet.png";
 			default: return "res://Planets/terra_planet.png"; 
-		}
-	}
-
-	private string GetShipTexturePath(string shipName)
-	{
-		switch (shipName)
-		{
-			case "The Relic Harvester": return "res://Ships/RelicHarvesterSprite.png";
-			case "The Panacea Spire": return "res://Ships/PanaceaSpireSprite.png";
-			case "The Neptune Forge": return "res://Ships/NeptuneForgeSprite.png";
-			case "The Genesis Ark": return "res://Ships/GenesisArkSprite.png";
-			case "The Valkyrie Wing": return "res://Ships/ValkyrieWingSprite.png";
-			case "The Aegis Bastion": return "res://Ships/AegisBastionSprite.png";
-			case "The Aether Skimmer": return "res://Ships/AetherSkimmerSprite.png";
-			
-			case "Aether Censor Obelisk": return "res://EnemyShips/AetherCensorObeliskSprite.png";
-			case "Custodian Logic Barge": return "res://EnemyShips/CustodianLogicBargeSprite.png";
-			case "Ignis Repurposed Terraformer": return "res://EnemyShips/IgnisRepurposedTerraformerSprite.png";
-			case "Reformatter Dreadnought": return "res://EnemyShips/ReformatterDreadnoughtSprite.png";
-			case "Scrap-Stick Subversion Drone": return "res://EnemyShips/ScrapStickSubversionDroneSprite.png";
-			default: return "res://icon.svg"; 
-		}
-	}
-
-	private string GetShipMovementSoundPath(string shipName)
-	{
-		switch (shipName)
-		{
-			case "The Valkyrie Wing": return "res://Sounds/ValkyrieWing.wav";
-			case "The Aegis Bastion": return "res://Sounds/HeavyThrusters.wav";
-			case "The Panacea Spire": return "res://Sounds/PanaceaSpire.wav";
-			case "The Aether Skimmer": return "res://Sounds/AetherSkimmer.wav";
-			case "The Genesis Ark": return "res://Sounds/GenesisArk.wav";
-			case "The Neptune Forge": return "res://Sounds/NeptuneForge.wav";
-			case "The Relic Harvester": return "res://Sounds/RelicHarvester.mp3";
-			default: return ""; 
-		}
-	}
-
-	private int GetShipBaseActions(string shipName)
-	{
-		switch (shipName)
-		{
-			case "The Aether Skimmer": return 5;
-			case "The Valkyrie Wing": return 4;
-			case "The Genesis Ark": return 3;
-			case "The Panacea Spire": return 3;
-			case "The Relic Harvester": return 3;
-			case "The Neptune Forge": return 2;
-			case "The Aegis Bastion": return 2;
-			
-			case "Scrap-Stick Subversion Drone": return 5; 
-			case "Aether Censor Obelisk": return 4; 
-			case "Custodian Logic Barge": return 3; 
-			case "Ignis Repurposed Terraformer": return 2; 
-			case "Reformatter Dreadnought": return 2; 
-			default: return 3; 
-		}
-	}
-
-	private (int hp, int shields) GetShipCombatStats(string shipName)
-	{
-		switch (shipName)
-		{
-			case "The Aegis Bastion": return (100, 50);   
-			case "The Neptune Forge": return (80, 20);    
-			case "The Genesis Ark": return (50, 30);      
-			case "The Panacea Spire": return (40, 40);    
-			case "The Relic Harvester": return (50, 20);  
-			case "The Valkyrie Wing": return (30, 20);    
-			case "The Aether Skimmer": return (20, 10);   
-			
-			case "Reformatter Dreadnought": return (100, 50); 
-			case "Ignis Repurposed Terraformer": return (80, 20); 
-			case "Custodian Logic Barge": return (50, 30); 
-			case "Aether Censor Obelisk": return (30, 20); 
-			case "Scrap-Stick Subversion Drone": return (20, 10); 
-			default: return (50, 25); 
-		}
-	}
-
-	private (int range, int damage) GetShipWeaponStats(string shipName)
-	{
-		switch (shipName)
-		{
-			case "The Aegis Bastion": return (2, 25);   
-			case "The Neptune Forge": return (2, 30);    
-			case "The Genesis Ark": return (3, 20);      
-			case "The Panacea Spire": return (2, 15);    
-			case "The Relic Harvester": return (1, 35);  
-			case "The Valkyrie Wing": return (2, 15);    
-			case "The Aether Skimmer": return (1, 20);   
-			
-			case "Reformatter Dreadnought": return (2, 25); 
-			case "Ignis Repurposed Terraformer": return (2, 30); 
-			case "Custodian Logic Barge": return (3, 20); 
-			case "Aether Censor Obelisk": return (2, 15); 
-			case "Scrap-Stick Subversion Drone": return (1, 20); 
-			default: return (2, 20); 
-		}
-	}
-
-	private int GetShipInitiativeBonus(string shipName)
-	{
-		switch (shipName)
-		{
-			case "The Aether Skimmer":
-			case "Scrap-Stick Subversion Drone": 
-				return 5; 
-			
-			case "The Valkyrie Wing":
-			case "Aether Censor Obelisk": 
-				return 3; 
-
-			case "The Genesis Ark":
-			case "The Panacea Spire":
-			case "The Relic Harvester":
-			case "Custodian Logic Barge": 
-				return 0; 
-			
-			case "The Neptune Forge":
-			case "Ignis Repurposed Terraformer":
-			case "The Aegis Bastion":
-			case "Reformatter Dreadnought": 
-				return -2; 
-				
-			default: return 0; 
-		}
-	}
-
-	private float GetShipRotationOffset(string shipName)
-	{
-		switch (shipName)
-		{
-			case "The Genesis Ark":
-			case "The Panacea Spire":
-			case "The Relic Harvester":
-			case "The Valkyrie Wing":
-			case "The Aegis Bastion":
-				return Mathf.Pi / 2f; 
-				
-			case "The Neptune Forge":
-			case "Scrap-Stick Subversion Drone":
-			case "Reformatter Dreadnought":
-				return Mathf.Pi; 
-
-			case "The Aether Skimmer":
-			case "Aether Censor Obelisk":
-			case "Custodian Logic Barge":
-			case "Ignis Repurposed Terraformer":
-				return 0f; 
-
-			default:
-				return 0f; 
 		}
 	}
 }
