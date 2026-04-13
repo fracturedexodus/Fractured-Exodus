@@ -170,63 +170,87 @@ public static class MapSpawner
 			SpawnEntityAtHex(gateHex, "res://StarGate.png", gateEntity, 0.4f, hexSize, hexGrid, hexContents, entityLayer);
 		}
 
+		// --- PERSISTENT ASTEROIDS ---
 		asteroidHexes.Clear();
-		int numAsteroidFields = rng.Next(0, 4); 
-		for(int i = 0; i < numAsteroidFields; i++)
+		if (currentSystem.AsteroidHexes != null && currentSystem.AsteroidHexes.Count > 0)
 		{
-			int fieldSize = rng.Next(5, 101); 
-			Vector2I startHex = FindEmptyHexInRing(rng.Next(10, maxRadius), rng, hexGrid, hexContents);
-			List<Vector2I> cluster = new List<Vector2I> { startHex };
-			
-			asteroidHexes.Add(startHex);
-			BattleVFX.DrawAsteroidVisual(environmentLayer, startHex, rng, hexSize, HexMath.HexToPixel(startHex, hexSize));
-
-			int attempts = 0;
-			while (cluster.Count < fieldSize && attempts < 1000) 
+			foreach (Vector2I hex in currentSystem.AsteroidHexes)
 			{
-				Vector2I baseHex = cluster[rng.Next(cluster.Count)];
-				Vector2I neighbor = baseHex + HexMath.Directions[rng.Next(6)];
+				asteroidHexes.Add(hex);
+				BattleVFX.DrawAsteroidVisual(environmentLayer, hex, rng, hexSize, HexMath.HexToPixel(hex, hexSize));
+			}
+		}
+		else 
+		{
+			int numAsteroidFields = rng.Next(0, 4); 
+			for(int i = 0; i < numAsteroidFields; i++)
+			{
+				int fieldSize = rng.Next(5, 101); 
+				Vector2I startHex = FindEmptyHexInRing(rng.Next(10, maxRadius), rng, hexGrid, hexContents);
+				List<Vector2I> cluster = new List<Vector2I> { startHex };
 				
-				if (HexMath.HexDistance(neighbor, Vector2I.Zero) >= 10 && HexMath.HexDistance(neighbor, Vector2I.Zero) <= maxRadius)
+				asteroidHexes.Add(startHex);
+				BattleVFX.DrawAsteroidVisual(environmentLayer, startHex, rng, hexSize, HexMath.HexToPixel(startHex, hexSize));
+
+				int attempts = 0;
+				while (cluster.Count < fieldSize && attempts < 1000) 
 				{
-					if (!asteroidHexes.Contains(neighbor) && IsHexEmpty(neighbor, hexGrid, hexContents))
+					Vector2I baseHex = cluster[rng.Next(cluster.Count)];
+					Vector2I neighbor = baseHex + HexMath.Directions[rng.Next(6)];
+					
+					if (HexMath.HexDistance(neighbor, Vector2I.Zero) >= 10 && HexMath.HexDistance(neighbor, Vector2I.Zero) <= maxRadius)
 					{
-						cluster.Add(neighbor);
-						asteroidHexes.Add(neighbor);
-						BattleVFX.DrawAsteroidVisual(environmentLayer, neighbor, rng, hexSize, HexMath.HexToPixel(neighbor, hexSize));
+						if (!asteroidHexes.Contains(neighbor) && IsHexEmpty(neighbor, hexGrid, hexContents))
+						{
+							cluster.Add(neighbor);
+							asteroidHexes.Add(neighbor);
+							BattleVFX.DrawAsteroidVisual(environmentLayer, neighbor, rng, hexSize, HexMath.HexToPixel(neighbor, hexSize));
+						}
 					}
+					attempts++;
 				}
-				attempts++;
 			}
 		}
 
+		// --- PERSISTENT RADIATION ---
 		radiationHexes.Clear();
-		int numRadiationFields = rng.Next(0, 4); 
-		for(int i = 0; i < numRadiationFields; i++)
+		if (currentSystem.RadiationHexes != null && currentSystem.RadiationHexes.Count > 0)
 		{
-			int fieldSize = rng.Next(20, 80); 
-			Vector2I startHex = FindEmptyHexInRing(rng.Next(10, maxRadius), rng, hexGrid, hexContents);
-			List<Vector2I> cluster = new List<Vector2I> { startHex };
-			
-			radiationHexes.Add(startHex);
-			BattleVFX.DrawRadiationVisual(radiationLayer, startHex, rng, hexSize, HexMath.HexToPixel(startHex, hexSize));
-
-			int attempts = 0;
-			while (cluster.Count < fieldSize && attempts < 1000) 
+			foreach (Vector2I hex in currentSystem.RadiationHexes)
 			{
-				Vector2I baseHex = cluster[rng.Next(cluster.Count)];
-				Vector2I neighbor = baseHex + HexMath.Directions[rng.Next(6)];
+				radiationHexes.Add(hex);
+				BattleVFX.DrawRadiationVisual(radiationLayer, hex, rng, hexSize, HexMath.HexToPixel(hex, hexSize));
+			}
+		}
+		else
+		{
+			int numRadiationFields = rng.Next(0, 4); 
+			for(int i = 0; i < numRadiationFields; i++)
+			{
+				int fieldSize = rng.Next(20, 80); 
+				Vector2I startHex = FindEmptyHexInRing(rng.Next(10, maxRadius), rng, hexGrid, hexContents);
+				List<Vector2I> cluster = new List<Vector2I> { startHex };
 				
-				if (HexMath.HexDistance(neighbor, Vector2I.Zero) <= maxRadius)
+				radiationHexes.Add(startHex);
+				BattleVFX.DrawRadiationVisual(radiationLayer, startHex, rng, hexSize, HexMath.HexToPixel(startHex, hexSize));
+
+				int attempts = 0;
+				while (cluster.Count < fieldSize && attempts < 1000) 
 				{
-					if (!radiationHexes.Contains(neighbor))
+					Vector2I baseHex = cluster[rng.Next(cluster.Count)];
+					Vector2I neighbor = baseHex + HexMath.Directions[rng.Next(6)];
+					
+					if (HexMath.HexDistance(neighbor, Vector2I.Zero) <= maxRadius)
 					{
-						cluster.Add(neighbor);
-						radiationHexes.Add(neighbor);
-						BattleVFX.DrawRadiationVisual(radiationLayer, neighbor, rng, hexSize, HexMath.HexToPixel(neighbor, hexSize));
+						if (!radiationHexes.Contains(neighbor))
+						{
+							cluster.Add(neighbor);
+							radiationHexes.Add(neighbor);
+							BattleVFX.DrawRadiationVisual(radiationLayer, neighbor, rng, hexSize, HexMath.HexToPixel(neighbor, hexSize));
+						}
 					}
+					attempts++;
 				}
-				attempts++;
 			}
 		}
 
