@@ -34,6 +34,10 @@ public partial class BattleMap : Node2D
 	public HazardManager Hazards { get; private set; }
 	public FogOfWarManager Fog { get; private set; }
 
+	// --- FIX 1: Variables to track movement locks ---
+	public int ActiveMovementTweens = 0;
+	public bool IsFleetMoving => ActiveMovementTweens > 0;
+
 	private int _maxMapRadius = 35; 
 	private PackedScene _hexScene = GD.Load<PackedScene>("res://hex_tile.tscn");
 	
@@ -172,6 +176,9 @@ public partial class BattleMap : Node2D
 	{
 		if (IsJumping || UI == null) return;
 		
+		// --- DYNAMIC FOG REVEAL ---
+		if (IsFleetMoving) Fog.UpdateVisibility();
+
 		foreach (Vector2I hex in SelectedHexes)
 		{
 			if (HexContents.ContainsKey(hex))
@@ -381,6 +388,7 @@ public partial class BattleMap : Node2D
 
 	private void OnScanPressed()
 	{
+		if (IsFleetMoving) return; 
 		if (CurrentlyViewedShip == null || CurrentlyViewedShip.CurrentActions < 1) return;
 		MapEntity planet = GetAdjacentPlanet(CurrentlyViewedShip);
 		if (planet == null) return;
@@ -406,6 +414,7 @@ public partial class BattleMap : Node2D
 
 	private void OnSalvagePressed()
 	{
+		if (IsFleetMoving) return; 
 		if (CurrentlyViewedShip == null || CurrentlyViewedShip.CurrentActions < 1) return;
 		MapEntity planet = GetAdjacentPlanet(CurrentlyViewedShip);
 		if (planet == null) return;
@@ -480,6 +489,7 @@ public partial class BattleMap : Node2D
 
 	private void OnCodexPressed() 
 	{ 
+		if (IsFleetMoving) return; 
 		OnSaveGamePressed(); 
 		SceneTransition transitioner = GetNodeOrNull<SceneTransition>("/root/SceneTransition");
 		if (transitioner != null) transitioner.ChangeScene("res://codex.tscn");
@@ -502,6 +512,7 @@ public partial class BattleMap : Node2D
 
 	internal void OnRepairPressed()
 	{
+		if (IsFleetMoving) return; 
 		if (CurrentlyViewedShip == null || CurrentlyViewedShip.IsDead || CurrentlyViewedShip.Type != "Player Fleet") return;
 		if (CurrentlyViewedShip.CurrentActions < 2) return;
 		CurrentlyViewedShip.CurrentActions -= 2;
@@ -521,7 +532,7 @@ public partial class BattleMap : Node2D
 
 	private void OnRepairFleetPressed()
 	{
-		if (Combat.InCombat) return;
+		if (IsFleetMoving || Combat.InCombat) return; 
 
 		int totalMissing = 0;
 		foreach (var kvp in HexContents)
@@ -587,6 +598,8 @@ public partial class BattleMap : Node2D
 
 	internal void OnEndTurnPressed()
 	{
+		if (IsFleetMoving) return; 
+
 		if (!Combat.InCombat)
 		{
 			CurrentTurn++;
@@ -647,7 +660,7 @@ public partial class BattleMap : Node2D
 
 	private void OnJumpPressed()
 	{
-		if (IsJumping) return;
+		if (IsJumping || IsFleetMoving) return; 
 		IsJumping = true;
 
 		if (UI != null)
@@ -829,17 +842,30 @@ public partial class BattleMap : Node2D
 			if (sfx != null) { SfxPlayer.Stream = sfx; SfxPlayer.Play(); }
 		}
 
+		// --- FIX 1: Lock system incremented ---
+		ActiveMovementTweens++;
+
 		Tween tween = CreateTween();
 		Vector2 targetPixelPos = HexMath.HexToPixel(toHex, HexSize);
 		float distance = ship.VisualSprite.Position.DistanceTo(targetPixelPos);
 		float duration = Mathf.Max(0.3f, distance / 500f); 
 		tween.TweenProperty(ship.VisualSprite, "position", targetPixelPos, duration).SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.InOut);
 		
-		Fog.UpdateVisibility();
+		// --- FIX 1: Lock system decremented when flight completes ---
+		tween.TweenCallback(Callable.From(() => 
+		{
+			ActiveMovementTweens--;
+			if (ActiveMovementTweens <= 0) 
+			{
+				Fog.UpdateVisibility(); // Crisp final calculation
+			}
+		}));
 	}
 
 	internal void MoveGroup(List<Vector2I> shipsToMove, Vector2I targetHex)
 	{
+		if (IsFleetMoving) return; // --- FIX 1: Prevent issuing new move commands while flying
+
 		shipsToMove = shipsToMove.Where(h => HexContents.ContainsKey(h)).ToList();
 		if (shipsToMove.Count == 0) return;
 
@@ -944,6 +970,7 @@ public partial class BattleMap : Node2D
 
 	private void OnAttackPressed()
 	{
+		if (IsFleetMoving) return; 
 		Combat.IsTargeting = !Combat.IsTargeting;
 		if (UI != null) UI.AttackButton.Text = Combat.IsTargeting ? "CANCEL TARGET" : "ATTACK";
 	}

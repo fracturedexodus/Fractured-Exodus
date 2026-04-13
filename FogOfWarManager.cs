@@ -23,27 +23,22 @@ public class FogOfWarManager
 			{
 				float angle_deg = 60 * i - 30;
 				float angle_rad = Mathf.DegToRad(angle_deg);
-				// Make fog polygon slightly larger to overlap perfectly and prevent visual seams
 				points[i] = new Vector2(hexSize * 1.05f * Mathf.Cos(angle_rad), hexSize * 1.05f * Mathf.Sin(angle_rad));
 			}
 			poly.Polygon = points;
-			poly.Color = new Color(0.05f, 0.05f, 0.1f, 0.98f); // Deep space dark blue/black
+			poly.Color = new Color(0.05f, 0.05f, 0.1f, 0.98f); 
 			poly.Position = HexMath.HexToPixel(hex, hexSize);
 			fogLayer.AddChild(poly);
 			_fogTiles[hex] = poly;
 		}
 	}
 
-	// --- NEW: Save/Load Methods ---
 	public HashSet<Vector2I> GetExploredHexes() => _exploredHexes;
 
 	public void SetExploredHexes(List<Vector2I> savedHexes)
 	{
 		if (savedHexes == null) return;
-		foreach (var hex in savedHexes)
-		{
-			_exploredHexes.Add(hex);
-		}
+		foreach (var hex in savedHexes) _exploredHexes.Add(hex);
 	}
 
 	public void UpdateVisibility()
@@ -53,12 +48,15 @@ public class FogOfWarManager
 
 		foreach (var kvp in _map.HexContents)
 		{
-			if (kvp.Value.Type == "Player Fleet") playerPositions.Add(kvp.Key);
+			if (kvp.Value.Type == "Player Fleet" && GodotObject.IsInstanceValid(kvp.Value.VisualSprite)) 
+			{
+				// --- FIX 2: Use the exact visual pixel position so vision travels WITH the ship! ---
+				Vector2I visualHex = HexMath.PixelToHex(kvp.Value.VisualSprite.Position, _map.HexSize);
+				playerPositions.Add(visualHex);
+			}
 		}
 
 		int visionRange = _map.ScanningRange;
-
-		// 1. Calculate currently visible hexes based on player ship positions
 		foreach (Vector2I pPos in playerPositions)
 		{
 			for (int q = -visionRange; q <= visionRange; q++)
@@ -74,68 +72,56 @@ public class FogOfWarManager
 			}
 		}
 
-		// 2. Update visual fog tiles
+		// --- OPTIMIZATION: Only update Godot properties if they actually changed to save CPU time ---
+		Color exploredColor = new Color(0.05f, 0.05f, 0.1f, 0.25f);
+		Color unexploredColor = new Color(0.05f, 0.05f, 0.1f, 0.98f);
+
 		foreach (var kvp in _fogTiles)
 		{
 			if (_currentlyVisible.Contains(kvp.Key))
 			{
-				kvp.Value.Visible = false; // Completely clear when looking directly at it
+				if (kvp.Value.Visible) kvp.Value.Visible = false; 
 			}
-			else if (_exploredHexes.Contains(kvp.Key))
-			{
-				kvp.Value.Visible = true;
-				// Brighter "remembered" area
-				kvp.Value.Color = new Color(0.05f, 0.05f, 0.1f, 0.25f); 
+			else if (_exploredHexes.Contains(kvp.Key)) 
+			{ 
+				if (!kvp.Value.Visible) kvp.Value.Visible = true; 
+				if (kvp.Value.Color != exploredColor) kvp.Value.Color = exploredColor; 
 			}
-			else
-			{
-				kvp.Value.Visible = true;
-				kvp.Value.Color = new Color(0.05f, 0.05f, 0.1f, 0.98f); // Pitch black for unexplored
+			else 
+			{ 
+				if (!kvp.Value.Visible) kvp.Value.Visible = true; 
+				if (kvp.Value.Color != unexploredColor) kvp.Value.Color = unexploredColor; 
 			}
 		}
-
-		// 3. Apply visibility rules to entities and hazards
 		UpdateEntityVisibility();
 	}
 
 	private void UpdateEntityVisibility()
 	{
-		// Hide/Show Ships and Planets
 		foreach (var kvp in _map.HexContents)
 		{
 			if (kvp.Value.Type != "Player Fleet" && GodotObject.IsInstanceValid(kvp.Value.VisualSprite))
 			{
-				if (kvp.Value.Type == "Enemy Fleet")
-				{
-					// Enemies are only visible if CURRENTLY in vision
-					kvp.Value.VisualSprite.Visible = _currentlyVisible.Contains(kvp.Key);
-				}
-				else
-				{
-					// Planets, Gates, and Stars stay visible once EXPLORED
-					kvp.Value.VisualSprite.Visible = _exploredHexes.Contains(kvp.Key);
-				}
+				bool shouldBeVisible = kvp.Value.Type == "Enemy Fleet" ? _currentlyVisible.Contains(kvp.Key) : _exploredHexes.Contains(kvp.Key);
+				if (kvp.Value.VisualSprite.Visible != shouldBeVisible) kvp.Value.VisualSprite.Visible = shouldBeVisible;
 			}
 		}
-
-		// Hide/Show Asteroids
-		foreach (Node child in _map.EnvironmentLayer.GetChildren())
+		
+		foreach (Node child in _map.EnvironmentLayer.GetChildren()) 
 		{
-			if (child is Polygon2D rock)
+			if (child is Polygon2D rock) 
 			{
-				Vector2I hex = HexMath.PixelToHex(rock.GlobalPosition, _map.HexSize);
-				rock.Visible = _exploredHexes.Contains(hex);
+				bool vis = _exploredHexes.Contains(HexMath.PixelToHex(rock.GlobalPosition, _map.HexSize));
+				if (rock.Visible != vis) rock.Visible = vis;
 			}
 		}
-
-		// Hide/Show Radiation Clouds
-		foreach (Node child in _map.RadiationLayer.GetChildren())
+		
+		foreach (Node child in _map.RadiationLayer.GetChildren()) 
 		{
-			if (child is Polygon2D rad)
+			if (child is Polygon2D rad) 
 			{
-				// Use GlobalPosition or Position depending on how your layers are structured
-				Vector2I hex = HexMath.PixelToHex(rad.GlobalPosition, _map.HexSize);
-				rad.Visible = _exploredHexes.Contains(hex); 
+				bool vis = _exploredHexes.Contains(HexMath.PixelToHex(rad.Position, _map.HexSize));
+				if (rad.Visible != vis) rad.Visible = vis;
 			}
 		}
 	}
