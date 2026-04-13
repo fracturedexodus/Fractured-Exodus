@@ -1,0 +1,277 @@
+[gd_scene format=3 uid="uid://cixla3d31mpt0"]
+
+[ext_resource type="Script" uid="uid://bdo32du5ph0u2" path="res://BattleUI.cs" id="1_2uhrq"]
+
+[node name="BattleUI" type="CanvasLayer" unique_id=654862988 node_paths=PackedStringArray("TurnLabel", "EndTurnButton", "SaveGameButton", "RepairFleetButton", "InventoryButton", "MainMenuButton", "AttackButton", "JumpButton", "InitiativeUI", "InfoPanel", "InfoLabel", "CombatLogPanel", "CombatLogText", "GameOverPanel", "GameOverLabel", "GameOverReturnButton", "ShipMenuPanel", "ShipMenuTitle", "ShipImageDisplay", "HpBar", "HpLabel", "ShieldBar", "ShieldLabel", "ShipMenuDetails", "BtnWeapons", "BtnShields", "BtnRepair", "BtnScan", "BtnSalvage", "CodexButton", "CloseMenuButton")]
+script = ExtResource("1_2uhrq")
+TurnLabel = NodePath("UIRoot/TopContainer/TurnLabel")
+EndTurnButton = NodePath("UIRoot/TopRightButtons/EndTurnButton")
+SaveGameButton = NodePath("UIRoot/TopRightButtons/SaveGameButton")
+RepairFleetButton = NodePath("UIRoot/TopRightButtons/RepairFleetButton")
+InventoryButton = NodePath("UIRoot/TopRightButtons/InventoryButton")
+MainMenuButton = NodePath("UIRoot/TopRightButtons/MainMenuButton")
+AttackButton = NodePath("UIRoot/AttackButton")
+JumpButton = NodePath("UIRoot/JumpButton")
+InitiativeUI = NodePath("UIRoot/TopContainer/InitiativeUI")
+InfoPanel = NodePath("UIRoot/InfoPanel")
+InfoLabel = NodePath("UIRoot/InfoPanel/InfoLabel")
+CombatLogPanel = NodePath("UIRoot/CombatLogPanel")
+CombatLogText = NodePath("UIRoot/CombatLogPanel/CombatLogText")
+GameOverPanel = NodePath("UIRoot/GameOverPanel")
+GameOverLabel = NodePath("UIRoot/GameOverPanel/VBoxContainer/GameOverLabel")
+GameOverReturnButton = NodePath("UIRoot/GameOverPanel/VBoxContainer/GameOverReturnButton")
+ShipMenuPanel = NodePath("UIRoot/ShipMenuPanel")
+ShipMenuTitle = NodePath("UIRoot/ShipMenuPanel/TerminalLayout/ShipMenuTitle")
+ShipImageDisplay = NodePath("UIRoot/ShipMenuPanel/TerminalLayout/ShipImageDisplay")
+HpBar = NodePath("UIRoot/ShipMenuPanel/TerminalLayout/HpBar")
+HpLabel = NodePath("UIRoot/ShipMenuPanel/TerminalLayout/HpLabel")
+ShieldBar = NodePath("UIRoot/ShipMenuPanel/TerminalLayout/ShieldBar")
+ShieldLabel = NodePath("UIRoot/ShipMenuPanel/TerminalLayout/ShieldLabel")
+ShipMenuDetails = NodePath("UIRoot/ShipMenuPanel/TerminalLayout/ShipMenuDetails")
+BtnWeapons = NodePath("UIRoot/ShipMenuPanel/TerminalLayout/HBoxContainer/BtnWeapons")
+BtnShields = NodePath("UIRoot/ShipMenuPanel/TerminalLayout/HBoxContainer/BtnShields")
+BtnRepair = NodePath("UIRoot/ShipMenuPanel/TerminalLayout/HBoxContainer/BtnRepair")
+BtnScan = NodePath("UIRoot/ShipMenuPanel/TerminalLayout/HBoxContainer2/BtnScan")
+BtnSalvage = NodePath("UIRoot/ShipMenuPanel/TerminalLayout/HBoxContainer2/BtnSalvage")
+CodexButton = NodePath("UIRoot/ShipMenuPanel/TerminalLayout/CodexButton")
+CloseMenuButton = NodePath("UIRoot/ShipMenuPanel/TerminalLayout/CloseMenuButton")
+
+[node name="UIRoot" type="Control" parent="." unique_id=1079034755]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="GameOverPanel" type="ColorRect" parent="UIRoot" unique_id=1955822144]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.33333334)
+
+[node name="VBoxContainer" type="VBoxContainer" parent="UIRoot/GameOverPanel" unique_id=300896430]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -20.0
+offset_top = -20.0
+offset_right = 20.0
+offset_bottom = 20.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="GameOverLabel" type="Label" parent="UIRoot/GameOverPanel/VBoxContainer" unique_id=2119566853]
+layout_mode = 2
+text = "FLEET DESTROYED"
+
+[node name="GameOverReturnButton" type="Button" parent="UIRoot/GameOverPanel/VBoxContainer" unique_id=66200893]
+layout_mode = 2
+text = "RETURN TO MAIN MENU"
+
+[node name="TopContainer" type="VBoxContainer" parent="UIRoot" unique_id=331354847]
+layout_mode = 0
+offset_left = 20.0
+offset_top = 20.0
+offset_right = 60.0
+offset_bottom = 60.0
+
+[node name="TurnLabel" type="Label" parent="UIRoot/TopContainer" unique_id=629574386]
+layout_mode = 2
+text = "EXPLORATION MODE"
+
+[node name="InitiativeUI" type="HBoxContainer" parent="UIRoot/TopContainer" unique_id=1205915555]
+layout_mode = 2
+
+[node name="TopRightButtons" type="HBoxContainer" parent="UIRoot" unique_id=947632623]
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -40.0
+offset_bottom = 40.0
+grow_horizontal = 0
+theme_override_constants/separation = 10
+
+[node name="MainMenuButton" type="Button" parent="UIRoot/TopRightButtons" unique_id=1770934302]
+custom_minimum_size = Vector2(160, 50)
+layout_mode = 2
+text = "MAIN MENU"
+
+[node name="InventoryButton" type="Button" parent="UIRoot/TopRightButtons" unique_id=1955871659]
+custom_minimum_size = Vector2(160, 50)
+layout_mode = 2
+text = "INVENTORY"
+
+[node name="RepairFleetButton" type="Button" parent="UIRoot/TopRightButtons" unique_id=155878874]
+custom_minimum_size = Vector2(160, 50)
+layout_mode = 2
+text = "REPAIR FLEET"
+
+[node name="SaveGameButton" type="Button" parent="UIRoot/TopRightButtons" unique_id=2038459830]
+custom_minimum_size = Vector2(160, 50)
+layout_mode = 2
+text = "SAVE GAME"
+
+[node name="EndTurnButton" type="Button" parent="UIRoot/TopRightButtons" unique_id=1191285172]
+custom_minimum_size = Vector2(160, 50)
+layout_mode = 2
+text = "END TURN"
+
+[node name="CombatLogPanel" type="PanelContainer" parent="UIRoot" unique_id=266343479]
+custom_minimum_size = Vector2(350, 250)
+layout_mode = 1
+anchors_preset = 4
+anchor_top = 0.5
+anchor_bottom = 0.5
+offset_top = -125.0
+offset_right = 350.0
+offset_bottom = 125.0
+grow_vertical = 2
+
+[node name="CombatLogText" type="RichTextLabel" parent="UIRoot/CombatLogPanel" unique_id=830800881]
+custom_minimum_size = Vector2(320, 220)
+layout_mode = 2
+bbcode_enabled = true
+scroll_following = true
+
+[node name="InfoPanel" type="PanelContainer" parent="UIRoot" unique_id=483008472]
+layout_mode = 1
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_top = -40.0
+offset_right = 40.0
+grow_vertical = 0
+
+[node name="InfoLabel" type="Label" parent="UIRoot/InfoPanel" unique_id=1395127949]
+custom_minimum_size = Vector2(250, 0)
+layout_mode = 2
+autowrap_mode = 2
+
+[node name="JumpButton" type="Button" parent="UIRoot" unique_id=1509029359]
+custom_minimum_size = Vector2(250, 50)
+layout_mode = 1
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -4.0
+offset_top = -8.0
+offset_right = 4.0
+grow_horizontal = 2
+grow_vertical = 0
+text = "ENTER STARGATE"
+
+[node name="AttackButton" type="Button" parent="UIRoot" unique_id=742223437]
+custom_minimum_size = Vector2(160, 50)
+layout_mode = 1
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -77.0
+offset_top = -106.0
+offset_right = 83.0
+offset_bottom = -56.0
+grow_horizontal = 2
+grow_vertical = 0
+text = "ATTACK"
+
+[node name="ShipMenuPanel" type="PanelContainer" parent="UIRoot" unique_id=161516367]
+custom_minimum_size = Vector2(350, 450)
+layout_mode = 1
+anchors_preset = 6
+anchor_left = 1.0
+anchor_top = 0.5
+anchor_right = 1.0
+anchor_bottom = 0.5
+offset_left = -350.0
+offset_top = -225.0
+offset_bottom = 225.0
+grow_horizontal = 0
+grow_vertical = 2
+
+[node name="TerminalLayout" type="VBoxContainer" parent="UIRoot/ShipMenuPanel" unique_id=445040580]
+layout_mode = 2
+
+[node name="ShipMenuTitle" type="Label" parent="UIRoot/ShipMenuPanel/TerminalLayout" unique_id=1210705416]
+layout_mode = 2
+
+[node name="ShipImageDisplay" type="TextureRect" parent="UIRoot/ShipMenuPanel/TerminalLayout" unique_id=805920059]
+custom_minimum_size = Vector2(150, 150)
+layout_mode = 2
+expand_mode = 1
+stretch_mode = 5
+
+[node name="HpLabel" type="Label" parent="UIRoot/ShipMenuPanel/TerminalLayout" unique_id=1401270824]
+layout_mode = 2
+
+[node name="HpBar" type="ProgressBar" parent="UIRoot/ShipMenuPanel/TerminalLayout" unique_id=650104751]
+layout_mode = 2
+show_percentage = false
+
+[node name="ShieldLabel" type="Label" parent="UIRoot/ShipMenuPanel/TerminalLayout" unique_id=1605985161]
+layout_mode = 2
+
+[node name="ShieldBar" type="ProgressBar" parent="UIRoot/ShipMenuPanel/TerminalLayout" unique_id=1776880451]
+layout_mode = 2
+show_percentage = false
+
+[node name="ShipMenuDetails" type="Label" parent="UIRoot/ShipMenuPanel/TerminalLayout" unique_id=1127902994]
+layout_mode = 2
+autowrap_mode = 2
+
+[node name="HBoxContainer" type="HBoxContainer" parent="UIRoot/ShipMenuPanel/TerminalLayout" unique_id=667147191]
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+
+[node name="BtnWeapons" type="Button" parent="UIRoot/ShipMenuPanel/TerminalLayout/HBoxContainer" unique_id=467570554]
+layout_mode = 2
+text = "Weapons"
+
+[node name="BtnShields" type="Button" parent="UIRoot/ShipMenuPanel/TerminalLayout/HBoxContainer" unique_id=604960036]
+layout_mode = 2
+text = "Shields"
+
+[node name="BtnRepair" type="Button" parent="UIRoot/ShipMenuPanel/TerminalLayout/HBoxContainer" unique_id=1274823740]
+layout_mode = 2
+text = "Repair"
+
+[node name="HBoxContainer2" type="HBoxContainer" parent="UIRoot/ShipMenuPanel/TerminalLayout" unique_id=998503502]
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+
+[node name="BtnScan" type="Button" parent="UIRoot/ShipMenuPanel/TerminalLayout/HBoxContainer2" unique_id=575789743]
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+text = "Scan"
+
+[node name="BtnSalvage" type="Button" parent="UIRoot/ShipMenuPanel/TerminalLayout/HBoxContainer2" unique_id=1567912959]
+layout_mode = 2
+text = "Salvage"
+
+[node name="CodexButton" type="Button" parent="UIRoot/ShipMenuPanel/TerminalLayout" unique_id=1320386122]
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+text = "Codex"
+
+[node name="CloseMenuButton" type="Button" parent="UIRoot/ShipMenuPanel/TerminalLayout" unique_id=758946038]
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+text = "Close"
