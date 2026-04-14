@@ -50,7 +50,6 @@ public class FogOfWarManager
 		{
 			if (kvp.Value.Type == "Player Fleet" && GodotObject.IsInstanceValid(kvp.Value.VisualSprite)) 
 			{
-				// --- FIX 2: Use the exact visual pixel position so vision travels WITH the ship! ---
 				Vector2I visualHex = HexMath.PixelToHex(kvp.Value.VisualSprite.Position, _map.HexSize);
 				playerPositions.Add(visualHex);
 			}
@@ -72,7 +71,18 @@ public class FogOfWarManager
 			}
 		}
 
-		// --- OPTIMIZATION: Only update Godot properties if they actually changed to save CPU time ---
+		// --- NEW: Inject Radar Scan Vision ---
+		SystemData sys = null;
+		if (_map._globalData != null && !string.IsNullOrEmpty(_map._globalData.SavedSystem) && _map._globalData.ExploredSystems.ContainsKey(_map._globalData.SavedSystem))
+		{
+			sys = _map._globalData.ExploredSystems[_map._globalData.SavedSystem];
+			foreach (Vector2I radarHex in sys.RadarRevealedHexes)
+			{
+				_currentlyVisible.Add(radarHex); // Acts like a camera!
+				_exploredHexes.Add(radarHex);
+			}
+		}
+
 		Color exploredColor = new Color(0.05f, 0.05f, 0.1f, 0.25f);
 		Color unexploredColor = new Color(0.05f, 0.05f, 0.1f, 0.98f);
 

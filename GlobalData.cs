@@ -35,6 +35,9 @@ public class SystemData
 	public List<Vector2I> AsteroidHexes { get; set; } = new List<Vector2I>();
 	public List<Vector2I> RadiationHexes { get; set; } = new List<Vector2I>();
 	public List<Vector2I> ExploredHexes { get; set; } = new List<Vector2I>();
+	
+	// --- NEW: Persistent Deep Scan State ---
+	public List<Vector2I> RadarRevealedHexes { get; set; } = new List<Vector2I>();
 }
 
 public class StarMapData
@@ -47,7 +50,6 @@ public class StarMapData
 	public string Region { get; set; }
 }
 
-// --- NEW: Quest Data Container ---
 public class QuestData
 {
 	public string QuestID { get; set; }
@@ -82,13 +84,12 @@ public partial class GlobalData : Node
 
 	public Godot.Collections.Dictionary<string, Variant> FleetResources { get; set; } = new Godot.Collections.Dictionary<string, Variant>
 	{
-		{ "Raw Materials", 0 },
-		{ "Energy Cores", 0 },
-		{ "Ancient Tech", 0 }
+		{ "Raw Materials", 350.0f },
+		{ "Energy Cores", 5.0f },
+		{ "Ancient Tech", 0.0f }
 	};
 	public Godot.Collections.Array FleetEquipment { get; set; } = new Godot.Collections.Array();
 
-	// --- NEW: Quest Memory ---
 	public List<QuestData> ActiveQuests { get; set; } = new List<QuestData>();
 	public Godot.Collections.Array CompletedQuestIDs { get; set; } = new Godot.Collections.Array();
 
@@ -131,6 +132,7 @@ public partial class GlobalData : Node
 			sysData["AsteroidHexes"] = ConvertVectorListToVariantArray(sysKvp.Value.AsteroidHexes);
 			sysData["RadiationHexes"] = ConvertVectorListToVariantArray(sysKvp.Value.RadiationHexes);
 			sysData["ExploredHexes"] = ConvertVectorListToVariantArray(sysKvp.Value.ExploredHexes);
+			sysData["RadarRevealedHexes"] = ConvertVectorListToVariantArray(sysKvp.Value.RadarRevealedHexes); // Save Radar
 			
 			var pArray = new Godot.Collections.Array<Variant>();
 			foreach (var p in sysKvp.Value.Planets)
@@ -201,6 +203,7 @@ public partial class GlobalData : Node
 				newSys.AsteroidHexes = ConvertVariantArrayToVectorList(sysDict.ContainsKey("AsteroidHexes") ? (Godot.Collections.Array)sysDict["AsteroidHexes"] : new Godot.Collections.Array());
 				newSys.RadiationHexes = ConvertVariantArrayToVectorList(sysDict.ContainsKey("RadiationHexes") ? (Godot.Collections.Array)sysDict["RadiationHexes"] : new Godot.Collections.Array());
 				newSys.ExploredHexes = ConvertVariantArrayToVectorList(sysDict.ContainsKey("ExploredHexes") ? (Godot.Collections.Array)sysDict["ExploredHexes"] : new Godot.Collections.Array());
+				newSys.RadarRevealedHexes = ConvertVariantArrayToVectorList(sysDict.ContainsKey("RadarRevealedHexes") ? (Godot.Collections.Array)sysDict["RadarRevealedHexes"] : new Godot.Collections.Array()); // Load Radar
 				
 				var pArray = (Godot.Collections.Array)sysDict["Planets"];
 				foreach (var pVar in pArray)
@@ -250,7 +253,8 @@ public partial class GlobalData : Node
 		ExploredSystems.Clear(); CurrentSectorStars.Clear();
 		CurrentTurn = 1; InCombat = false; CurrentQueueIndex = 0; JustJumped = false; 
 		SavedFleetState.Clear(); FleetEquipment.Clear();
-		FleetResources = new Godot.Collections.Dictionary<string, Variant> { { "Raw Materials", 0 }, { "Energy Cores", 0 }, { "Ancient Tech", 0 } };
+		
+		FleetResources = new Godot.Collections.Dictionary<string, Variant> { { "Raw Materials", 350.0f }, { "Energy Cores", 5.0f }, { "Ancient Tech", 0.0f } };
 
 		if (FileAccess.FileExists(_savePath)) DirAccess.RemoveAbsolute(_savePath);
 		GD.Print("GlobalData has been completely wiped for a new campaign.");

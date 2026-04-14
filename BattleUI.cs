@@ -5,6 +5,7 @@ public partial class BattleUI : CanvasLayer
 {
 	[ExportGroup("Main HUD")]
 	[Export] public Label TurnLabel;
+	[Export] public Label InventoryDisplay;
 	[Export] public Button EndTurnButton;
 	[Export] public Button SaveGameButton;
 	[Export] public Button RepairFleetButton;
@@ -41,6 +42,7 @@ public partial class BattleUI : CanvasLayer
 	[Export] public Button BtnRepair;
 	[Export] public Button BtnScan;
 	[Export] public Button BtnSalvage;
+	[Export] public Button BtnLongRange;
 	[Export] public Button CodexButton;
 	[Export] public Button CloseMenuButton;
 }
