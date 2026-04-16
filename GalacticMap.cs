@@ -81,9 +81,19 @@ public partial class GalacticMap : Control
 		else
 			GenerateAndSaveSector(40);
 
+		// --- FIX: Safely find and hide the buttons if the game is already running! ---
 		if (string.IsNullOrEmpty(_globalData.SavedSystem))
 		{
 			BuildRegionSelectionUI();
+		}
+		else
+		{
+			// Using FindChild ensures it finds the buttons even if they are inside UI containers
+			Button randomizeBtn = FindChild("RandomizeButton", true, false) as Button;
+			Button menuBtn = FindChild("MenuButton", true, false) as Button;
+			
+			if (randomizeBtn != null) randomizeBtn.Visible = false;
+			if (menuBtn != null) menuBtn.Visible = false;
 		}
 	}
 
@@ -131,28 +141,33 @@ public partial class GalacticMap : Control
 		style.BgColor = new Color(0.05f, 0.05f, 0.1f, 0.85f);
 		style.BorderWidthTop = 2; style.BorderWidthBottom = 2; style.BorderWidthLeft = 2; style.BorderWidthRight = 2;
 		style.BorderColor = new Color(0f, 1f, 1f, 0.5f);
-		style.ContentMarginLeft = 20; style.ContentMarginRight = 20; style.ContentMarginTop = 20; style.ContentMarginBottom = 20;
+		
+		style.ContentMarginLeft = 15; style.ContentMarginRight = 15; style.ContentMarginTop = 15; style.ContentMarginBottom = 15;
 		_regionSelectionMenu.AddThemeStyleboxOverride("panel", style);
 
 		_regionSelectionMenu.SetAnchorsPreset(LayoutPreset.CenterLeft);
+		_regionSelectionMenu.GrowVertical = GrowDirection.Both; 
 		_regionSelectionMenu.Position = new Vector2(40, 0); 
 		AddChild(_regionSelectionMenu);
 
 		VBoxContainer menuContainer = new VBoxContainer();
-		menuContainer.AddThemeConstantOverride("separation", 15);
+		menuContainer.AddThemeConstantOverride("separation", 11);
 		_regionSelectionMenu.AddChild(menuContainer);
 
 		Label titleLabel = new Label();
 		titleLabel.Text = "=== CHOOSE STARTING REGION ===";
 		titleLabel.HorizontalAlignment = HorizontalAlignment.Center;
 		titleLabel.AddThemeColorOverride("font_color", new Color(0f, 1f, 1f)); 
+		titleLabel.AddThemeFontSizeOverride("font_size", 14); 
 		menuContainer.AddChild(titleLabel);
 
 		foreach (string regionName in regionColors.Keys)
 		{
 			Button btn = new Button();
 			btn.Text = $"START IN: {regionName.ToUpper()}";
-			btn.CustomMinimumSize = new Vector2(300, 50);
+			
+			btn.CustomMinimumSize = new Vector2(225, 38);
+			btn.AddThemeFontSizeOverride("font_size", 13); 
 			
 			btn.AddThemeColorOverride("font_color", regionColors[regionName]); 
 			
@@ -243,14 +258,8 @@ public partial class GalacticMap : Control
 				newPlanet.Name = $"{newStarData.SystemName} Prime-{p + 1}";
 				newPlanet.TypeIndex = rng.RandiRange(0, 5); 
 				
-				// --- FIX 1: Shrunk the maximum planet size significantly! ---
-				// Planets now generate between 0.15 and 0.40 scale, guaranteeing they 
-				// look diverse but are always dwarfed by the central star.
 				newPlanet.Scale = rng.RandfRange(0.15f, 0.40f);
-				
-				// Spread the planets out slightly more to account for random orbital overlap
 				newPlanet.Distance = rng.RandfRange(200f, 300f) + (p * rng.RandfRange(120f, 200f)); 
-				
 				newPlanet.Speed = rng.RandfRange(0.1f, 0.4f) / (p + 1f); 
 				newPlanet.StartingAngle = rng.RandfRange(0f, Mathf.Pi * 2f);
 
@@ -365,6 +374,7 @@ public partial class GalacticMap : Control
 		
 		if (_globalData.JustJumped)
 		{
+			// --- FIX: Stargate jumps warp directly back to the exploration/combat map! ---
 			var transitioner = GetNodeOrNull<SceneTransition>("/root/SceneTransition");
 			if (transitioner != null) 
 			{

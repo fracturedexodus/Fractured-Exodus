@@ -48,7 +48,10 @@ public partial class BattleMap : Node2D
 	private Polygon2D _hoverHighlight;
 	private Vector2I _currentHoveredHex;
 	
-	// --- NEW: Radar variables ---
+	// --- Hover Tooltip UI ---
+	private Label _hoverTooltip;
+	
+	// --- Radar variables ---
 	private Polygon2D _radarHighlight; 
 	public bool IsTargetingLongRange = false;
 
@@ -97,17 +100,33 @@ public partial class BattleMap : Node2D
 		_hoverHighlight.Visible = false; 
 		AddChild(_hoverHighlight);
 
+		// --- Setup the dynamic hover tooltip ---
+		_hoverTooltip = new Label();
+		_hoverTooltip.ZIndex = 200;
+		_hoverTooltip.Visible = false;
+		
+		StyleBoxFlat tooltipBox = new StyleBoxFlat();
+		tooltipBox.BgColor = new Color(0.05f, 0.05f, 0.1f, 0.9f);
+		tooltipBox.BorderWidthBottom = 1; tooltipBox.BorderWidthTop = 1; tooltipBox.BorderWidthLeft = 1; tooltipBox.BorderWidthRight = 1;
+		tooltipBox.BorderColor = new Color(1f, 0f, 0f, 0.6f);
+		tooltipBox.ContentMarginLeft = 10; tooltipBox.ContentMarginRight = 10; tooltipBox.ContentMarginTop = 10; tooltipBox.ContentMarginBottom = 10;
+		
+		_hoverTooltip.AddThemeStyleboxOverride("normal", tooltipBox);
+		_hoverTooltip.AddThemeColorOverride("font_color", new Color(1f, 1f, 1f));
+		_hoverTooltip.AddThemeFontSizeOverride("font_size", 14);
+		_hoverHighlight.AddChild(_hoverTooltip); 
+
 		// --- Massive Radar Circle Setup ---
 		_radarHighlight = new Polygon2D();
 		int circlePoints = 32;
 		Vector2[] radarPoints = new Vector2[circlePoints];
-		float radiusPixels = 10f * HexSize * Mathf.Sqrt(3); // Radius of 10 hexes
+		float radiusPixels = 10f * HexSize * Mathf.Sqrt(3); 
 		for(int i = 0; i < circlePoints; i++) {
 			float angle = (Mathf.Pi * 2 / circlePoints) * i;
 			radarPoints[i] = new Vector2(Mathf.Cos(angle) * radiusPixels, Mathf.Sin(angle) * radiusPixels);
 		}
 		_radarHighlight.Polygon = radarPoints;
-		_radarHighlight.Color = new Color(0f, 1f, 0.3f, 0.2f); // Semi-transparent bright green
+		_radarHighlight.Color = new Color(0f, 1f, 0.3f, 0.2f); 
 		_radarHighlight.Visible = false;
 		AddChild(_radarHighlight);
 
@@ -126,6 +145,38 @@ public partial class BattleMap : Node2D
 		}
 
 		MapSpawner.PopulateMapFromMemory(_globalData, _maxMapRadius, HexSize, HexGrid, HexContents, EntityLayer, EnvironmentLayer, RadiationLayer, AsteroidHexes, RadiationHexes);
+		
+		// --- UPDATED: Faster, finer, denser Vortex Particles! ---
+		foreach (var kvp in HexContents)
+		{
+			if (kvp.Value.Type == "StarGate" && GodotObject.IsInstanceValid(kvp.Value.VisualSprite))
+			{
+				CpuParticles2D vortex = new CpuParticles2D();
+				vortex.Name = "VortexParticles";
+				vortex.Amount = 250; // Vastly increased count for density
+				vortex.Lifetime = 1.5f;
+				vortex.EmissionShape = CpuParticles2D.EmissionShapeEnum.Sphere;
+				vortex.EmissionSphereRadius = 35f; 
+				vortex.Gravity = Vector2.Zero;
+				vortex.Emitting = true; 
+				
+				vortex.RadialAccelMin = -30f; 
+				vortex.RadialAccelMax = -50f; 
+				
+				// Made it spin much faster
+				vortex.TangentialAccelMin = 100f; 
+				vortex.TangentialAccelMax = 180f; 
+				
+				// Made particles significantly smaller to look like fine dust/energy
+				vortex.ScaleAmountMin = 1.5f; 
+				vortex.ScaleAmountMax = 3.0f; 
+				
+				vortex.Color = new Color(0.2f, 0.8f, 1.0f, 0.8f); 
+				vortex.ZIndex = 1; 
+				
+				kvp.Value.VisualSprite.AddChild(vortex);
+			}
+		}
 		
 		Fog.UpdateVisibility();
 		CenterCameraOnFleet(); 
@@ -229,7 +280,6 @@ public partial class BattleMap : Node2D
 
 	public override void _Input(InputEvent @event)
 	{
-		// Intercept clicks if we are using the deep scanner
 		if (IsTargetingLongRange)
 		{
 			if (@event is InputEventMouseButton targetEvent && targetEvent.Pressed)
@@ -240,11 +290,11 @@ public partial class BattleMap : Node2D
 				}
 				else if (targetEvent.ButtonIndex == MouseButton.Right)
 				{
-					IsTargetingLongRange = false; // Cancel scan
+					IsTargetingLongRange = false; 
 					LogCombatMessage("[color=yellow]Long Range Scan Cancelled.[/color]");
 				}
 			}
-			return; // Consume input so ships don't accidentally move!
+			return; 
 		}
 
 		bool isMoveCommand = false;
@@ -341,7 +391,6 @@ public partial class BattleMap : Node2D
 
 		SystemData sys = _globalData.ExploredSystems[_globalData.SavedSystem];
 		
-		// Generate hexes within a radius of 10
 		for (int q = -10; q <= 10; q++)
 		{
 			int r1 = Mathf.Max(-10, -q - 10);
@@ -353,7 +402,7 @@ public partial class BattleMap : Node2D
 			}
 		}
 
-		Fog.UpdateVisibility(); // Lift the fog immediately!
+		Fog.UpdateVisibility(); 
 		
 		UI.CombatLogPanel.Visible = true;
 		LogCombatMessage("\n[color=#00ffff]*** DEEP SPACE TELEMETRY UPDATED ***[/color]");
@@ -474,10 +523,38 @@ public partial class BattleMap : Node2D
 			{
 				_hoverHighlight.Visible = true;
 				_hoverHighlight.Position = HexMath.HexToPixel(_currentHoveredHex, HexSize);
+
+				if (HexContents.ContainsKey(_currentHoveredHex))
+				{
+					MapEntity hoveredEntity = HexContents[_currentHoveredHex];
+					bool isEnemy = hoveredEntity.Type == "Enemy Fleet";
+					bool isPlayer = hoveredEntity.Type == "Player Fleet";
+
+					if ((isEnemy || isPlayer) && GodotObject.IsInstanceValid(hoveredEntity.VisualSprite) && hoveredEntity.VisualSprite.Visible)
+					{
+						if (isEnemy) _hoverHighlight.Color = new Color(1f, 0f, 0f, 0.4f); 
+						else _hoverHighlight.Color = new Color(0f, 1f, 0f, 0.4f); 
+						
+						_hoverTooltip.Text = $"=== {hoveredEntity.Name.ToUpper()} ===\nHP: {hoveredEntity.CurrentHP} / {hoveredEntity.MaxHP}\nShields: {hoveredEntity.CurrentShields} / {hoveredEntity.MaxShields}\nAttack: {hoveredEntity.AttackDamage} DMG\nRange: {hoveredEntity.AttackRange} Hexes";
+						_hoverTooltip.Position = new Vector2(90, -60); 
+						_hoverTooltip.Visible = true;
+					}
+					else
+					{
+						_hoverHighlight.Color = new Color(0f, 1f, 1f, 0.4f); 
+						_hoverTooltip.Visible = false;
+					}
+				}
+				else
+				{
+					_hoverHighlight.Color = new Color(0f, 1f, 1f, 0.4f); 
+					_hoverTooltip.Visible = false;
+				}
 			}
 			else
 			{
 				_hoverHighlight.Visible = false;
+				_hoverTooltip.Visible = false; 
 			}
 		}
 
@@ -503,7 +580,7 @@ public partial class BattleMap : Node2D
 				rock.Rotation += spin * (float)delta;
 			}
 		}
-		
+
 		Hazards.ProcessHazards(delta);
 		UpdateJumpButton();
 		UpdateAttackButton();
@@ -620,7 +697,6 @@ public partial class BattleMap : Node2D
 			CurrentlyViewedShip = ship;
 			UI.ShipMenuTitle.Text = $"== {ship.Name.ToUpper()} ==";
 
-			// --- FIX: Safely check if the image path exists before loading! ---
 			string imagePath = Database.GetShipTexturePath(ship.Name);
 			if (!string.IsNullOrEmpty(imagePath))
 			{
@@ -1020,6 +1096,23 @@ public partial class BattleMap : Node2D
 		Tween warpTween = CreateTween();
 		warpTween.SetParallel(true);
 
+		if (HexContents.ContainsKey(gateHex) && GodotObject.IsInstanceValid(HexContents[gateHex].VisualSprite))
+		{
+			Sprite2D gateSprite = HexContents[gateHex].VisualSprite;
+			
+			CpuParticles2D vortex = gateSprite.GetNodeOrNull<CpuParticles2D>("VortexParticles");
+			if (vortex != null)
+			{
+				vortex.Amount = 500; // Overdrive the particles during jump
+				vortex.ScaleAmountMin = 1.0f; // Shrink them to dust
+				vortex.ScaleAmountMax = 2.5f;
+				vortex.RadialAccelMin = -120f; // Pull in much harder
+				vortex.TangentialAccelMin = 250f; // Violent spin
+				vortex.TangentialAccelMax = 400f; 
+				vortex.Color = new Color(1f, 1f, 1f, 1f); // Flash bright white
+			}
+		}
+
 		foreach(var kvp in HexContents)
 		{
 			if (kvp.Value.Type == "Player Fleet")
@@ -1027,10 +1120,10 @@ public partial class BattleMap : Node2D
 				Sprite2D shipSprite = kvp.Value.VisualSprite;
 				if (GodotObject.IsInstanceValid(shipSprite))
 				{
-					warpTween.TweenProperty(shipSprite, "position", gatePixelPos, 1.5f).SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.In);
-					warpTween.TweenProperty(shipSprite, "scale", new Vector2(0.01f, 0.01f), 1.5f).SetTrans(Tween.TransitionType.Cubic);
-					warpTween.TweenProperty(shipSprite, "rotation", shipSprite.Rotation + Mathf.Pi * 4, 1.5f);
-					warpTween.TweenProperty(shipSprite, "modulate", new Color(1, 2, 3, 0), 1.5f); 
+					warpTween.TweenProperty(shipSprite, "position", gatePixelPos, 1.5f).SetTrans(Tween.TransitionType.Expo).SetEase(Tween.EaseType.In);
+					warpTween.TweenProperty(shipSprite, "scale", new Vector2(0.001f, 0.001f), 1.5f).SetTrans(Tween.TransitionType.Expo).SetEase(Tween.EaseType.In);
+					warpTween.TweenProperty(shipSprite, "rotation", shipSprite.Rotation + Mathf.Pi * 8, 1.5f).SetTrans(Tween.TransitionType.Expo).SetEase(Tween.EaseType.In);
+					warpTween.TweenProperty(shipSprite, "modulate", new Color(2f, 2f, 3f, 0f), 1.5f).SetTrans(Tween.TransitionType.Expo).SetEase(Tween.EaseType.In); 
 				}
 			}
 		}
