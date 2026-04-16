@@ -2,7 +2,7 @@
 
 [ext_resource type="Script" uid="uid://1ivinqx7y0ky" path="res://SystemView.cs" id="1_aihgg"]
 [ext_resource type="Texture2D" uid="uid://c62s7c7jt40ky" path="res://YellowSUN.png" id="2_b7847"]
-[ext_resource type="FontFile" uid="uid://cuic2grb7lr6j" path="res://Orbitron-VariableFont_wght.ttf" id="3_bngyh"]
+[ext_resource type="FontFile" uid="uid://cs2qy7wansjjb" path="res://Orbitron-VariableFont_wght.ttf" id="3_bngyh"]
 [ext_resource type="AudioStream" uid="uid://bshhtl28bl4ys" path="res://Nebula_Bloom.mp3" id="3_ugi38"]
 
 [node name="SystemView" type="Node2D" unique_id=1165564058]

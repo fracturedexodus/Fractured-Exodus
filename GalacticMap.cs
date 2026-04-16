@@ -1,6 +1,7 @@
 using Godot;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 public partial class GalacticMap : Control
 {
@@ -21,14 +22,17 @@ public partial class GalacticMap : Control
 	private Line2D _warpLine;
 	private Polygon2D _originMarker;
 
+	// --- STARTING MENU PANEL ---
+	private PanelContainer _regionSelectionMenu;
+
 	// --- LORE DATA ---
 	private List<string> prefixes = new List<string> { 
-		"Aether", "Void", "Core", "Verdant", "Obsidian", "Ember", "Luminous", 
-		"Echo", "Spindle", "Nadir", "Helix", "Throne", "Nexus", "Zenith" 
+		"Nova", "Astra", "Helios", "Kaelen", "Triton", "Orion", "Vanguard", 
+		"Polaris", "Sirius", "Altair", "Draxis", "Vesper", "Sol", "Rigel" 
 	};
 	private List<string> suffixes = new List<string> { 
-		"Reach", "Hold", "Gate", "Station", "Spire", "Belt", "Wastes", 
-		"Shroud", "Wound", "Spiral", "Silence", "Verge", "Relic", "Vault" 
+		"Cluster", "Sector", "Expanse", "Nebula", "Drift", "Abyss", "Zone", 
+		"Quadrant", "Matrix", "System", "Cloud", "Frontier", "Tide", "Halo" 
 	};
 
 	// --- COLOR DEFINITIONS FOR YOUR REGIONS ---
@@ -76,6 +80,11 @@ public partial class GalacticMap : Control
 			LoadSectorFromMemory();
 		else
 			GenerateAndSaveSector(40);
+
+		if (string.IsNullOrEmpty(_globalData.SavedSystem))
+		{
+			BuildRegionSelectionUI();
+		}
 	}
 
 	private Vector2[] CreateCirclePolygon(float radius)
@@ -110,7 +119,86 @@ public partial class GalacticMap : Control
 	}
 
 	// ==========================================
-	// DATA GENERATION (THE UNIVERSE BUILDER)
+	// START MENU UI BUILDER
+	// ==========================================
+
+	private void BuildRegionSelectionUI()
+	{
+		_regionSelectionMenu = new PanelContainer();
+		_regionSelectionMenu.ZIndex = 200; 
+		
+		StyleBoxFlat style = new StyleBoxFlat();
+		style.BgColor = new Color(0.05f, 0.05f, 0.1f, 0.85f);
+		style.BorderWidthTop = 2; style.BorderWidthBottom = 2; style.BorderWidthLeft = 2; style.BorderWidthRight = 2;
+		style.BorderColor = new Color(0f, 1f, 1f, 0.5f);
+		style.ContentMarginLeft = 20; style.ContentMarginRight = 20; style.ContentMarginTop = 20; style.ContentMarginBottom = 20;
+		_regionSelectionMenu.AddThemeStyleboxOverride("panel", style);
+
+		_regionSelectionMenu.SetAnchorsPreset(LayoutPreset.CenterLeft);
+		_regionSelectionMenu.Position = new Vector2(40, 0); 
+		AddChild(_regionSelectionMenu);
+
+		VBoxContainer menuContainer = new VBoxContainer();
+		menuContainer.AddThemeConstantOverride("separation", 15);
+		_regionSelectionMenu.AddChild(menuContainer);
+
+		Label titleLabel = new Label();
+		titleLabel.Text = "=== CHOOSE STARTING REGION ===";
+		titleLabel.HorizontalAlignment = HorizontalAlignment.Center;
+		titleLabel.AddThemeColorOverride("font_color", new Color(0f, 1f, 1f)); 
+		menuContainer.AddChild(titleLabel);
+
+		foreach (string regionName in regionColors.Keys)
+		{
+			Button btn = new Button();
+			btn.Text = $"START IN: {regionName.ToUpper()}";
+			btn.CustomMinimumSize = new Vector2(300, 50);
+			
+			btn.AddThemeColorOverride("font_color", regionColors[regionName]); 
+			
+			string targetRegion = regionName; 
+			btn.Pressed += () => StartGameInRegion(targetRegion);
+			
+			menuContainer.AddChild(btn);
+		}
+	}
+
+	private void StartGameInRegion(string targetRegion)
+	{
+		if (_globalData == null || _globalData.CurrentSectorStars.Count == 0) return;
+
+		List<StarMapData> starsInRegion = _globalData.CurrentSectorStars
+			.Where(star => star.Region == targetRegion)
+			.ToList();
+
+		if (starsInRegion.Count == 0)
+		{
+			GD.PrintErr($"No stars generated in {targetRegion}! Falling back to a completely random system.");
+			starsInRegion = _globalData.CurrentSectorStars;
+		}
+
+		RandomNumberGenerator rng = new RandomNumberGenerator();
+		rng.Randomize();
+		StarMapData startingStar = starsInRegion[rng.RandiRange(0, starsInRegion.Count - 1)];
+
+		_globalData.SavedSystem = startingStar.SystemName;
+		_globalData.JustJumped = false; 
+		
+		GD.Print($"Starting new campaign in {targetRegion}. Randomly picked {startingStar.SystemName}.");
+
+		var transitioner = GetNodeOrNull<SceneTransition>("/root/SceneTransition");
+		if (transitioner != null) 
+		{
+			transitioner.ChangeScene("res://system_view.tscn");
+		} 
+		else 
+		{
+			GetTree().ChangeSceneToFile("res://system_view.tscn");
+		}
+	}
+
+	// ==========================================
+	// DATA GENERATION
 	// ==========================================
 
 	private void GenerateAndSaveSector(int amount)
@@ -145,20 +233,27 @@ public partial class GalacticMap : Control
 			_globalData.CurrentSectorStars.Add(newStarData);
 			DrawStarNode(newStarData);
 
-			// --- NEW: PRE-GENERATE THE ENTIRE SYSTEM IN MEMORY ---
 			SystemData newSystem = new SystemData();
 			newSystem.SystemName = newStarData.SystemName;
 			newSystem.HasBeenVisited = false;
 
-			// Generate the Planets for this system upfront
 			for (int p = 0; p < newStarData.PlanetCount; p++)
 			{
 				PlanetData newPlanet = new PlanetData();
-				
-				// Naming convention (e.g., "Aether-Reach 45 Prime-1")
 				newPlanet.Name = $"{newStarData.SystemName} Prime-{p + 1}";
 				newPlanet.TypeIndex = rng.RandiRange(0, 5); 
-				newPlanet.Scale = rng.RandfRange(0.4f, 1.2f);
+				
+				// --- FIX 1: Shrunk the maximum planet size significantly! ---
+				// Planets now generate between 0.15 and 0.40 scale, guaranteeing they 
+				// look diverse but are always dwarfed by the central star.
+				newPlanet.Scale = rng.RandfRange(0.15f, 0.40f);
+				
+				// Spread the planets out slightly more to account for random orbital overlap
+				newPlanet.Distance = rng.RandfRange(200f, 300f) + (p * rng.RandfRange(120f, 200f)); 
+				
+				newPlanet.Speed = rng.RandfRange(0.1f, 0.4f) / (p + 1f); 
+				newPlanet.StartingAngle = rng.RandfRange(0f, Mathf.Pi * 2f);
+
 				newPlanet.Habitability = habitabilityTypes[rng.RandiRange(0, habitabilityTypes.Length - 1)];
 				newPlanet.HasBeenScanned = false;
 				newPlanet.HasBeenSalvaged = false;
@@ -166,11 +261,9 @@ public partial class GalacticMap : Control
 				newSystem.Planets.Add(newPlanet);
 			}
 
-			// Add the newly built system to the universal memory bank
 			_globalData.ExploredSystems[newSystem.SystemName] = newSystem;
 		}
 
-		// --- NEW: Save the generated universe to the hard drive immediately ---
 		if (_globalData != null)
 		{
 			_globalData.SaveGame();
@@ -310,8 +403,15 @@ public partial class GalacticMap : Control
 			}
 		}
 
+		if (IsInstanceValid(_regionSelectionMenu))
+		{
+			_regionSelectionMenu.QueueFree();
+		}
+
 		_globalData.CurrentSectorStars.Clear();
 		GenerateAndSaveSector(40);
+		
+		BuildRegionSelectionUI();
 	}
 
 	public void _on_close_button_pressed()

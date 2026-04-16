@@ -35,8 +35,6 @@ public class SystemData
 	public List<Vector2I> AsteroidHexes { get; set; } = new List<Vector2I>();
 	public List<Vector2I> RadiationHexes { get; set; } = new List<Vector2I>();
 	public List<Vector2I> ExploredHexes { get; set; } = new List<Vector2I>();
-	
-	// --- NEW: Persistent Deep Scan State ---
 	public List<Vector2I> RadarRevealedHexes { get; set; } = new List<Vector2I>();
 }
 
@@ -132,7 +130,7 @@ public partial class GlobalData : Node
 			sysData["AsteroidHexes"] = ConvertVectorListToVariantArray(sysKvp.Value.AsteroidHexes);
 			sysData["RadiationHexes"] = ConvertVectorListToVariantArray(sysKvp.Value.RadiationHexes);
 			sysData["ExploredHexes"] = ConvertVectorListToVariantArray(sysKvp.Value.ExploredHexes);
-			sysData["RadarRevealedHexes"] = ConvertVectorListToVariantArray(sysKvp.Value.RadarRevealedHexes); // Save Radar
+			sysData["RadarRevealedHexes"] = ConvertVectorListToVariantArray(sysKvp.Value.RadarRevealedHexes);
 			
 			var pArray = new Godot.Collections.Array<Variant>();
 			foreach (var p in sysKvp.Value.Planets)
@@ -142,6 +140,12 @@ public partial class GlobalData : Node
 				pDict["TypeIndex"] = p.TypeIndex;
 				pDict["Scale"] = p.Scale;
 				pDict["Habitability"] = p.Habitability;
+				
+				// --- FIX: Actually save the orbital parameters! ---
+				pDict["Distance"] = p.Distance;
+				pDict["Speed"] = p.Speed;
+				pDict["StartingAngle"] = p.StartingAngle;
+				
 				pDict["HasBeenScanned"] = p.HasBeenScanned;
 				pDict["HasBeenSalvaged"] = p.HasBeenSalvaged;
 				pArray.Add(pDict);
@@ -203,7 +207,7 @@ public partial class GlobalData : Node
 				newSys.AsteroidHexes = ConvertVariantArrayToVectorList(sysDict.ContainsKey("AsteroidHexes") ? (Godot.Collections.Array)sysDict["AsteroidHexes"] : new Godot.Collections.Array());
 				newSys.RadiationHexes = ConvertVariantArrayToVectorList(sysDict.ContainsKey("RadiationHexes") ? (Godot.Collections.Array)sysDict["RadiationHexes"] : new Godot.Collections.Array());
 				newSys.ExploredHexes = ConvertVariantArrayToVectorList(sysDict.ContainsKey("ExploredHexes") ? (Godot.Collections.Array)sysDict["ExploredHexes"] : new Godot.Collections.Array());
-				newSys.RadarRevealedHexes = ConvertVariantArrayToVectorList(sysDict.ContainsKey("RadarRevealedHexes") ? (Godot.Collections.Array)sysDict["RadarRevealedHexes"] : new Godot.Collections.Array()); // Load Radar
+				newSys.RadarRevealedHexes = ConvertVariantArrayToVectorList(sysDict.ContainsKey("RadarRevealedHexes") ? (Godot.Collections.Array)sysDict["RadarRevealedHexes"] : new Godot.Collections.Array());
 				
 				var pArray = (Godot.Collections.Array)sysDict["Planets"];
 				foreach (var pVar in pArray)
@@ -214,6 +218,12 @@ public partial class GlobalData : Node
 						TypeIndex = (int)pDict["TypeIndex"],
 						Scale = (float)pDict["Scale"],
 						Habitability = (string)pDict["Habitability"],
+						
+						// --- FIX: Safely load the orbital parameters! ---
+						Distance = pDict.ContainsKey("Distance") ? (float)pDict["Distance"] : 0f,
+						Speed = pDict.ContainsKey("Speed") ? (float)pDict["Speed"] : 0f,
+						StartingAngle = pDict.ContainsKey("StartingAngle") ? (float)pDict["StartingAngle"] : 0f,
+						
 						HasBeenScanned = pDict.ContainsKey("HasBeenScanned") ? (bool)pDict["HasBeenScanned"] : false,
 						HasBeenSalvaged = pDict.ContainsKey("HasBeenSalvaged") ? (bool)pDict["HasBeenSalvaged"] : false
 					});
