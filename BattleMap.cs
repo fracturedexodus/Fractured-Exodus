@@ -97,7 +97,7 @@ public partial class BattleMap : Node2D
 		_hoverHighlight.Visible = false; 
 		AddChild(_hoverHighlight);
 
-		// --- NEW: Massive Radar Circle Setup ---
+		// --- Massive Radar Circle Setup ---
 		_radarHighlight = new Polygon2D();
 		int circlePoints = 32;
 		Vector2[] radarPoints = new Vector2[circlePoints];
@@ -178,7 +178,6 @@ public partial class BattleMap : Node2D
 		UI.CloseMenuButton.Pressed += () => ToggleShipMenu(false);
 		UI.TurnLabel.Text = $"TURN {CurrentTurn}";
 		
-		// --- NEW: Link the Long Range button ---
 		if (UI.BtnLongRange != null) UI.BtnLongRange.Pressed += OnLongRangePressed;
 	}
 
@@ -230,7 +229,7 @@ public partial class BattleMap : Node2D
 
 	public override void _Input(InputEvent @event)
 	{
-		// --- NEW: Intercept clicks if we are using the deep scanner ---
+		// Intercept clicks if we are using the deep scanner
 		if (IsTargetingLongRange)
 		{
 			if (@event is InputEventMouseButton targetEvent && targetEvent.Pressed)
@@ -327,7 +326,6 @@ public partial class BattleMap : Node2D
 		}
 	}
 
-	// --- NEW: Scan Execution Logic ---
 	private void ExecuteLongRangeScan(Vector2I targetHex)
 	{
 		IsTargetingLongRange = false;
@@ -463,7 +461,6 @@ public partial class BattleMap : Node2D
 		Vector2 globalMousePos = GetGlobalMousePosition();
 		_currentHoveredHex = HexMath.PixelToHex(globalMousePos, HexSize);
 		
-		// --- NEW: Toggle the massive green radar circle based on state ---
 		if (IsTargetingLongRange)
 		{
 			_radarHighlight.Visible = true;
@@ -622,8 +619,15 @@ public partial class BattleMap : Node2D
 		{
 			CurrentlyViewedShip = ship;
 			UI.ShipMenuTitle.Text = $"== {ship.Name.ToUpper()} ==";
-			Texture2D tex = GD.Load<Texture2D>(Database.GetShipTexturePath(ship.Name));
-			if (tex != null) UI.ShipImageDisplay.Texture = tex;
+
+			// --- FIX: Safely check if the image path exists before loading! ---
+			string imagePath = Database.GetShipTexturePath(ship.Name);
+			if (!string.IsNullOrEmpty(imagePath))
+			{
+				Texture2D tex = GD.Load<Texture2D>(imagePath);
+				if (tex != null) UI.ShipImageDisplay.Texture = tex;
+			}
+			
 			float hpPercent = (float)ship.CurrentHP / ship.MaxHP;
 			UI.ShipImageDisplay.Modulate = new Color(1f, hpPercent, hpPercent); 
 
@@ -645,25 +649,14 @@ public partial class BattleMap : Node2D
 			UI.BtnScan.Visible = false;
 			UI.BtnSalvage.Visible = false;
 
-if (isPlayer && !Combat.InCombat)
+			if (isPlayer && !Combat.InCombat)
 			{
-				// --- DEBUG CONSOLE PRINTS ---
-				GD.Print($"[DEBUG] Selected Ship Name: '{ship.Name}'");
-				GD.Print($"[DEBUG] Is BtnLongRange linked? {UI.BtnLongRange != null}");
-
-				// --- NEW: Enable the Deep Scan button if flying the Aether Skimmer ---
-				// (Check if your console prints exact match for "The Aether Skimmer")
 				if (ship.Name == "The Aether Skimmer")
 				{
 					if (UI.BtnLongRange != null)
 					{
 						UI.BtnLongRange.Visible = true;
 						UI.BtnLongRange.Disabled = _globalData.FleetResources["Energy Cores"].AsSingle() < 5f;
-						GD.Print("[DEBUG] SUCCESS: Button made visible!");
-					}
-					else
-					{
-						GD.PrintErr("[ERROR] The Aether Skimmer was selected, but BtnLongRange is NULL. You must link it in the Godot Editor Inspector!");
 					}
 				}
 

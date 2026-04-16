@@ -1,6 +1,6 @@
 [gd_scene format=3 uid="uid://giuvbptmldjs"]
 
-[ext_resource type="FontFile" uid="uid://cuic2grb7lr6j" path="res://Orbitron-VariableFont_wght.ttf" id="1_2t6ru"]
+[ext_resource type="FontFile" uid="uid://cs2qy7wansjjb" path="res://Orbitron-VariableFont_wght.ttf" id="1_2t6ru"]
 [ext_resource type="Texture2D" uid="uid://d0urmllhu0psk" path="res://star.png" id="1_q8pje"]
 
 [node name="StarNode" type="Button" unique_id=1533541352]
