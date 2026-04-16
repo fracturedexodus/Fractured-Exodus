@@ -4,7 +4,7 @@ using System.Collections.Generic;
 
 public partial class GalacticMap : Control
 {
-	// --- NEW: THE REGION IMAGE MASK ---
+	// --- THE REGION IMAGE MASK ---
 	[Export] public Texture2D RegionMaskTexture; 
 	private Image _regionImage;
 
@@ -18,7 +18,6 @@ public partial class GalacticMap : Control
 	private bool _isHoveringStar = false;
 	private Vector2 _hoverTarget = Vector2.Zero;
 	
-	// NEW: Godot Native Nodes for drawing over the UI
 	private Line2D _warpLine;
 	private Polygon2D _originMarker;
 
@@ -51,21 +50,19 @@ public partial class GalacticMap : Control
 		_systemWindow = GetNode<SystemWindow>("SystemWindow");
 		_systemWindow.Visible = false;
 
-		// --- NEW: Setup the Line and Circle nodes so they draw OVER the background ---
 		_warpLine = new Line2D();
 		_warpLine.Width = 3.0f;
-		_warpLine.DefaultColor = new Color(1f, 1f, 1f, 0.8f); // White with slight transparency
-		_warpLine.ZIndex = 100; // Forces it to draw on top of UI
+		_warpLine.DefaultColor = new Color(1f, 1f, 1f, 0.8f); 
+		_warpLine.ZIndex = 100; 
 		AddChild(_warpLine);
 
 		_originMarker = new Polygon2D();
-		_originMarker.Color = new Color(0.2f, 0.8f, 1f, 1f); // Bright blue
+		_originMarker.Color = new Color(0.2f, 0.8f, 1f, 1f); 
 		_originMarker.Polygon = CreateCirclePolygon(6.0f);
 		_originMarker.ZIndex = 100;
 		_originMarker.Visible = false;
 		AddChild(_originMarker);
 
-		// Load the image data into memory so we can read its pixels
 		if (RegionMaskTexture != null)
 		{
 			_regionImage = RegionMaskTexture.GetImage();
@@ -81,7 +78,6 @@ public partial class GalacticMap : Control
 			GenerateAndSaveSector(40);
 	}
 
-	// Helper to draw a perfect circle for the origin marker
 	private Vector2[] CreateCirclePolygon(float radius)
 	{
 		Vector2[] points = new Vector2[32];
@@ -93,7 +89,6 @@ public partial class GalacticMap : Control
 		return points;
 	}
 
-	// --- UPDATED: Use the Line2D node to draw the trajectory ---
 	public override void _Process(double delta)
 	{
 		if (_globalData != null && _globalData.JustJumped && _currentSystemMapPos != Vector2.Zero)
@@ -115,7 +110,7 @@ public partial class GalacticMap : Control
 	}
 
 	// ==========================================
-	// DATA GENERATION
+	// DATA GENERATION (THE UNIVERSE BUILDER)
 	// ==========================================
 
 	private void GenerateAndSaveSector(int amount)
@@ -123,6 +118,8 @@ public partial class GalacticMap : Control
 		Vector2 screenSize = GetViewportRect().Size;
 		RandomNumberGenerator rng = new RandomNumberGenerator();
 		rng.Randomize();
+
+		string[] habitabilityTypes = { "Barren", "Toxic", "Frozen", "Volcanic", "Temperate", "Gas Giant" };
 
 		for (int i = 0; i < amount; i++)
 		{
@@ -147,6 +144,37 @@ public partial class GalacticMap : Control
 
 			_globalData.CurrentSectorStars.Add(newStarData);
 			DrawStarNode(newStarData);
+
+			// --- NEW: PRE-GENERATE THE ENTIRE SYSTEM IN MEMORY ---
+			SystemData newSystem = new SystemData();
+			newSystem.SystemName = newStarData.SystemName;
+			newSystem.HasBeenVisited = false;
+
+			// Generate the Planets for this system upfront
+			for (int p = 0; p < newStarData.PlanetCount; p++)
+			{
+				PlanetData newPlanet = new PlanetData();
+				
+				// Naming convention (e.g., "Aether-Reach 45 Prime-1")
+				newPlanet.Name = $"{newStarData.SystemName} Prime-{p + 1}";
+				newPlanet.TypeIndex = rng.RandiRange(0, 5); 
+				newPlanet.Scale = rng.RandfRange(0.4f, 1.2f);
+				newPlanet.Habitability = habitabilityTypes[rng.RandiRange(0, habitabilityTypes.Length - 1)];
+				newPlanet.HasBeenScanned = false;
+				newPlanet.HasBeenSalvaged = false;
+
+				newSystem.Planets.Add(newPlanet);
+			}
+
+			// Add the newly built system to the universal memory bank
+			_globalData.ExploredSystems[newSystem.SystemName] = newSystem;
+		}
+
+		// --- NEW: Save the generated universe to the hard drive immediately ---
+		if (_globalData != null)
+		{
+			_globalData.SaveGame();
+			GD.Print($"[UNIVERSE BUILDER] Successfully generated and saved {amount} distinct star systems.");
 		}
 	}
 
@@ -169,7 +197,6 @@ public partial class GalacticMap : Control
 		newStar.CustomMinimumSize = new Vector2(1, 1);
 		newStar.ClipText = false;
 
-		// --- NEW: Built-in Tooltip for hovering! ---
 		newStar.TooltipText = $"System: {data.SystemName}\nPlanets: {data.PlanetCount}\nRegion: {data.Region}";
 
 		Sprite2D starSprite = newStar.GetNode<Sprite2D>("Sprite2D");
@@ -177,13 +204,11 @@ public partial class GalacticMap : Control
 		starSprite.Modulate = data.StarColor;
 		starSprite.Position = new Vector2(newStar.Size.X / 2, 30);
 
-		// If this is the system we just jumped from, save its position so we know where to draw the line FROM
 		if (_globalData != null && _globalData.JustJumped && data.SystemName == _globalData.SavedSystem)
 		{
 			_currentSystemMapPos = data.MapPosition + new Vector2(50, 30); 
 		}
 
-		// Mouse hover logic to snap the Warp Line to the target star
 		newStar.MouseEntered += () => 
 		{
 			_isHoveringStar = true;
@@ -245,10 +270,8 @@ public partial class GalacticMap : Control
 
 		_globalData.SavedSystem = data.SystemName; 
 		
-		// Check if we are jumping via Stargate
 		if (_globalData.JustJumped)
 		{
-			// Bypass the popup and warp directly to the battle map
 			var transitioner = GetNodeOrNull<SceneTransition>("/root/SceneTransition");
 			if (transitioner != null) 
 			{
@@ -261,7 +284,6 @@ public partial class GalacticMap : Control
 			return; 
 		}
 
-		// Normal Exploration Flow: Open the System Window pop-up
 		_systemWindow.SetupWindow(data.SystemName, data.PlanetCount, data.Region);
 		
 		Vector2 starPos = clickedStar.Position;
