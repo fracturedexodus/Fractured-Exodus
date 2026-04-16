@@ -1309,4 +1309,26 @@ public partial class BattleMap : Node2D
 		}
 		return target; 
 	}
+	internal void AwardEnemyKillSalvage(string enemyName)
+	{
+		if (_globalData == null || UI == null) return;
+
+		// Generate random loot for the kill
+		Random rng = new Random();
+		float rawYield = rng.Next(15, 41); // 15 to 40 Raw Materials
+		float energyYield = rng.Next(1, 4); // 1 to 3 Energy Cores
+		float techYield = rng.Next(0, 100) < 25 ? 1f : 0f; // 25% chance to drop 1 Ancient Tech
+
+		// Add to Global Inventory
+		_globalData.FleetResources["Raw Materials"] = _globalData.FleetResources["Raw Materials"].AsSingle() + rawYield;
+		_globalData.FleetResources["Energy Cores"] = _globalData.FleetResources["Energy Cores"].AsSingle() + energyYield;
+		_globalData.FleetResources["Ancient Tech"] = _globalData.FleetResources["Ancient Tech"].AsSingle() + techYield;
+
+		UpdateResourceUI();
+
+		// Print the loot drop to the Combat Log
+		UI.CombatLogPanel.Visible = true;
+		LogCombatMessage($"\n[color=#00ff00]*** {enemyName.ToUpper()} DESTROYED ***[/color]");
+		LogCombatMessage($"[color=cyan]Combat Salvage:[/color] {rawYield} Raw Materials, {energyYield} Energy Cores{(techYield > 0 ? ", 1 Ancient Tech" : "")}");
+	}
 }

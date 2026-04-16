@@ -416,6 +416,12 @@ public class CombatManager
 		{
 			_map.LogCombatMessage($"[color=red]*** {defender.Name.ToUpper()} DESTROYED ***[/color]\n");
 			
+			// --- NEW: Give Player Salvage if it was an Enemy Fleet! ---
+			if (defender.Type == "Enemy Fleet")
+			{
+				_map.AwardEnemyKillSalvage(defender.Name);
+			}
+
 			if (_map.ExplosionPlayer.Stream != null) _map.ExplosionPlayer.Play();
 			BattleVFX.DrawExplosion(_map.EntityLayer, HexMath.HexToPixel(defenderHex, _map.HexSize), _map.HexSize);
 
