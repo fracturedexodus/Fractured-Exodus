@@ -102,7 +102,6 @@ public partial class BattleMap : Node2D
 
 		// --- Setup the dynamic hover tooltip ---
 		_hoverTooltip = new Label();
-		_hoverTooltip.ZIndex = 200;
 		_hoverTooltip.Visible = false;
 		
 		StyleBoxFlat tooltipBox = new StyleBoxFlat();
@@ -114,7 +113,11 @@ public partial class BattleMap : Node2D
 		_hoverTooltip.AddThemeStyleboxOverride("normal", tooltipBox);
 		_hoverTooltip.AddThemeColorOverride("font_color", new Color(1f, 1f, 1f));
 		_hoverTooltip.AddThemeFontSizeOverride("font_size", 14);
-		_hoverHighlight.AddChild(_hoverTooltip); 
+
+		// --- NEW: Put the tooltip on a CanvasLayer so it ignores Camera Zoom! ---
+		CanvasLayer tooltipLayer = new CanvasLayer { Layer = 100 };
+		AddChild(tooltipLayer);
+		tooltipLayer.AddChild(_hoverTooltip); 
 
 		// --- Massive Radar Circle Setup ---
 		_radarHighlight = new Polygon2D();
@@ -146,14 +149,13 @@ public partial class BattleMap : Node2D
 
 		MapSpawner.PopulateMapFromMemory(_globalData, _maxMapRadius, HexSize, HexGrid, HexContents, EntityLayer, EnvironmentLayer, RadiationLayer, AsteroidHexes, RadiationHexes);
 		
-		// --- UPDATED: Faster, finer, denser Vortex Particles! ---
 		foreach (var kvp in HexContents)
 		{
 			if (kvp.Value.Type == "StarGate" && GodotObject.IsInstanceValid(kvp.Value.VisualSprite))
 			{
 				CpuParticles2D vortex = new CpuParticles2D();
 				vortex.Name = "VortexParticles";
-				vortex.Amount = 250; // Vastly increased count for density
+				vortex.Amount = 250; 
 				vortex.Lifetime = 1.5f;
 				vortex.EmissionShape = CpuParticles2D.EmissionShapeEnum.Sphere;
 				vortex.EmissionSphereRadius = 35f; 
@@ -163,11 +165,9 @@ public partial class BattleMap : Node2D
 				vortex.RadialAccelMin = -30f; 
 				vortex.RadialAccelMax = -50f; 
 				
-				// Made it spin much faster
 				vortex.TangentialAccelMin = 100f; 
 				vortex.TangentialAccelMax = 180f; 
 				
-				// Made particles significantly smaller to look like fine dust/energy
 				vortex.ScaleAmountMin = 1.5f; 
 				vortex.ScaleAmountMax = 3.0f; 
 				
@@ -536,7 +536,13 @@ public partial class BattleMap : Node2D
 						else _hoverHighlight.Color = new Color(0f, 1f, 0f, 0.4f); 
 						
 						_hoverTooltip.Text = $"=== {hoveredEntity.Name.ToUpper()} ===\nHP: {hoveredEntity.CurrentHP} / {hoveredEntity.MaxHP}\nShields: {hoveredEntity.CurrentShields} / {hoveredEntity.MaxShields}\nAttack: {hoveredEntity.AttackDamage} DMG\nRange: {hoveredEntity.AttackRange} Hexes";
-						_hoverTooltip.Position = new Vector2(90, -60); 
+						
+						// --- NEW: Calculate absolute screen position to bypass camera zoom! ---
+						Vector2 screenPos = _hoverHighlight.GetGlobalTransformWithCanvas().Origin;
+						float currentZoom = GetViewportTransform().Scale.X;
+						
+						// Pins the tooltip to the right of the hex dynamically based on current zoom
+						_hoverTooltip.Position = screenPos + new Vector2((HexSize * currentZoom) + 15, -60);
 						_hoverTooltip.Visible = true;
 					}
 					else
@@ -1103,13 +1109,13 @@ public partial class BattleMap : Node2D
 			CpuParticles2D vortex = gateSprite.GetNodeOrNull<CpuParticles2D>("VortexParticles");
 			if (vortex != null)
 			{
-				vortex.Amount = 500; // Overdrive the particles during jump
-				vortex.ScaleAmountMin = 1.0f; // Shrink them to dust
+				vortex.Amount = 500; 
+				vortex.ScaleAmountMin = 1.0f; 
 				vortex.ScaleAmountMax = 2.5f;
-				vortex.RadialAccelMin = -120f; // Pull in much harder
-				vortex.TangentialAccelMin = 250f; // Violent spin
+				vortex.RadialAccelMin = -120f; 
+				vortex.TangentialAccelMin = 250f; 
 				vortex.TangentialAccelMax = 400f; 
-				vortex.Color = new Color(1f, 1f, 1f, 1f); // Flash bright white
+				vortex.Color = new Color(1f, 1f, 1f, 1f); 
 			}
 		}
 
