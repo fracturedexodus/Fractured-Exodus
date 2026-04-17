@@ -29,9 +29,9 @@ public class SystemData
 	
 	public bool HasBeenVisited { get; set; } = false;
 	public Godot.Collections.Array EnemyFleets { get; set; } = new Godot.Collections.Array();
-	public List<Vector2I> StargateLocations { get; set; } = new List<Vector2I>();
 
 	// --- Persistent Map State ---
+	public List<Vector2I> StargateHexes { get; set; } = new List<Vector2I>(); // Updated to match GalacticMap!
 	public List<Vector2I> AsteroidHexes { get; set; } = new List<Vector2I>();
 	public List<Vector2I> RadiationHexes { get; set; } = new List<Vector2I>();
 	public List<Vector2I> ExploredHexes { get; set; } = new List<Vector2I>();
@@ -126,7 +126,7 @@ public partial class GlobalData : Node
 			sysData["HasBeenVisited"] = sysKvp.Value.HasBeenVisited;
 			sysData["EnemyFleets"] = sysKvp.Value.EnemyFleets;
 			
-			sysData["StargateLocations"] = ConvertVectorListToVariantArray(sysKvp.Value.StargateLocations);
+			sysData["StargateHexes"] = ConvertVectorListToVariantArray(sysKvp.Value.StargateHexes);
 			sysData["AsteroidHexes"] = ConvertVectorListToVariantArray(sysKvp.Value.AsteroidHexes);
 			sysData["RadiationHexes"] = ConvertVectorListToVariantArray(sysKvp.Value.RadiationHexes);
 			sysData["ExploredHexes"] = ConvertVectorListToVariantArray(sysKvp.Value.ExploredHexes);
@@ -141,7 +141,6 @@ public partial class GlobalData : Node
 				pDict["Scale"] = p.Scale;
 				pDict["Habitability"] = p.Habitability;
 				
-				// --- FIX: Actually save the orbital parameters! ---
 				pDict["Distance"] = p.Distance;
 				pDict["Speed"] = p.Speed;
 				pDict["StartingAngle"] = p.StartingAngle;
@@ -203,7 +202,7 @@ public partial class GlobalData : Node
 				newSys.HasBeenVisited = sysDict.ContainsKey("HasBeenVisited") ? (bool)sysDict["HasBeenVisited"] : false;
 				newSys.EnemyFleets = sysDict.ContainsKey("EnemyFleets") ? (Godot.Collections.Array)sysDict["EnemyFleets"] : new Godot.Collections.Array();
 				
-				newSys.StargateLocations = ConvertVariantArrayToVectorList(sysDict.ContainsKey("StargateLocations") ? (Godot.Collections.Array)sysDict["StargateLocations"] : new Godot.Collections.Array());
+				newSys.StargateHexes = ConvertVariantArrayToVectorList(sysDict.ContainsKey("StargateHexes") ? (Godot.Collections.Array)sysDict["StargateHexes"] : new Godot.Collections.Array());
 				newSys.AsteroidHexes = ConvertVariantArrayToVectorList(sysDict.ContainsKey("AsteroidHexes") ? (Godot.Collections.Array)sysDict["AsteroidHexes"] : new Godot.Collections.Array());
 				newSys.RadiationHexes = ConvertVariantArrayToVectorList(sysDict.ContainsKey("RadiationHexes") ? (Godot.Collections.Array)sysDict["RadiationHexes"] : new Godot.Collections.Array());
 				newSys.ExploredHexes = ConvertVariantArrayToVectorList(sysDict.ContainsKey("ExploredHexes") ? (Godot.Collections.Array)sysDict["ExploredHexes"] : new Godot.Collections.Array());
@@ -219,7 +218,6 @@ public partial class GlobalData : Node
 						Scale = (float)pDict["Scale"],
 						Habitability = (string)pDict["Habitability"],
 						
-						// --- FIX: Safely load the orbital parameters! ---
 						Distance = pDict.ContainsKey("Distance") ? (float)pDict["Distance"] : 0f,
 						Speed = pDict.ContainsKey("Speed") ? (float)pDict["Speed"] : 0f,
 						StartingAngle = pDict.ContainsKey("StartingAngle") ? (float)pDict["StartingAngle"] : 0f,

@@ -154,17 +154,9 @@ public static class MapSpawner
 			if (pData.Name == globalData.SavedPlanet) basePlanetLocation = spawnHex;
 		}
 
-		if (!currentSystem.HasBeenVisited)
-		{
-			int numGates = rng.Next(1, 3);
-			for (int i = 0; i < numGates; i++)
-			{
-				Vector2I gateHex = FindEmptyHexInRing(rng.Next(15, maxRadius - 5), rng, hexGrid, hexContents);
-				currentSystem.StargateLocations.Add(gateHex); 
-			}
-		}
-		
-		foreach (Vector2I gateHex in currentSystem.StargateLocations)
+		// --- PERSISTENT STARGATES ---
+		// We no longer generate gates here! They are generated in GalacticMap and read from memory.
+		foreach (Vector2I gateHex in currentSystem.StargateHexes)
 		{
 			MapEntity gateEntity = new MapEntity { Name = "Ancient StarGate", Type = "StarGate", Details = "Trans-dimensional warp gate connecting local star systems." };
 			SpawnEntityAtHex(gateHex, "res://StarGate.png", gateEntity, 0.4f, hexSize, hexGrid, hexContents, entityLayer);
@@ -260,9 +252,9 @@ public static class MapSpawner
 			arrivedViaJump = globalData.JustJumped;
 			if (arrivedViaJump)
 			{
-				if (currentSystem.StargateLocations.Count > 0)
+				if (currentSystem.StargateHexes.Count > 0)
 				{
-					basePlanetLocation = currentSystem.StargateLocations[rng.Next(currentSystem.StargateLocations.Count)];
+					basePlanetLocation = currentSystem.StargateHexes[rng.Next(currentSystem.StargateHexes.Count)];
 				}
 				else
 				{

@@ -138,13 +138,24 @@ public partial class GalacticMap : Control
 		// 1. MANAGE THE SYSTEM HOVER BOX (LEFT SIDE)
 		if (_isHoveringStar && _hoveredStarData != null)
 		{
-			_systemHoverText.Text = $"[color=cyan][b]=== {_hoveredStarData.SystemName.ToUpper()} ===[/b][/color]\nPlanets: {_hoveredStarData.PlanetCount}\nRegion: {_hoveredStarData.Region}";
+			bool hasVisited = false;
+			if (_globalData != null && _globalData.ExploredSystems.ContainsKey(_hoveredStarData.SystemName))
+			{
+				hasVisited = _globalData.ExploredSystems[_hoveredStarData.SystemName].HasBeenVisited;
+			}
+
+			if (hasVisited)
+			{
+				_systemHoverText.Text = $"[color=cyan][b]=== {_hoveredStarData.SystemName.ToUpper()} ===[/b][/color]\nPlanets: {_hoveredStarData.PlanetCount}\nRegion: {_hoveredStarData.Region}";
+			}
+			else
+			{
+				_systemHoverText.Text = $"[color=gray][b]=== UNKNOWN SYSTEM ===[/b][/color]\nPlanets: ???\nRegion: {_hoveredStarData.Region}";
+			}
 			
-			// Position on the LEFT side of the cursor
 			Vector2 sysPos = mousePos - new Vector2(_systemHoverPanel.Size.X + 20, 20);
 			
-			// Screen boundaries check
-			if (sysPos.X < 0) sysPos.X = mousePos.X + 20; // Flip to right if off screen left
+			if (sysPos.X < 0) sysPos.X = mousePos.X + 20; 
 			if (sysPos.Y + _systemHoverPanel.Size.Y > screenSize.Y) sysPos.Y = screenSize.Y - _systemHoverPanel.Size.Y - 10;
 			if (sysPos.Y < 0) sysPos.Y = 10;
 
@@ -169,7 +180,6 @@ public partial class GalacticMap : Control
 			_warpLine.AddPoint(_currentSystemMapPos);
 			_warpLine.AddPoint(targetPos);
 
-			// Hide the warp line if we are hovering directly over the star we are currently in
 			if (dist < 5.0f) 
 			{
 				_warpLine.DefaultColor = new Color(0,0,0,0);
@@ -177,9 +187,8 @@ public partial class GalacticMap : Control
 			}
 			else
 			{
-				// --- UPDATED: 10 RAW MATERIALS PER 5 PIXELS MULTIPLIER (x2.0) ---
 				float rawCost = Mathf.Max(1f, Mathf.Round(dist * 2.0f));
-				float energyCost = 1.0f; // Flat cost to fire the gate
+				float energyCost = 1.0f; 
 				
 				bool canAfford = true;
 				float cRaw = 0f;
@@ -199,10 +208,8 @@ public partial class GalacticMap : Control
 					_jumpInfoText.Text = $"[color=yellow][b]=== FTL TRAJECTORY ===[/b][/color]\n\nDistance: {Mathf.Round(dist)}ly\n\n[b]JUMP COST:[/b]\nRaw Materials: {rawCost}\nEnergy Cores: {energyCost}\n\n" + 
 										 (canAfford ? "[color=green]RESOURCES OPTIMAL[/color]" : $"[color=red]INSUFFICIENT RESOURCES[/color]\nAvailable: {cRaw:0.#} Raw, {cEne:0.#} Energy");
 					
-					// Position on the RIGHT side of the cursor
 					Vector2 jumpPos = mousePos + new Vector2(20, -20);
 					
-					// Screen boundaries check
 					if (jumpPos.X + _jumpInfoPanel.Size.X > screenSize.X) jumpPos.X = mousePos.X - _jumpInfoPanel.Size.X - 20;
 					if (jumpPos.Y + _jumpInfoPanel.Size.Y > screenSize.Y) jumpPos.Y = screenSize.Y - _jumpInfoPanel.Size.Y - 10;
 					if (jumpPos.Y < 0) jumpPos.Y = 10;
@@ -210,7 +217,6 @@ public partial class GalacticMap : Control
 					_jumpInfoPanel.Position = jumpPos;
 					_jumpInfoPanel.Visible = true;
 
-					// Conflict resolution: If the jump panel had to flip left, push the system panel to the right
 					if (jumpPos.X < mousePos.X && _systemHoverPanel.Visible) 
 					{
 						_systemHoverPanel.Position = new Vector2(mousePos.X + 20, _systemHoverPanel.Position.Y);
@@ -236,10 +242,10 @@ public partial class GalacticMap : Control
 
 	private void BuildHoverUI()
 	{
-		// 1. Build the FTL Jump Info Panel (Right Side)
 		_jumpInfoPanel = new PanelContainer();
 		_jumpInfoPanel.ZIndex = 200;
 		_jumpInfoPanel.Visible = false;
+		_jumpInfoPanel.MouseFilter = MouseFilterEnum.Ignore; // Ensure UI doesn't block clicks
 
 		StyleBoxFlat jumpStyle = new StyleBoxFlat();
 		jumpStyle.BgColor = new Color(0.05f, 0.05f, 0.1f, 0.95f);
@@ -254,19 +260,20 @@ public partial class GalacticMap : Control
 		_jumpInfoText = new RichTextLabel();
 		_jumpInfoText.BbcodeEnabled = true;
 		_jumpInfoText.FitContent = true;
+		_jumpInfoText.MouseFilter = MouseFilterEnum.Ignore;
 		_jumpInfoText.AddThemeColorOverride("default_color", new Color(1f, 1f, 1f));
 		_jumpInfoText.AddThemeFontSizeOverride("normal_font_size", 14);
 		_jumpInfoPanel.AddChild(_jumpInfoText);
 
-		// 2. Build the System Hover Info Panel (Left Side)
 		_systemHoverPanel = new PanelContainer();
 		_systemHoverPanel.ZIndex = 200;
 		_systemHoverPanel.Visible = false;
+		_systemHoverPanel.MouseFilter = MouseFilterEnum.Ignore;
 
 		StyleBoxFlat sysStyle = new StyleBoxFlat();
 		sysStyle.BgColor = new Color(0.05f, 0.05f, 0.1f, 0.95f);
 		sysStyle.BorderWidthTop = 2; sysStyle.BorderWidthBottom = 2; sysStyle.BorderWidthLeft = 2; sysStyle.BorderWidthRight = 2;
-		sysStyle.BorderColor = new Color(0f, 1f, 1f, 0.8f); // Cyan border
+		sysStyle.BorderColor = new Color(0f, 1f, 1f, 0.8f); 
 		sysStyle.ContentMarginLeft = 15; sysStyle.ContentMarginRight = 15; sysStyle.ContentMarginTop = 15; sysStyle.ContentMarginBottom = 15;
 		_systemHoverPanel.AddThemeStyleboxOverride("panel", sysStyle);
 
@@ -276,6 +283,7 @@ public partial class GalacticMap : Control
 		_systemHoverText = new RichTextLabel();
 		_systemHoverText.BbcodeEnabled = true;
 		_systemHoverText.FitContent = true;
+		_systemHoverText.MouseFilter = MouseFilterEnum.Ignore;
 		_systemHoverText.AddThemeColorOverride("default_color", new Color(1f, 1f, 1f));
 		_systemHoverText.AddThemeFontSizeOverride("normal_font_size", 14);
 		_systemHoverPanel.AddChild(_systemHoverText);
@@ -312,7 +320,7 @@ public partial class GalacticMap : Control
 
 		_regionInfoPanel = new PanelContainer();
 		_regionInfoPanel.ZIndex = 200;
-		_regionInfoPanel.Visible = false; // Hidden by default
+		_regionInfoPanel.Visible = false; 
 
 		StyleBoxFlat infoStyle = new StyleBoxFlat();
 		infoStyle.BgColor = new Color(0.05f, 0.05f, 0.1f, 0.95f);
@@ -411,6 +419,26 @@ public partial class GalacticMap : Control
 	// DATA GENERATION
 	// ==========================================
 
+	private Vector2I GetRandomHex(RandomNumberGenerator rng, int minRadius, int maxRadius)
+	{
+		while (true)
+		{
+			int q = rng.RandiRange(-maxRadius, maxRadius);
+			int r1 = Mathf.Max(-maxRadius, -q - maxRadius);
+			int r2 = Mathf.Min(maxRadius, -q + maxRadius);
+			int r = rng.RandiRange(r1, r2);
+			
+			Vector2I hex = new Vector2I(q, r);
+			
+			int dist = (Mathf.Abs(hex.X) + Mathf.Abs(hex.X + hex.Y) + Mathf.Abs(hex.Y)) / 2;
+			
+			if (dist >= minRadius && dist <= maxRadius)
+			{
+				return hex;
+			}
+		}
+	}
+
 	private void GenerateAndSaveSector(int amount)
 	{
 		Vector2 screenSize = GetViewportRect().Size;
@@ -446,6 +474,27 @@ public partial class GalacticMap : Control
 			SystemData newSystem = new SystemData();
 			newSystem.SystemName = newStarData.SystemName;
 			newSystem.HasBeenVisited = false;
+
+			newSystem.AsteroidHexes = new List<Vector2I>();
+			newSystem.RadiationHexes = new List<Vector2I>();
+			
+			int gateCount = rng.RandiRange(1, 2);
+			for (int g = 0; g < gateCount; g++)
+			{
+				newSystem.StargateHexes.Add(GetRandomHex(rng, 10, 28));
+			}
+
+			int asteroidCount = rng.RandiRange(40, 80);
+			for (int a = 0; a < asteroidCount; a++)
+			{
+				newSystem.AsteroidHexes.Add(GetRandomHex(rng, 5, 34));
+			}
+
+			int radCount = rng.RandiRange(20, 50);
+			for (int r = 0; r < radCount; r++)
+			{
+				newSystem.RadiationHexes.Add(GetRandomHex(rng, 5, 34));
+			}
 
 			for (int p = 0; p < newStarData.PlanetCount; p++)
 			{
@@ -483,42 +532,55 @@ public partial class GalacticMap : Control
 		}
 	}
 
+	// --- COMPLETELY REWRITTEN FOR RELIABLE UI INTERACTION ---
 	private void DrawStarNode(StarMapData data)
 	{
-		Button newStar = starScene.Instantiate<Button>();
+		// 1. Create a pure UI Control node as the clickable hit-box. 
+		// This bypasses physics layers entirely so it never gets blocked!
+		Control newStar = new Control();
+		
+		// Set a generous, invisible 40x40 hit area centered perfectly on the star's coordinates
+		newStar.CustomMinimumSize = new Vector2(40, 40);
+		newStar.Position = data.MapPosition - new Vector2(20, 20); 
+		newStar.MouseDefaultCursorShape = Control.CursorShape.PointingHand; // Show the player it's clickable!
 		AddChild(newStar); 
 
-		newStar.Position = data.MapPosition;
-		newStar.Text = data.SystemName;
-		newStar.Alignment = HorizontalAlignment.Center;
-		newStar.CustomMinimumSize = new Vector2(1, 1);
-		newStar.ClipText = false;
-		
-		newStar.TooltipText = ""; 
-
-		Sprite2D starSprite = newStar.GetNode<Sprite2D>("Sprite2D");
+		// 2. Draw the visual Star exactly in the center of the hit box
+		Sprite2D starSprite = new Sprite2D();
+		Texture2D tex = GD.Load<Texture2D>("res://star.png"); 
+		if (tex != null) starSprite.Texture = tex;
 		starSprite.Scale = new Vector2(data.StarScale, data.StarScale);
 		starSprite.Modulate = data.StarColor;
-		starSprite.Position = new Vector2(newStar.Size.X / 2, 30);
+		starSprite.Position = new Vector2(20, 20); // Center inside the Control
+		newStar.AddChild(starSprite);
 
+		// Record your current position if you just warped in
 		if (_globalData != null && _globalData.JustJumped && data.SystemName == _globalData.SavedSystem)
 		{
-			_currentSystemMapPos = data.MapPosition + new Vector2(50, 30); 
+			_currentSystemMapPos = data.MapPosition; 
 		}
+
+		// 3. Connect UI Signals natively
+		newStar.GuiInput += (InputEvent @event) => 
+		{
+			if (@event is InputEventMouseButton mouseEvent && mouseEvent.Pressed && mouseEvent.ButtonIndex == MouseButton.Left)
+			{
+				_on_star_clicked(data, newStar);
+			}
+		};
 
 		newStar.MouseEntered += () => 
 		{
 			_isHoveringStar = true;
-			_hoverTarget = newStar.Position + new Vector2(50, 30);
+			_hoverTarget = data.MapPosition; 
 			_hoveredStarData = data; 
 		};
+		
 		newStar.MouseExited += () => 
 		{
 			_isHoveringStar = false;
 			_hoveredStarData = null;
 		};
-
-		newStar.Pressed += () => _on_star_clicked(data, newStar);
 	}
 
 	// ==========================================
@@ -563,7 +625,7 @@ public partial class GalacticMap : Control
 	// UI SIGNALS
 	// ==========================================
 
-	private void _on_star_clicked(StarMapData data, Button clickedStar)
+	private void _on_star_clicked(StarMapData data, Control clickedStar) // Updated argument to Control
 	{
 		if (!IsInstanceValid(_systemWindow)) return;
 
@@ -571,10 +633,10 @@ public partial class GalacticMap : Control
 		{
 			if (data.SystemName == _globalData.SavedSystem) return; 
 
-			Vector2 FTLTarget = clickedStar.Position + new Vector2(50, 30);
+			// Target calculation is now precise because we are using data.MapPosition directly!
+			Vector2 FTLTarget = data.MapPosition;
 			float distance = _currentSystemMapPos.DistanceTo(FTLTarget);
 			
-			// --- UPDATED: 10 RAW MATERIALS PER 5 PIXELS MULTIPLIER (x2.0) ---
 			float rawCost = Mathf.Max(1f, Mathf.Round(distance * 2.0f));
 			float energyCost = 1.0f;
 
@@ -615,7 +677,7 @@ public partial class GalacticMap : Control
 		_globalData.SavedSystem = data.SystemName; 
 		_systemWindow.SetupWindow(data.SystemName, data.PlanetCount, data.Region);
 		
-		Vector2 starPos = clickedStar.Position;
+		Vector2 starPos = data.MapPosition;
 		Vector2 windowSize = _systemWindow.Size;
 		Vector2 screenSize = GetViewportRect().Size;
 
