@@ -1,7 +1,7 @@
 [gd_scene format=3 uid="uid://vywwdok04ogw"]
 
 [ext_resource type="Script" uid="uid://cil0rminqk3hc" path="res://Codex.cs" id="1_as55l"]
-[ext_resource type="FontFile" uid="uid://cuic2grb7lr6j" path="res://Orbitron-VariableFont_wght.ttf" id="2_ekr6b"]
+[ext_resource type="FontFile" uid="uid://cs2qy7wansjjb" path="res://Orbitron-VariableFont_wght.ttf" id="2_ekr6b"]
 [ext_resource type="Texture2D" uid="uid://ml4aup8uct5w" path="res://CodexScreen.png" id="2_kg3id"]
 
 [node name="Codex" type="Control" unique_id=720745994]
