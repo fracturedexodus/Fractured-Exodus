@@ -61,6 +61,11 @@ public partial class BattleMap : Node2D
 	internal bool IsJumping = false; 
 	internal MapEntity CurrentlyViewedShip = null;
 
+	// --- STRANDED FLEET PROTOCOL UI ---
+	private CenterContainer _strandedMenuWrapper;
+	private bool _distressSignalAmbush = false; 
+	private bool _isWaitingForDistressSignal = false; 
+
 	public override void _Ready()
 	{
 		_globalData = GetNodeOrNull<GlobalData>("/root/GlobalData");
@@ -114,7 +119,7 @@ public partial class BattleMap : Node2D
 		_hoverTooltip.AddThemeColorOverride("font_color", new Color(1f, 1f, 1f));
 		_hoverTooltip.AddThemeFontSizeOverride("font_size", 14);
 
-		// --- NEW: Put the tooltip on a CanvasLayer so it ignores Camera Zoom! ---
+		// --- Put the tooltip on a CanvasLayer so it ignores Camera Zoom ---
 		CanvasLayer tooltipLayer = new CanvasLayer { Layer = 100 };
 		AddChild(tooltipLayer);
 		tooltipLayer.AddChild(_hoverTooltip); 
@@ -136,6 +141,7 @@ public partial class BattleMap : Node2D
 		SetupCamera();
 		SetupAudio(); 
 		ConnectUIButtons(); 
+		BuildStrandedMenu(); 
 		
 		MapSpawner.SetupSpaceBackground(_bgLayer, GetViewportRect().Size);
 		MapSpawner.GenerateGrid(_maxMapRadius, HexSize, _hexScene, _gridLayer, HexGrid);
@@ -232,6 +238,167 @@ public partial class BattleMap : Node2D
 		if (UI.BtnLongRange != null) UI.BtnLongRange.Pressed += OnLongRangePressed;
 	}
 
+	// ==========================================
+	// STRANDED FLEET PROTOCOL UI
+	// ==========================================
+	private void BuildStrandedMenu()
+	{
+		CanvasLayer menuLayer = new CanvasLayer { Layer = 150 };
+		AddChild(menuLayer);
+
+		_strandedMenuWrapper = new CenterContainer();
+		_strandedMenuWrapper.SetAnchorsPreset(Control.LayoutPreset.FullRect); 
+		// --- FIX: This physically blocks mouse clicks from passing through to the map below ---
+		_strandedMenuWrapper.MouseFilter = Control.MouseFilterEnum.Stop; 
+		_strandedMenuWrapper.Visible = false;
+		menuLayer.AddChild(_strandedMenuWrapper);
+
+		PanelContainer strandedPanel = new PanelContainer();
+		
+		StyleBoxFlat style = new StyleBoxFlat();
+		style.BgColor = new Color(0.05f, 0.05f, 0.1f, 0.95f);
+		style.BorderWidthTop = 2; style.BorderWidthBottom = 2; style.BorderWidthLeft = 2; style.BorderWidthRight = 2;
+		style.BorderColor = new Color(1f, 0f, 0f, 0.8f); // Danger Red
+		style.ContentMarginLeft = 20; style.ContentMarginRight = 20; style.ContentMarginTop = 20; style.ContentMarginBottom = 20;
+		strandedPanel.AddThemeStyleboxOverride("panel", style);
+		
+		_strandedMenuWrapper.AddChild(strandedPanel);
+
+		VBoxContainer container = new VBoxContainer();
+		container.AddThemeConstantOverride("separation", 15);
+		strandedPanel.AddChild(container);
+
+		Label title = new Label();
+		title.Text = "=== WARNING: CRITICAL FUEL DEPLETION ===";
+		title.HorizontalAlignment = HorizontalAlignment.Center;
+		title.AddThemeColorOverride("font_color", new Color(1f, 0f, 0f));
+		title.AddThemeFontSizeOverride("font_size", 18);
+		container.AddChild(title);
+
+		Label body = new Label();
+		body.Text = "Your fleet has run out of Raw Materials.\nMain engines are offline. Life support is failing.\n\nWhat are your orders, Commander?";
+		body.HorizontalAlignment = HorizontalAlignment.Center;
+		body.AddThemeFontSizeOverride("font_size", 14);
+		container.AddChild(body);
+
+		Button btnDistress = new Button();
+		btnDistress.Text = "SEND FTL DISTRESS SIGNAL (Gamble)";
+		btnDistress.CustomMinimumSize = new Vector2(0, 40);
+		btnDistress.AddThemeColorOverride("font_color", new Color(1f, 1f, 0f));
+		btnDistress.Pressed += OnDistressSignalPressed;
+		container.AddChild(btnDistress);
+
+		Button btnAbandon = new Button();
+		btnAbandon.Text = "ABANDON FLEET (Return to Menu)";
+		btnAbandon.CustomMinimumSize = new Vector2(0, 40);
+		btnAbandon.Pressed += () => {
+			if (_globalData != null) _globalData.ResetForNewGame();
+			OnMainMenuPressed();
+		};
+		container.AddChild(btnAbandon);
+	}
+
+	private void ShowStrandedMenu()
+	{
+		if (_strandedMenuWrapper != null && !_strandedMenuWrapper.Visible)
+		{
+			_strandedMenuWrapper.Visible = true;
+			if (UI != null) UI.CombatLogPanel.Visible = true;
+			LogCombatMessage("\n[color=red]*** FLEET STRANDED: OUT OF FUEL ***[/color]");
+		}
+	}
+
+	private void OnDistressSignalPressed()
+	{
+		_strandedMenuWrapper.Visible = false;
+		_isWaitingForDistressSignal = true; 
+		
+		LogCombatMessage("\n[color=yellow]--- BROADCASTING WIDE-BAND DISTRESS SIGNAL ---[/color]");
+		LogCombatMessage("Awaiting response...");
+
+		Random rng = new Random();
+		
+		GetTree().CreateTimer(1.5f).Timeout += () => 
+		{
+			if (rng.Next(0, 100) < 50) 
+			{
+				int fuelSalvaged = rng.Next(25, 76); 
+				if (_globalData != null)
+				{
+					_globalData.FleetResources["Raw Materials"] = _globalData.FleetResources["Raw Materials"].AsSingle() + fuelSalvaged;
+					UpdateResourceUI();
+				}
+				
+				LogCombatMessage($"[color=green]SIGNAL RECEIVED![/color] A passing smuggler vessel dropped emergency supplies.");
+				LogCombatMessage($"[color=cyan]+{fuelSalvaged} Raw Materials Acquired.[/color]");
+				_isWaitingForDistressSignal = false;
+			}
+			else
+			{
+				LogCombatMessage($"[color=red]WARNING: SLIPSPACE SIGNATURES DETECTED![/color]");
+				LogCombatMessage($"[color=red]Hostile forces intercepted the signal. Prepare for combat![/color]");
+				
+				_distressSignalAmbush = true; 
+				_isWaitingForDistressSignal = false;
+				SpawnAmbushFleet();
+			}
+		};
+	}
+
+	private void SpawnAmbushFleet()
+	{
+		Random rng = new Random();
+		int enemyShipCount = rng.Next(1, 6); 
+		
+		Vector2I ambushBaseLocation = new Vector2I(0,0);
+		foreach (var kvp in HexContents)
+		{
+			if (kvp.Value.Type == "Player Fleet")
+			{
+				ambushBaseLocation = kvp.Key; 
+				break;
+			}
+		}
+
+		int enemyDirIndex = 0;
+		for (int i = 0; i < enemyShipCount; i++)
+		{
+			string enemyName = Database.EnemyShipTypes[rng.Next(Database.EnemyShipTypes.Length)];
+			while (enemyDirIndex < 36) 
+			{
+				int ring = (enemyDirIndex / 6) + 1;
+				Vector2I spawnPos = ambushBaseLocation + HexMath.Directions[enemyDirIndex % 6] * ring;
+				enemyDirIndex++;
+				
+				if (HexGrid.ContainsKey(spawnPos) && !HexContents.ContainsKey(spawnPos))
+				{
+					int shipBaseActionPoints = Database.GetShipBaseActions(enemyName); 
+					(int hp, int shields) = Database.GetShipCombatStats(enemyName);
+					(int range, int dmg) = Database.GetShipWeaponStats(enemyName);
+
+					MapEntity shipData = new MapEntity { 
+						Name = enemyName, Type = "Enemy Fleet", Details = "Status: Hostile Ambush",
+						MaxActions = shipBaseActionPoints, CurrentActions = shipBaseActionPoints,
+						AttackRange = range, AttackDamage = dmg,
+						MaxHP = hp, CurrentHP = hp, MaxShields = shields, CurrentShields = shields,
+						InitiativeBonus = Database.GetShipInitiativeBonus(enemyName),
+						BaseRotationOffset = Database.GetShipRotationOffset(enemyName)
+					};
+					
+					MapSpawner.SpawnEntityAtHex(spawnPos, Database.GetShipTexturePath(enemyName), shipData, 0.2f, HexSize, HexGrid, HexContents, EntityLayer); 
+					break; 
+				}
+			}
+		}
+
+		GetTree().CreateTimer(0.5f).Timeout += () => 
+		{
+			Combat.CheckForCombatTrigger();
+		};
+	}
+
+	// ==========================================
+
 	private void CenterCameraOnFleet()
 	{
 		foreach (var kvp in HexContents)
@@ -280,6 +447,9 @@ public partial class BattleMap : Node2D
 
 	public override void _Input(InputEvent @event)
 	{
+		// --- STRICT BLOCKADE: IF STRANDED MENU IS OPEN, ABSOLUTELY NO CLICKS PASS THROUGH ---
+		if (_strandedMenuWrapper != null && _strandedMenuWrapper.Visible) return;
+
 		if (IsTargetingLongRange)
 		{
 			if (@event is InputEventMouseButton targetEvent && targetEvent.Pressed)
@@ -290,7 +460,7 @@ public partial class BattleMap : Node2D
 				}
 				else if (targetEvent.ButtonIndex == MouseButton.Right)
 				{
-					IsTargetingLongRange = false; 
+					IsTargetingLongRange = false; // Cancel scan
 					LogCombatMessage("[color=yellow]Long Range Scan Cancelled.[/color]");
 				}
 			}
@@ -315,19 +485,39 @@ public partial class BattleMap : Node2D
 			if (SelectedHexes.Count > 0 && HexGrid.ContainsKey(targetHex))
 			{
 				float totalFuelNeeded = 0f;
+				bool containsPlayerFleet = false;
+
 				foreach (Vector2I sHex in SelectedHexes)
 				{
 					if (HexContents.ContainsKey(sHex) && HexContents[sHex].Type == "Player Fleet")
 					{
 						totalFuelNeeded += HexMath.HexDistance(sHex, targetHex) * 0.25f;
+						containsPlayerFleet = true;
 					}
 				}
 
-				if (_globalData != null && _globalData.FleetResources["Raw Materials"].AsSingle() < totalFuelNeeded)
+				if (!containsPlayerFleet) return;
+				if (totalFuelNeeded == 0f && !Combat.InCombat) return;
+
+				// --- HARD MATH STOP: FUEL REQUIREMENT CHECK (ONLY OUTSIDE COMBAT) ---
+				if (!Combat.InCombat)
 				{
-					if (UI != null) UI.CombatLogPanel.Visible = true;
-					LogCombatMessage($"\n[color=red]*** MOVEMENT ABORTED: INSUFFICIENT FUEL ({totalFuelNeeded} Raw Materials Req) ***[/color]");
-					return; 
+					float currentFuel = _globalData != null ? _globalData.FleetResources["Raw Materials"].AsSingle() : 0f;
+
+					// 1. Are we completely empty?
+					if (currentFuel < 0.25f)
+					{
+						ShowStrandedMenu();
+						return; // Stops all movement
+					}
+
+					// 2. Do we have enough for THIS specific jump?
+					if (currentFuel < totalFuelNeeded)
+					{
+						if (UI != null) UI.CombatLogPanel.Visible = true;
+						LogCombatMessage($"\n[color=red]*** MOVEMENT ABORTED: INSUFFICIENT FUEL ({totalFuelNeeded} Raw Materials Req) ***[/color]");
+						return; // Stops all movement
+					}
 				}
 
 				bool playerActuallyMoved = false;
@@ -504,6 +694,15 @@ public partial class BattleMap : Node2D
 	public override void _Process(double delta)
 	{
 		if (IsJumping || UI == null) return;
+
+		// --- AUTOMATIC INSTANT STRANDED POPUP ---
+		if (_globalData != null && _globalData.FleetResources["Raw Materials"].AsSingle() < 0.25f)
+		{
+			if (!Combat.InCombat && !IsFleetMoving && _strandedMenuWrapper != null && !_strandedMenuWrapper.Visible && !_distressSignalAmbush && !_isWaitingForDistressSignal)
+			{
+				ShowStrandedMenu();
+			}
+		}
 		
 		if (IsFleetMoving) Fog.UpdateVisibility();
 
@@ -537,11 +736,9 @@ public partial class BattleMap : Node2D
 						
 						_hoverTooltip.Text = $"=== {hoveredEntity.Name.ToUpper()} ===\nHP: {hoveredEntity.CurrentHP} / {hoveredEntity.MaxHP}\nShields: {hoveredEntity.CurrentShields} / {hoveredEntity.MaxShields}\nAttack: {hoveredEntity.AttackDamage} DMG\nRange: {hoveredEntity.AttackRange} Hexes";
 						
-						// --- NEW: Calculate absolute screen position to bypass camera zoom! ---
 						Vector2 screenPos = _hoverHighlight.GetGlobalTransformWithCanvas().Origin;
 						float currentZoom = GetViewportTransform().Scale.X;
 						
-						// Pins the tooltip to the right of the hex dynamically based on current zoom
 						_hoverTooltip.Position = screenPos + new Vector2((HexSize * currentZoom) + 15, -60);
 						_hoverTooltip.Visible = true;
 					}
@@ -587,6 +784,8 @@ public partial class BattleMap : Node2D
 			}
 		}
 
+		// STARGATE ROTATION HAS BEEN PERMANENTLY REMOVED FROM THIS LOOP!
+		
 		Hazards.ProcessHazards(delta);
 		UpdateJumpButton();
 		UpdateAttackButton();
@@ -1249,7 +1448,7 @@ public partial class BattleMap : Node2D
 			if (sfx != null) { SfxPlayer.Stream = sfx; SfxPlayer.Play(); }
 		}
 
-		if (ship.Type == "Player Fleet" && _globalData != null)
+		if (ship.Type == "Player Fleet" && _globalData != null && !Combat.InCombat)
 		{
 			int distance = HexMath.HexDistance(fromHex, toHex);
 			float fuelCost = distance * 0.25f;
@@ -1408,24 +1607,37 @@ public partial class BattleMap : Node2D
 		}
 		return target; 
 	}
+	
 	internal void AwardEnemyKillSalvage(string enemyName)
 	{
 		if (_globalData == null || UI == null) return;
 
-		// Generate random loot for the kill
 		Random rng = new Random();
-		float rawYield = rng.Next(15, 41); // 15 to 40 Raw Materials
-		float energyYield = rng.Next(1, 4); // 1 to 3 Energy Cores
-		float techYield = rng.Next(0, 100) < 25 ? 1f : 0f; // 25% chance to drop 1 Ancient Tech
+		float rawYield;
+		float energyYield;
+		float techYield;
 
-		// Add to Global Inventory
+		// --- GUARANTEED MASSIVE REWARD FOR SURVIVING THE AMBUSH ---
+		if (_distressSignalAmbush)
+		{
+			rawYield = rng.Next(100, 301); // Massive salvage
+			energyYield = rng.Next(3, 8); 
+			techYield = 1f; 
+			_distressSignalAmbush = false; // Turn flag off so subsequent kills in the same ambush drop normal loot
+		}
+		else
+		{
+			rawYield = rng.Next(15, 41); 
+			energyYield = rng.Next(1, 4); 
+			techYield = rng.Next(0, 100) < 25 ? 1f : 0f; 
+		}
+
 		_globalData.FleetResources["Raw Materials"] = _globalData.FleetResources["Raw Materials"].AsSingle() + rawYield;
 		_globalData.FleetResources["Energy Cores"] = _globalData.FleetResources["Energy Cores"].AsSingle() + energyYield;
 		_globalData.FleetResources["Ancient Tech"] = _globalData.FleetResources["Ancient Tech"].AsSingle() + techYield;
 
 		UpdateResourceUI();
 
-		// Print the loot drop to the Combat Log
 		UI.CombatLogPanel.Visible = true;
 		LogCombatMessage($"\n[color=#00ff00]*** {enemyName.ToUpper()} DESTROYED ***[/color]");
 		LogCombatMessage($"[color=cyan]Combat Salvage:[/color] {rawYield} Raw Materials, {energyYield} Energy Cores{(techYield > 0 ? ", 1 Ancient Tech" : "")}");
