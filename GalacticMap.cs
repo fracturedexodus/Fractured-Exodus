@@ -183,7 +183,30 @@ public partial class GalacticMap : Control
 			if (dist < 5.0f) 
 			{
 				_warpLine.DefaultColor = new Color(0,0,0,0);
-				if (IsInstanceValid(_jumpInfoPanel)) _jumpInfoPanel.Visible = false;
+				
+				// --- NEW: Display "Abort Jump" panel if hovering over current system ---
+				if (_isHoveringStar && _hoveredStarData != null && IsInstanceValid(_jumpInfoPanel))
+				{
+					_jumpInfoText.Text = $"[color=cyan][b]=== ABORT JUMP ===[/b][/color]\n\nReturn to {_hoveredStarData.SystemName.ToUpper()} local space.\n\n[color=green]COST: 0 Resources[/color]";
+					
+					Vector2 jumpPos = mousePos + new Vector2(20, -20);
+					
+					if (jumpPos.X + _jumpInfoPanel.Size.X > screenSize.X) jumpPos.X = mousePos.X - _jumpInfoPanel.Size.X - 20;
+					if (jumpPos.Y + _jumpInfoPanel.Size.Y > screenSize.Y) jumpPos.Y = screenSize.Y - _jumpInfoPanel.Size.Y - 10;
+					if (jumpPos.Y < 0) jumpPos.Y = 10;
+
+					_jumpInfoPanel.Position = jumpPos;
+					_jumpInfoPanel.Visible = true;
+
+					if (jumpPos.X < mousePos.X && _systemHoverPanel.Visible) 
+					{
+						_systemHoverPanel.Position = new Vector2(mousePos.X + 20, _systemHoverPanel.Position.Y);
+					}
+				}
+				else if (IsInstanceValid(_jumpInfoPanel))
+				{
+					_jumpInfoPanel.Visible = false;
+				}
 			}
 			else
 			{
@@ -245,7 +268,7 @@ public partial class GalacticMap : Control
 		_jumpInfoPanel = new PanelContainer();
 		_jumpInfoPanel.ZIndex = 200;
 		_jumpInfoPanel.Visible = false;
-		_jumpInfoPanel.MouseFilter = MouseFilterEnum.Ignore; // Ensure UI doesn't block clicks
+		_jumpInfoPanel.MouseFilter = MouseFilterEnum.Ignore; 
 
 		StyleBoxFlat jumpStyle = new StyleBoxFlat();
 		jumpStyle.BgColor = new Color(0.05f, 0.05f, 0.1f, 0.95f);
@@ -532,35 +555,28 @@ public partial class GalacticMap : Control
 		}
 	}
 
-	// --- COMPLETELY REWRITTEN FOR RELIABLE UI INTERACTION ---
 	private void DrawStarNode(StarMapData data)
 	{
-		// 1. Create a pure UI Control node as the clickable hit-box. 
-		// This bypasses physics layers entirely so it never gets blocked!
 		Control newStar = new Control();
 		
-		// Set a generous, invisible 40x40 hit area centered perfectly on the star's coordinates
 		newStar.CustomMinimumSize = new Vector2(40, 40);
 		newStar.Position = data.MapPosition - new Vector2(20, 20); 
-		newStar.MouseDefaultCursorShape = Control.CursorShape.PointingHand; // Show the player it's clickable!
+		newStar.MouseDefaultCursorShape = Control.CursorShape.PointingHand; 
 		AddChild(newStar); 
 
-		// 2. Draw the visual Star exactly in the center of the hit box
 		Sprite2D starSprite = new Sprite2D();
 		Texture2D tex = GD.Load<Texture2D>("res://star.png"); 
 		if (tex != null) starSprite.Texture = tex;
 		starSprite.Scale = new Vector2(data.StarScale, data.StarScale);
 		starSprite.Modulate = data.StarColor;
-		starSprite.Position = new Vector2(20, 20); // Center inside the Control
+		starSprite.Position = new Vector2(20, 20); 
 		newStar.AddChild(starSprite);
 
-		// Record your current position if you just warped in
 		if (_globalData != null && _globalData.JustJumped && data.SystemName == _globalData.SavedSystem)
 		{
 			_currentSystemMapPos = data.MapPosition; 
 		}
 
-		// 3. Connect UI Signals natively
 		newStar.GuiInput += (InputEvent @event) => 
 		{
 			if (@event is InputEventMouseButton mouseEvent && mouseEvent.Pressed && mouseEvent.ButtonIndex == MouseButton.Left)
@@ -625,15 +641,28 @@ public partial class GalacticMap : Control
 	// UI SIGNALS
 	// ==========================================
 
-	private void _on_star_clicked(StarMapData data, Control clickedStar) // Updated argument to Control
+	private void _on_star_clicked(StarMapData data, Control clickedStar) 
 	{
 		if (!IsInstanceValid(_systemWindow)) return;
 
 		if (_globalData.JustJumped)
 		{
-			if (data.SystemName == _globalData.SavedSystem) return; 
+			// --- NEW: ABORT JUMP LOGIC ---
+			// If they click the system they are already in, transition back safely with 0 fuel cost!
+			if (data.SystemName == _globalData.SavedSystem)
+			{
+				var cancelTransitioner = GetNodeOrNull<SceneTransition>("/root/SceneTransition");
+				if (cancelTransitioner != null) 
+				{
+					cancelTransitioner.ChangeScene("res://exploration_battle.tscn");
+				}
+				else 
+				{
+					GetTree().ChangeSceneToFile("res://exploration_battle.tscn");
+				}
+				return; 
+			}
 
-			// Target calculation is now precise because we are using data.MapPosition directly!
 			Vector2 FTLTarget = data.MapPosition;
 			float distance = _currentSystemMapPos.DistanceTo(FTLTarget);
 			
