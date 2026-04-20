@@ -87,6 +87,11 @@ public partial class Codex : Control
 		btnEnemy.Pressed += LoadEnemyShips;
 		_mainMenuContainer.AddChild(btnEnemy);
 
+		// --- NEW: VISITED SYSTEMS BUTTON ---
+		Button btnVisited = CreateMenuButton("VISITED SYSTEMS");
+		btnVisited.Pressed += ShowVisitedSystems;
+		_mainMenuContainer.AddChild(btnVisited);
+
 		Button btnBack = CreateMenuButton("RETURN TO TACTICAL");
 		btnBack.AddThemeColorOverride("font_color", new Color(1f, 0.4f, 0.4f));
 		btnBack.Pressed += ReturnToGame;
@@ -300,6 +305,40 @@ public partial class Codex : Control
 		}
 	}
 
+	// --- NEW: Load Visited Systems ---
+	private void ShowVisitedSystems()
+	{
+		_mainMenuContainer.Visible = false;
+		_listContainer.Visible = true;
+		foreach (Node child in _itemList.GetChildren()) child.QueueFree();
+
+		bool foundAny = false;
+
+		if (_globalData != null && _globalData.ExploredSystems != null)
+		{
+			foreach (var sysKvp in _globalData.ExploredSystems)
+			{
+				SystemData sys = sysKvp.Value;
+				if (sys.HasBeenVisited) 
+				{
+					foundAny = true;
+					Button btn = CreateMenuButton(sys.SystemName.ToUpper());
+					btn.Pressed += () => ShowSystemDetails(sys);
+					_itemList.AddChild(btn);
+				}
+			}
+		}
+
+		if (!foundAny)
+		{
+			Label noneLabel = new Label();
+			noneLabel.Text = "No systems visited yet.\nExplore the galaxy!";
+			noneLabel.HorizontalAlignment = HorizontalAlignment.Center;
+			noneLabel.AddThemeColorOverride("font_color", new Color(1f, 0.4f, 0.4f));
+			_itemList.AddChild(noneLabel);
+		}
+	}
+
 	// ==========================================
 	// DETAIL RENDERING
 	// ==========================================
@@ -382,6 +421,59 @@ public partial class Codex : Control
 			$"[color=gray]Note: Depleted worlds yield no further resources for fleet acquisition.[/color]";
 	}
 
+	// --- NEW: Show System Details ---
+	private void ShowSystemDetails(SystemData sys)
+	{
+		_detailTitle.Text = $"SYSTEM: {sys.SystemName.ToUpper()}";
+		
+		// Hide images for the system log view
+		_detailImage.Texture = null; 
+		_detailBlueprintImage.Texture = null;
+		_detailBlueprintImage.Visible = false;
+
+		int scanned = 0;
+		int salvaged = 0;
+		foreach (PlanetData p in sys.Planets)
+		{
+			if (p.HasBeenScanned) scanned++;
+			if (p.HasBeenSalvaged) salvaged++;
+		}
+
+		string region = "Unknown Region";
+		if (_globalData != null && _globalData.CurrentSectorStars != null)
+		{
+			foreach (var star in _globalData.CurrentSectorStars)
+			{
+				if (star.SystemName == sys.SystemName)
+				{
+					region = star.Region;
+					break;
+				}
+			}
+		}
+
+		string info = 
+			$"[center][color=#00ffff]--- SYSTEM TELEMETRY ---[/color][/center]\n\n" +
+			$"[b]GALACTIC REGION:[/b] {region}\n" +
+			$"[b]ORBITING PLANETS:[/b] {sys.Planets.Count}\n" +
+			$"[b]PLANETS SCANNED:[/b] {scanned} / {sys.Planets.Count}\n" +
+			$"[b]PLANETS SALVAGED:[/b] {salvaged} / {sys.Planets.Count}\n\n" +
+			$"[color=yellow][b]--- PLANETARY DATA ---[/b][/color]\n";
+
+		for (int i = 0; i < sys.Planets.Count; i++)
+		{
+			PlanetData p = sys.Planets[i];
+			
+			string status = "[color=gray]Unexplored[/color]";
+			if (p.HasBeenSalvaged) status = "[color=red]Depleted[/color]";
+			else if (p.HasBeenScanned) status = "[color=cyan]Scanned[/color]";
+			
+			info += $"- Planet {i+1} ({p.Habitability}): {status}\n";
+		}
+
+		_detailText.Text = info;
+	}
+
 	private void ReturnToGame()
 	{
 		SceneTransition transitioner = GetNodeOrNull<SceneTransition>("/root/SceneTransition");
@@ -408,14 +500,13 @@ public partial class Codex : Control
 		}
 	}
 
-	// --- NEW: Player Blueprint Fetcher ---
 	private string GetPlayerBlueprintImage(string shipName)
 	{
 		switch (shipName)
 		{
 			case "The Aegis Bastion": return "res://Ships/AegisBastion.png";
 			case "The Aether Skimmer": return "res://Ships/AetherSkimmer.png";
-			case "The Panacea Spire": return "res://Ships/PanaceSpire.png"; // Matches uploaded spelling
+			case "The Panacea Spire": return "res://Ships/PanaceSpire.png"; 
 			case "The Neptune Forge": return "res://Ships/NeptuneForge.png";
 			case "The Genesis Ark": return "res://Ships/GenesisArk.png";
 			case "The Relic Harvester": return "res://Ships/RelicHarvester.png";
