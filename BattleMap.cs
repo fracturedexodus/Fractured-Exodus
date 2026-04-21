@@ -144,7 +144,7 @@ public partial class BattleMap : Node2D
 		BuildStrandedMenu(); 
 		
 		_btnTrade = new Button();
-		_btnTrade.Text = "TRADE (1 Tech -> 500 Raw)";
+		_btnTrade.Text = "TRADE (1 Tech -> 100 Raw)";
 		_btnTrade.Visible = false;
 		_btnTrade.CustomMinimumSize = new Vector2(0, 40);
 		_btnTrade.AddThemeColorOverride("font_color", new Color(0f, 1f, 0.5f));
@@ -1025,12 +1025,12 @@ public partial class BattleMap : Node2D
 		{
 			_globalData.FleetResources["Ancient Tech"] = tech - 1f;
 			float raw = _globalData.FleetResources["Raw Materials"].AsSingle();
-			_globalData.FleetResources["Raw Materials"] = raw + 500f;
+			_globalData.FleetResources["Raw Materials"] = raw + 100f;
 			UpdateResourceUI();
 			
 			UI.CombatLogPanel.Visible = true;
 			LogCombatMessage("\n[color=green]--- TRADE SUCCESSFUL ---[/color]");
-			LogCombatMessage("Sold 1 Ancient Tech for 500 Raw Materials.");
+			LogCombatMessage("Sold 1 Ancient Tech for 100 Raw Materials.");
 		}
 		else
 		{
