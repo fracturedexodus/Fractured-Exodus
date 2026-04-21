@@ -356,6 +356,58 @@ public class CombatManager
 		}
 	}
 
+	// --- NEW: PARTICLE EFFECT SPAWNER ---
+	private void SpawnAttackEffect(Vector2I targetHex, bool hitShields)
+	{
+		CpuParticles2D effect = new CpuParticles2D();
+		
+		effect.Emitting = false;
+		effect.OneShot = true;
+		effect.Explosiveness = 0.9f; 
+		effect.Lifetime = 0.5f; 
+		
+		effect.EmissionShape = CpuParticles2D.EmissionShapeEnum.Sphere;
+		effect.EmissionSphereRadius = 10f;
+		
+		effect.Gravity = Vector2.Zero;
+		
+		if (hitShields)
+		{
+			// SHIELD IMPACT: Bright, fast blue energy burst
+			effect.Amount = 40;
+			effect.Spread = 180f;
+			effect.InitialVelocityMin = 100f;
+			effect.InitialVelocityMax = 250f;
+			effect.ScaleAmountMin = 2f;
+			effect.ScaleAmountMax = 4f;
+			effect.Color = new Color(0f, 0.8f, 1f, 0.8f); 
+		}
+		else
+		{
+			// HULL IMPACT: Fiery, debris-like explosion
+			effect.Amount = 60;
+			effect.Spread = 180f;
+			effect.InitialVelocityMin = 50f;
+			effect.InitialVelocityMax = 150f;
+			effect.ScaleAmountMin = 3f;
+			effect.ScaleAmountMax = 6f;
+			effect.Color = new Color(1f, 0.4f, 0f, 0.9f); 
+		}
+
+		effect.Position = HexMath.HexToPixel(targetHex, _map.HexSize);
+		effect.ZIndex = 50; 
+		
+		_map.AddChild(effect);
+		effect.Emitting = true;
+		
+		// Clean up the particle node after it finishes
+		SceneTreeTimer timer = _map.GetTree().CreateTimer(effect.Lifetime + 0.1f);
+		timer.Timeout += () => 
+		{
+			if (GodotObject.IsInstanceValid(effect)) effect.QueueFree();
+		};
+	}
+
 	public void PerformAttack(Vector2I attackerHex, Vector2I defenderHex)
 	{
 		MapEntity attacker = _map.HexContents[attackerHex];
@@ -410,13 +462,18 @@ public class CombatManager
 		if (hullDmg > 0) logMsg += $" ([color=#ff4444]Hull -{hullDmg}[/color])";
 		_map.LogCombatMessage(logMsg);
 
+		// --- NEW: FIRE OFF THE VISUAL FEEDBACK! ---
+		// If the damage hit the hull (meaning shields were down or bypassed), it triggers the fiery explosion.
+		// If the hull took 0 damage, it means the shield fully absorbed the hit.
+		bool hitShields = (shieldDmg > 0 && hullDmg == 0);
+		SpawnAttackEffect(defenderHex, hitShields);
+
 		if (_map.SelectedHexes.Count == 1 && _map.SelectedHexes[0] == attackerHex) _map.ToggleShipMenu(true, attacker);
 
 		if (defender.CurrentHP <= 0)
 		{
 			_map.LogCombatMessage($"[color=red]*** {defender.Name.ToUpper()} DESTROYED ***[/color]\n");
 			
-			// --- NEW: Give Player Salvage if it was an Enemy Fleet! ---
 			if (defender.Type == "Enemy Fleet")
 			{
 				_map.AwardEnemyKillSalvage(defender.Name);
