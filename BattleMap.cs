@@ -108,7 +108,6 @@ public partial class BattleMap : Node2D
 		_hoverHighlight.Visible = false; 
 		AddChild(_hoverHighlight);
 
-		// --- Setup the dynamic hover tooltip ---
 		_hoverTooltip = new Label();
 		_hoverTooltip.Visible = false;
 		
@@ -122,12 +121,10 @@ public partial class BattleMap : Node2D
 		_hoverTooltip.AddThemeColorOverride("font_color", new Color(1f, 1f, 1f));
 		_hoverTooltip.AddThemeFontSizeOverride("font_size", 14);
 
-		// --- Put the tooltip on a CanvasLayer so it ignores Camera Zoom ---
 		CanvasLayer tooltipLayer = new CanvasLayer { Layer = 100 };
 		AddChild(tooltipLayer);
 		tooltipLayer.AddChild(_hoverTooltip); 
 
-		// --- Massive Radar Circle Setup ---
 		_radarHighlight = new Polygon2D();
 		int circlePoints = 32;
 		Vector2[] radarPoints = new Vector2[circlePoints];
@@ -146,7 +143,6 @@ public partial class BattleMap : Node2D
 		ConnectUIButtons(); 
 		BuildStrandedMenu(); 
 		
-		// --- SETUP DYNAMIC TRADE BUTTON ---
 		_btnTrade = new Button();
 		_btnTrade.Text = "TRADE (1 Tech -> 500 Raw)";
 		_btnTrade.Visible = false;
@@ -174,7 +170,6 @@ public partial class BattleMap : Node2D
 
 		MapSpawner.PopulateMapFromMemory(_globalData, _maxMapRadius, HexSize, HexGrid, HexContents, EntityLayer, EnvironmentLayer, RadiationLayer, AsteroidHexes, RadiationHexes);
 		
-		// --- NEW: SPAWN OUTPOSTS INTO THE BATTLEMAP ---
 		if (_globalData != null && !string.IsNullOrEmpty(_globalData.SavedSystem) && _globalData.ExploredSystems.ContainsKey(_globalData.SavedSystem))
 		{
 			SystemData currentSys = _globalData.ExploredSystems[_globalData.SavedSystem];
@@ -189,8 +184,11 @@ public partial class BattleMap : Node2D
 						MaxHP = 1500, CurrentHP = 1500,
 						MaxShields = 500, CurrentShields = 500
 					};
-					// Spawns them safely and scales the sprite down to 0.35 so it fits
-					MapSpawner.SpawnEntityAtHex(outpost.HexPosition, outpost.SpritePath, outpostEntity, 0.35f, HexSize, HexGrid, HexContents, EntityLayer);
+					
+					// --- THE FIX: Self-healing code to catch bad .jpg save files! ---
+					string safeSpritePath = outpost.SpritePath.Replace(".jpg", ".png");
+					
+					MapSpawner.SpawnEntityAtHex(outpost.HexPosition, safeSpritePath, outpostEntity, 0.35f, HexSize, HexGrid, HexContents, EntityLayer);
 				}
 			}
 		}
@@ -909,7 +907,6 @@ public partial class BattleMap : Node2D
 		return null;
 	}
 	
-	// --- NEW: ADJACENCY CHECK FOR OUTPOSTS ---
 	private MapEntity GetAdjacentOutpost(MapEntity ship)
 	{
 		Vector2I shipHex = Vector2I.Zero;
@@ -942,7 +939,6 @@ public partial class BattleMap : Node2D
 		
 		if (UI.BtnLongRange != null) UI.BtnLongRange.Visible = false;
 		
-		// --- RESET TRADE BUTTON VISIBILITY ---
 		if (_btnTrade != null) _btnTrade.Visible = false;
 
 		if (expand && ship != null)
@@ -1011,7 +1007,6 @@ public partial class BattleMap : Node2D
 					}
 				}
 				
-				// --- NEW: OUTPOST ADJACENCY CHECK ---
 				MapEntity adjOutpost = GetAdjacentOutpost(ship);
 				if (adjOutpost != null && _btnTrade != null)
 				{
@@ -1021,7 +1016,6 @@ public partial class BattleMap : Node2D
 		}
 	}
 
-	// --- NEW: TRADE LOGIC ---
 	private void OnTradePressed()
 	{
 		if (_globalData == null) return;
@@ -1420,24 +1414,29 @@ public partial class BattleMap : Node2D
 
 		warpTween.Chain().TweenCallback(Callable.From(() => 
 		{
+			OnSaveGamePressed(); 
+
 			if (_globalData != null)
 			{
 				_globalData.JustJumped = true;
+				
 				if (isEmergencyJump)
 				{
 					Random rng = new Random();
 					if (_globalData.CurrentSectorStars != null && _globalData.CurrentSectorStars.Count > 1)
 					{
 						var availableStars = _globalData.CurrentSectorStars.Where(s => s.SystemName != _globalData.SavedSystem).ToList();
-						if (availableStars.Count > 0) _globalData.SavedSystem = availableStars[rng.Next(availableStars.Count)].SystemName;
-						else _globalData.SavedSystem = "SECTOR-" + rng.Next(1000, 9999);
+						if (availableStars.Count > 0)
+						{
+							_globalData.SavedSystem = availableStars[rng.Next(availableStars.Count)].SystemName;
+						}
 					}
-					else _globalData.SavedSystem = "SECTOR-" + rng.Next(1000, 9999);
 					_globalData.SavedPlanet = ""; 
+					
+					if (_globalData.HasMethod("SaveGame")) _globalData.Call("SaveGame");
 				}
 			}
 			
-			OnSaveGamePressed(); 
 			SceneTransition transitioner = GetNodeOrNull<SceneTransition>("/root/SceneTransition");
 			string nextScene = isEmergencyJump ? "res://exploration_battle.tscn" : "res://galactic_map.tscn";
 			
