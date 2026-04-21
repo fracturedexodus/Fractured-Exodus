@@ -21,6 +21,14 @@ public class PlanetData
 	public bool HasBeenSalvaged { get; set; } = false;
 }
 
+// --- NEW: OUTPOST DATA CLASS ---
+public class OutpostData
+{
+	public string Name { get; set; }
+	public Vector2I HexPosition { get; set; }
+	public string SpritePath { get; set; }
+}
+
 public class SystemData 
 {
 	public string SystemName { get; set; }
@@ -31,11 +39,14 @@ public class SystemData
 	public Godot.Collections.Array EnemyFleets { get; set; } = new Godot.Collections.Array();
 
 	// --- Persistent Map State ---
-	public List<Vector2I> StargateHexes { get; set; } = new List<Vector2I>(); // Updated to match GalacticMap!
+	public List<Vector2I> StargateHexes { get; set; } = new List<Vector2I>(); 
 	public List<Vector2I> AsteroidHexes { get; set; } = new List<Vector2I>();
 	public List<Vector2I> RadiationHexes { get; set; } = new List<Vector2I>();
 	public List<Vector2I> ExploredHexes { get; set; } = new List<Vector2I>();
 	public List<Vector2I> RadarRevealedHexes { get; set; } = new List<Vector2I>();
+	
+	// --- NEW: SYSTEM OUTPOSTS LIST ---
+	public List<OutpostData> Outposts { get; set; } = new List<OutpostData>();
 }
 
 public class StarMapData
@@ -150,6 +161,23 @@ public partial class GlobalData : Node
 				pArray.Add(pDict);
 			}
 			sysData["Planets"] = pArray;
+
+			// --- NEW: SAVE OUTPOST DATA ---
+			var oArray = new Godot.Collections.Array<Variant>();
+			if (sysKvp.Value.Outposts != null)
+			{
+				foreach (var o in sysKvp.Value.Outposts)
+				{
+					var oDict = new Godot.Collections.Dictionary<string, Variant>();
+					oDict["Name"] = o.Name;
+					oDict["Q"] = o.HexPosition.X;
+					oDict["R"] = o.HexPosition.Y;
+					oDict["SpritePath"] = o.SpritePath;
+					oArray.Add(oDict);
+				}
+			}
+			sysData["Outposts"] = oArray;
+
 			exploredDict[sysKvp.Key] = sysData;
 		}
 		saveData["ExploredSystems"] = exploredDict;
@@ -226,6 +254,22 @@ public partial class GlobalData : Node
 						HasBeenSalvaged = pDict.ContainsKey("HasBeenSalvaged") ? (bool)pDict["HasBeenSalvaged"] : false
 					});
 				}
+
+				// --- NEW: LOAD OUTPOST DATA ---
+				if (sysDict.ContainsKey("Outposts"))
+				{
+					var oArray = (Godot.Collections.Array)sysDict["Outposts"];
+					foreach (var oVar in oArray)
+					{
+						var oDict = (Godot.Collections.Dictionary)oVar;
+						newSys.Outposts.Add(new OutpostData {
+							Name = (string)oDict["Name"],
+							HexPosition = new Vector2I((int)oDict["Q"], (int)oDict["R"]),
+							SpritePath = (string)oDict["SpritePath"]
+						});
+					}
+				}
+
 				ExploredSystems[sysName] = newSys;
 			}
 		}

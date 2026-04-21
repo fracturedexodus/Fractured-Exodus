@@ -184,7 +184,6 @@ public partial class GalacticMap : Control
 			{
 				_warpLine.DefaultColor = new Color(0,0,0,0);
 				
-				// --- NEW: Display "Abort Jump" panel if hovering over current system ---
 				if (_isHoveringStar && _hoveredStarData != null && IsInstanceValid(_jumpInfoPanel))
 				{
 					_jumpInfoText.Text = $"[color=cyan][b]=== ABORT JUMP ===[/b][/color]\n\nReturn to {_hoveredStarData.SystemName.ToUpper()} local space.\n\n[color=green]COST: 0 Resources[/color]";
@@ -500,6 +499,7 @@ public partial class GalacticMap : Control
 
 			newSystem.AsteroidHexes = new List<Vector2I>();
 			newSystem.RadiationHexes = new List<Vector2I>();
+			newSystem.Outposts = new List<OutpostData>(); // --- NEW: OUTPOST LIST INITIALIZATION ---
 			
 			int gateCount = rng.RandiRange(1, 2);
 			for (int g = 0; g < gateCount; g++)
@@ -517,6 +517,27 @@ public partial class GalacticMap : Control
 			for (int r = 0; r < radCount; r++)
 			{
 				newSystem.RadiationHexes.Add(GetRandomHex(rng, 5, 34));
+			}
+
+			// --- NEW: OUTPOST GENERATION LOGIC (80% CHANCE) ---
+			int outpostRoll = rng.RandiRange(1, 100);
+			if (outpostRoll <= 80)
+			{
+				int numOutposts = rng.RandiRange(1, 3);
+				string[] outpostSprites = {
+					"res://BlackMarketAsteroidExchangeSprite.png",
+					"res://ScrappersFurnaceHubSprite.jpg",
+					"res://VerdantPactBiosphereOutpostSprite.png"
+				};
+				
+				for (int o = 0; o < numOutposts; o++)
+				{
+					OutpostData outpost = new OutpostData();
+					outpost.Name = $"{newSystem.SystemName} Outpost {o + 1}";
+					outpost.HexPosition = GetRandomHex(rng, 8, 25);
+					outpost.SpritePath = outpostSprites[rng.RandiRange(0, outpostSprites.Length - 1)];
+					newSystem.Outposts.Add(outpost);
+				}
 			}
 
 			for (int p = 0; p < newStarData.PlanetCount; p++)
@@ -647,8 +668,6 @@ public partial class GalacticMap : Control
 
 		if (_globalData.JustJumped)
 		{
-			// --- NEW: ABORT JUMP LOGIC ---
-			// If they click the system they are already in, transition back safely with 0 fuel cost!
 			if (data.SystemName == _globalData.SavedSystem)
 			{
 				var cancelTransitioner = GetNodeOrNull<SceneTransition>("/root/SceneTransition");

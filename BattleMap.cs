@@ -65,6 +65,9 @@ public partial class BattleMap : Node2D
 	private CenterContainer _strandedMenuWrapper;
 	private bool _distressSignalAmbush = false; 
 	private bool _isWaitingForDistressSignal = false; 
+	
+	// --- DYNAMIC TRADE BUTTON ---
+	private Button _btnTrade;
 
 	public override void _Ready()
 	{
@@ -143,6 +146,22 @@ public partial class BattleMap : Node2D
 		ConnectUIButtons(); 
 		BuildStrandedMenu(); 
 		
+		// --- SETUP DYNAMIC TRADE BUTTON ---
+		_btnTrade = new Button();
+		_btnTrade.Text = "TRADE (1 Tech -> 500 Raw)";
+		_btnTrade.Visible = false;
+		_btnTrade.CustomMinimumSize = new Vector2(0, 40);
+		_btnTrade.AddThemeColorOverride("font_color", new Color(0f, 1f, 0.5f));
+		_btnTrade.Pressed += OnTradePressed;
+		if (UI != null && UI.BtnSalvage != null)
+		{
+			UI.BtnSalvage.GetParent().AddChild(_btnTrade);
+		}
+		else
+		{
+			AddChild(_btnTrade); 
+		}
+		
 		MapSpawner.SetupSpaceBackground(_bgLayer, GetViewportRect().Size);
 		MapSpawner.GenerateGrid(_maxMapRadius, HexSize, _hexScene, _gridLayer, HexGrid);
 		
@@ -155,6 +174,27 @@ public partial class BattleMap : Node2D
 
 		MapSpawner.PopulateMapFromMemory(_globalData, _maxMapRadius, HexSize, HexGrid, HexContents, EntityLayer, EnvironmentLayer, RadiationLayer, AsteroidHexes, RadiationHexes);
 		
+		// --- NEW: SPAWN OUTPOSTS INTO THE BATTLEMAP ---
+		if (_globalData != null && !string.IsNullOrEmpty(_globalData.SavedSystem) && _globalData.ExploredSystems.ContainsKey(_globalData.SavedSystem))
+		{
+			SystemData currentSys = _globalData.ExploredSystems[_globalData.SavedSystem];
+			if (currentSys.Outposts != null)
+			{
+				foreach (var outpost in currentSys.Outposts)
+				{
+					MapEntity outpostEntity = new MapEntity {
+						Name = outpost.Name,
+						Type = "Outpost",
+						Details = "Trading Hub",
+						MaxHP = 1500, CurrentHP = 1500,
+						MaxShields = 500, CurrentShields = 500
+					};
+					// Spawns them safely and scales the sprite down to 0.35 so it fits
+					MapSpawner.SpawnEntityAtHex(outpost.HexPosition, outpost.SpritePath, outpostEntity, 0.35f, HexSize, HexGrid, HexContents, EntityLayer);
+				}
+			}
+		}
+
 		foreach (var kvp in HexContents)
 		{
 			if (kvp.Value.Type == "StarGate" && GodotObject.IsInstanceValid(kvp.Value.VisualSprite))
@@ -248,7 +288,6 @@ public partial class BattleMap : Node2D
 
 		_strandedMenuWrapper = new CenterContainer();
 		_strandedMenuWrapper.SetAnchorsPreset(Control.LayoutPreset.FullRect); 
-		// --- FIX: This physically blocks mouse clicks from passing through to the map below ---
 		_strandedMenuWrapper.MouseFilter = Control.MouseFilterEnum.Stop; 
 		_strandedMenuWrapper.Visible = false;
 		menuLayer.AddChild(_strandedMenuWrapper);
@@ -258,7 +297,7 @@ public partial class BattleMap : Node2D
 		StyleBoxFlat style = new StyleBoxFlat();
 		style.BgColor = new Color(0.05f, 0.05f, 0.1f, 0.95f);
 		style.BorderWidthTop = 2; style.BorderWidthBottom = 2; style.BorderWidthLeft = 2; style.BorderWidthRight = 2;
-		style.BorderColor = new Color(1f, 0f, 0f, 0.8f); // Danger Red
+		style.BorderColor = new Color(1f, 0f, 0f, 0.8f); 
 		style.ContentMarginLeft = 20; style.ContentMarginRight = 20; style.ContentMarginTop = 20; style.ContentMarginBottom = 20;
 		strandedPanel.AddThemeStyleboxOverride("panel", style);
 		
@@ -447,7 +486,6 @@ public partial class BattleMap : Node2D
 
 	public override void _Input(InputEvent @event)
 	{
-		// --- STRICT BLOCKADE: IF STRANDED MENU IS OPEN, ABSOLUTELY NO CLICKS PASS THROUGH ---
 		if (_strandedMenuWrapper != null && _strandedMenuWrapper.Visible) return;
 
 		if (IsTargetingLongRange)
@@ -499,24 +537,21 @@ public partial class BattleMap : Node2D
 				if (!containsPlayerFleet) return;
 				if (totalFuelNeeded == 0f && !Combat.InCombat) return;
 
-				// --- HARD MATH STOP: FUEL REQUIREMENT CHECK (ONLY OUTSIDE COMBAT) ---
 				if (!Combat.InCombat)
 				{
 					float currentFuel = _globalData != null ? _globalData.FleetResources["Raw Materials"].AsSingle() : 0f;
 
-					// 1. Are we completely empty?
 					if (currentFuel < 0.25f)
 					{
 						ShowStrandedMenu();
-						return; // Stops all movement
+						return; 
 					}
 
-					// 2. Do we have enough for THIS specific jump?
 					if (currentFuel < totalFuelNeeded)
 					{
 						if (UI != null) UI.CombatLogPanel.Visible = true;
 						LogCombatMessage($"\n[color=red]*** MOVEMENT ABORTED: INSUFFICIENT FUEL ({totalFuelNeeded} Raw Materials Req) ***[/color]");
-						return; // Stops all movement
+						return; 
 					}
 				}
 
@@ -695,7 +730,6 @@ public partial class BattleMap : Node2D
 	{
 		if (IsJumping || UI == null) return;
 
-		// --- AUTOMATIC INSTANT STRANDED POPUP ---
 		if (_globalData != null && _globalData.FleetResources["Raw Materials"].AsSingle() < 0.25f)
 		{
 			if (!Combat.InCombat && !IsFleetMoving && _strandedMenuWrapper != null && !_strandedMenuWrapper.Visible && !_distressSignalAmbush && !_isWaitingForDistressSignal)
@@ -783,8 +817,6 @@ public partial class BattleMap : Node2D
 				rock.Rotation += spin * (float)delta;
 			}
 		}
-
-		// STARGATE ROTATION HAS BEEN PERMANENTLY REMOVED FROM THIS LOOP!
 		
 		Hazards.ProcessHazards(delta);
 		UpdateJumpButton();
@@ -876,6 +908,19 @@ public partial class BattleMap : Node2D
 		}
 		return null;
 	}
+	
+	// --- NEW: ADJACENCY CHECK FOR OUTPOSTS ---
+	private MapEntity GetAdjacentOutpost(MapEntity ship)
+	{
+		Vector2I shipHex = Vector2I.Zero;
+		foreach(var kvp in HexContents) if (kvp.Value == ship) shipHex = kvp.Key;
+		foreach(Vector2I dir in HexMath.Directions)
+		{
+			Vector2I n = shipHex + dir;
+			if (HexContents.ContainsKey(n) && HexContents[n].Type == "Outpost") return HexContents[n];
+		}
+		return null;
+	}
 
 	private PlanetData GetPlanetData(string planetName)
 	{
@@ -896,6 +941,9 @@ public partial class BattleMap : Node2D
 		tween.TweenProperty(UI.ShipMenuPanel, "position:x", targetX, 0.3f).SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.Out);
 		
 		if (UI.BtnLongRange != null) UI.BtnLongRange.Visible = false;
+		
+		// --- RESET TRADE BUTTON VISIBILITY ---
+		if (_btnTrade != null) _btnTrade.Visible = false;
 
 		if (expand && ship != null)
 		{
@@ -962,7 +1010,38 @@ public partial class BattleMap : Node2D
 						}
 					}
 				}
+				
+				// --- NEW: OUTPOST ADJACENCY CHECK ---
+				MapEntity adjOutpost = GetAdjacentOutpost(ship);
+				if (adjOutpost != null && _btnTrade != null)
+				{
+					_btnTrade.Visible = true;
+				}
 			}
+		}
+	}
+
+	// --- NEW: TRADE LOGIC ---
+	private void OnTradePressed()
+	{
+		if (_globalData == null) return;
+		float tech = _globalData.FleetResources["Ancient Tech"].AsSingle();
+		
+		if (tech >= 1f)
+		{
+			_globalData.FleetResources["Ancient Tech"] = tech - 1f;
+			float raw = _globalData.FleetResources["Raw Materials"].AsSingle();
+			_globalData.FleetResources["Raw Materials"] = raw + 500f;
+			UpdateResourceUI();
+			
+			UI.CombatLogPanel.Visible = true;
+			LogCombatMessage("\n[color=green]--- TRADE SUCCESSFUL ---[/color]");
+			LogCombatMessage("Sold 1 Ancient Tech for 500 Raw Materials.");
+		}
+		else
+		{
+			UI.CombatLogPanel.Visible = true;
+			LogCombatMessage("\n[color=red]*** INSUFFICIENT ANCIENT TECH ***[/color]");
 		}
 	}
 
@@ -1617,13 +1696,12 @@ public partial class BattleMap : Node2D
 		float energyYield;
 		float techYield;
 
-		// --- GUARANTEED MASSIVE REWARD FOR SURVIVING THE AMBUSH ---
 		if (_distressSignalAmbush)
 		{
-			rawYield = rng.Next(100, 301); // Massive salvage
+			rawYield = rng.Next(100, 301); 
 			energyYield = rng.Next(3, 8); 
 			techYield = 1f; 
-			_distressSignalAmbush = false; // Turn flag off so subsequent kills in the same ambush drop normal loot
+			_distressSignalAmbush = false; 
 		}
 		else
 		{
