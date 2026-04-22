@@ -408,21 +408,34 @@ public static class MapSpawner
 	}
 
 	public static Vector2I FindEmptyHexInRing(int radius, Random rng, Dictionary<Vector2I, Node2D> hexGrid, Dictionary<Vector2I, MapEntity> hexContents)
+{
+	List<Vector2I> ringHexes = new List<Vector2I>();
+	
+	// Loop through the entire generated grid to find hexes perfectly matching the radius.
+	// This perfectly distributes valid locations in a 360-degree ring!
+	foreach (Vector2I hex in hexGrid.Keys)
 	{
-		List<Vector2I> ringHexes = new List<Vector2I>();
-		Vector2I currentHex = new Vector2I(0, -radius);
-		foreach (Vector2I dir in HexMath.Directions)
+		if (HexMath.HexDistance(Vector2I.Zero, hex) == radius)
 		{
-			for (int i = 0; i < radius; i++)
-			{
-				ringHexes.Add(currentHex);
-				currentHex += dir;
-			}
+			ringHexes.Add(hex);
 		}
-		ShuffleList(ringHexes, rng);
-		foreach (var hex in ringHexes) if (hexGrid.ContainsKey(hex) && !hexContents.ContainsKey(hex)) return hex;
-		return new Vector2I(radius, 0); 
 	}
+
+	// Shuffle the valid ring hexes to ensure random placement
+	ShuffleList(ringHexes, rng);
+	
+	// Find the first one that doesn't have an entity in it
+	foreach (var hex in ringHexes) 
+	{
+		if (!hexContents.ContainsKey(hex)) 
+		{
+			return hex;
+		}
+	}
+	
+	// Fallback if the entire ring is somehow completely full
+	return new Vector2I(radius, 0); 
+}
 
 	private static void ShuffleList<T>(List<T> list, Random rng)  
 	{  
