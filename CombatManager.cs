@@ -463,8 +463,6 @@ public class CombatManager
 		_map.LogCombatMessage(logMsg);
 
 		// --- NEW: FIRE OFF THE VISUAL FEEDBACK! ---
-		// If the damage hit the hull (meaning shields were down or bypassed), it triggers the fiery explosion.
-		// If the hull took 0 damage, it means the shield fully absorbed the hit.
 		bool hitShields = (shieldDmg > 0 && hullDmg == 0);
 		SpawnAttackEffect(defenderHex, hitShields);
 
@@ -474,6 +472,7 @@ public class CombatManager
 		{
 			_map.LogCombatMessage($"[color=red]*** {defender.Name.ToUpper()} DESTROYED ***[/color]\n");
 			
+			// --- NEW: Give Player Salvage if it was an Enemy Fleet! ---
 			if (defender.Type == "Enemy Fleet")
 			{
 				_map.AwardEnemyKillSalvage(defender.Name);
@@ -532,7 +531,8 @@ public class CombatManager
 				if (_map.HexContents.ContainsKey(neighbor))
 				{
 					string type = _map.HexContents[neighbor].Type;
-					if (type == "Planet" || type == "Base Planet (Player Start)" || type == "Celestial Body" || type == "Player Fleet" || type == "Enemy Fleet" || type == "StarGate") isBlocked = true; 
+					// --- THE FIX: AI CAN NO LONGER PATHFIND OVER OUTPOSTS! ---
+					if (type == "Planet" || type == "Base Planet (Player Start)" || type == "Celestial Body" || type == "Player Fleet" || type == "Enemy Fleet" || type == "StarGate" || type == "Outpost") isBlocked = true; 
 				}
 
 				if (!isBlocked)

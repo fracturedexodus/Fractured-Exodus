@@ -1584,43 +1584,43 @@ public partial class BattleMap : Node2D
 	}
 
 	internal Dictionary<Vector2I, int> GetReachableHexes(Vector2I startHex, int movementRange)
+{
+	Dictionary<Vector2I, int> costSoFar = new Dictionary<Vector2I, int>();
+	costSoFar[startHex] = 0;
+	Queue<Vector2I> frontier = new Queue<Vector2I>();
+	frontier.Enqueue(startHex);
+
+	while (frontier.Count > 0)
 	{
-		Dictionary<Vector2I, int> costSoFar = new Dictionary<Vector2I, int>();
-		costSoFar[startHex] = 0;
-		Queue<Vector2I> frontier = new Queue<Vector2I>();
-		frontier.Enqueue(startHex);
-
-		while (frontier.Count > 0)
+		Vector2I current = frontier.Dequeue();
+		foreach (Vector2I dir in HexMath.Directions)
 		{
-			Vector2I current = frontier.Dequeue();
-			foreach (Vector2I dir in HexMath.Directions)
+			Vector2I next = current + dir;
+			if (!HexGrid.ContainsKey(next)) continue;
+
+			bool isBlocked = false;
+			if (HexContents.ContainsKey(next))
 			{
-				Vector2I next = current + dir;
-				if (!HexGrid.ContainsKey(next)) continue;
+				string type = HexContents[next].Type;
+				// THE FIX: Added "Outpost" to the blocked list so ships can't run it over!
+				if (type == "Planet" || type == "Base Planet (Player Start)" || type == "Celestial Body" || type == "Player Fleet" || type == "Enemy Fleet" || type == "StarGate" || type == "Outpost") isBlocked = true; 
+			}
 
-				bool isBlocked = false;
-				if (HexContents.ContainsKey(next))
+			if (isBlocked) continue;
+
+			int newCost = costSoFar[current] + 1; 
+			if (newCost <= movementRange)
+			{
+				if (!costSoFar.ContainsKey(next) || newCost < costSoFar[next])
 				{
-					string type = HexContents[next].Type;
-					if (type == "Planet" || type == "Base Planet (Player Start)" || type == "Celestial Body" || type == "Player Fleet" || type == "Enemy Fleet" || type == "StarGate") isBlocked = true; 
-				}
-
-				if (isBlocked) continue;
-
-				int newCost = costSoFar[current] + 1; 
-				if (newCost <= movementRange)
-				{
-					if (!costSoFar.ContainsKey(next) || newCost < costSoFar[next])
-					{
-						costSoFar[next] = newCost;
-						frontier.Enqueue(next);
-					}
+					costSoFar[next] = newCost;
+					frontier.Enqueue(next);
 				}
 			}
 		}
-		return costSoFar;
 	}
-
+	return costSoFar;
+}
 	internal void UpdateHighlights()
 	{
 		foreach (Node child in _highlightLayer.GetChildren()) child.QueueFree();
