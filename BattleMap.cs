@@ -66,8 +66,10 @@ public partial class BattleMap : Node2D
 	private bool _distressSignalAmbush = false; 
 	private bool _isWaitingForDistressSignal = false; 
 	
-	// --- DYNAMIC TRADE BUTTON ---
+	// --- DYNAMIC TRADE BUTTON & SHOP UI ---
 	private Button _btnTrade;
+	private CenterContainer _shopMenuWrapper;
+	private VBoxContainer _shopItemList;
 
 	public override void _Ready()
 	{
@@ -142,13 +144,15 @@ public partial class BattleMap : Node2D
 		SetupAudio(); 
 		ConnectUIButtons(); 
 		BuildStrandedMenu(); 
+		BuildShopUI(); // --- NEW: BUILD THE SHOP UI ---
 		
 		_btnTrade = new Button();
-		_btnTrade.Text = "TRADE (1 Tech -> 100 Raw)";
+		_btnTrade.Text = "ACCESS OUTPOST EXCHANGE"; // Updated Button Text
 		_btnTrade.Visible = false;
 		_btnTrade.CustomMinimumSize = new Vector2(0, 40);
-		_btnTrade.AddThemeColorOverride("font_color", new Color(0f, 1f, 0.5f));
-		_btnTrade.Pressed += OnTradePressed;
+		_btnTrade.AddThemeColorOverride("font_color", new Color(0f, 1f, 0.8f));
+		_btnTrade.Pressed += OpenShop; // Pointed to the new Shop Menu
+		
 		if (UI != null && UI.BtnSalvage != null)
 		{
 			UI.BtnSalvage.GetParent().AddChild(_btnTrade);
@@ -185,9 +189,7 @@ public partial class BattleMap : Node2D
 						MaxShields = 500, CurrentShields = 500
 					};
 					
-					// --- THE FIX: Self-healing code to catch bad .jpg save files! ---
 					string safeSpritePath = outpost.SpritePath.Replace(".jpg", ".png");
-					
 					MapSpawner.SpawnEntityAtHex(outpost.HexPosition, safeSpritePath, outpostEntity, 0.35f, HexSize, HexGrid, HexContents, EntityLayer);
 				}
 			}
@@ -244,6 +246,28 @@ public partial class BattleMap : Node2D
 		}
 	}
 
+	// --- UNIVERSAL WALKABILITY CHECK ---
+	internal bool IsHexWalkable(Vector2I hex)
+	{
+		if (!HexGrid.ContainsKey(hex)) return false;
+		
+		if (HexContents.ContainsKey(hex))
+		{
+			string type = HexContents[hex].Type;
+			if (type == "Planet" || 
+				type == "Base Planet (Player Start)" || 
+				type == "Celestial Body" || 
+				type == "Player Fleet" || 
+				type == "Enemy Fleet" || 
+				type == "StarGate" || 
+				type == "Outpost") 
+			{
+				return false; 
+			}
+		}
+		return true;
+	}
+
 	internal void UpdateResourceUI()
 	{
 		if (UI == null || UI.InventoryDisplay == null || _globalData == null) return;
@@ -274,6 +298,129 @@ public partial class BattleMap : Node2D
 		UI.TurnLabel.Text = $"TURN {CurrentTurn}";
 		
 		if (UI.BtnLongRange != null) UI.BtnLongRange.Pressed += OnLongRangePressed;
+	}
+
+	// ==========================================
+	// OUTPOST SHOP UI
+	// ==========================================
+
+	private void BuildShopUI()
+	{
+		CanvasLayer shopLayer = new CanvasLayer { Layer = 160 };
+		AddChild(shopLayer);
+
+		_shopMenuWrapper = new CenterContainer();
+		_shopMenuWrapper.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+		_shopMenuWrapper.MouseFilter = Control.MouseFilterEnum.Stop;
+		_shopMenuWrapper.Visible = false;
+		shopLayer.AddChild(_shopMenuWrapper);
+
+		PanelContainer shopPanel = new PanelContainer();
+		StyleBoxFlat style = new StyleBoxFlat();
+		style.BgColor = new Color(0.05f, 0.05f, 0.1f, 0.95f);
+		style.BorderWidthTop = 2; style.BorderWidthBottom = 2; style.BorderWidthLeft = 2; style.BorderWidthRight = 2;
+		style.BorderColor = new Color(0f, 1f, 0.8f, 0.8f);
+		style.ContentMarginLeft = 25; style.ContentMarginRight = 25; style.ContentMarginTop = 20; style.ContentMarginBottom = 20;
+		shopPanel.AddThemeStyleboxOverride("panel", style);
+		_shopMenuWrapper.AddChild(shopPanel);
+
+		VBoxContainer mainVBox = new VBoxContainer();
+		mainVBox.AddThemeConstantOverride("separation", 15);
+		shopPanel.AddChild(mainVBox);
+
+		Label title = new Label();
+		title.Text = "=== BLACK MARKET EXCHANGE ===";
+		title.HorizontalAlignment = HorizontalAlignment.Center;
+		title.AddThemeColorOverride("font_color", new Color(0f, 1f, 0.8f));
+		title.AddThemeFontSizeOverride("font_size", 18);
+		mainVBox.AddChild(title);
+
+		ScrollContainer scroll = new ScrollContainer();
+		scroll.CustomMinimumSize = new Vector2(500, 350);
+		mainVBox.AddChild(scroll);
+
+		_shopItemList = new VBoxContainer();
+		_shopItemList.AddThemeConstantOverride("separation", 15);
+		scroll.AddChild(_shopItemList);
+
+		Button closeBtn = new Button();
+		closeBtn.Text = "CLOSE TERMINAL";
+		closeBtn.CustomMinimumSize = new Vector2(0, 40);
+		closeBtn.Pressed += () => _shopMenuWrapper.Visible = false;
+		mainVBox.AddChild(closeBtn);
+	}
+
+	private void OpenShop()
+	{
+		if (_globalData == null || _globalData.MasterEquipmentDB == null) return;
+
+		foreach (Node child in _shopItemList.GetChildren()) child.QueueFree();
+
+		float pTech = _globalData.FleetResources["Ancient Tech"].AsSingle();
+		float pRaw = _globalData.FleetResources["Raw Materials"].AsSingle();
+
+		foreach (var kvp in _globalData.MasterEquipmentDB)
+		{
+			EquipmentData item = kvp.Value;
+			
+			HBoxContainer row = new HBoxContainer();
+			
+			RichTextLabel info = new RichTextLabel();
+			info.BbcodeEnabled = true;
+			info.Text = $"[b][color=yellow]{item.Name}[/color][/b] ({item.Category})\n{item.Description}\n[color=cyan]Cost: {item.CostTech} Tech, {item.CostRaw} Raw[/color]";
+			info.CustomMinimumSize = new Vector2(380, 75);
+			info.FitContent = true;
+			row.AddChild(info);
+
+			Button buyBtn = new Button();
+			buyBtn.Text = "BUY";
+			buyBtn.CustomMinimumSize = new Vector2(90, 40);
+			buyBtn.SizeFlagsVertical = Control.SizeFlags.ShrinkCenter;
+			
+			if (pTech < item.CostTech || pRaw < item.CostRaw) 
+			{
+				buyBtn.Disabled = true;
+				buyBtn.Text = "FUNDS";
+			}
+
+			buyBtn.Pressed += () => BuyItem(item.ItemID);
+			row.AddChild(buyBtn);
+
+			_shopItemList.AddChild(row);
+		}
+
+		_shopMenuWrapper.Visible = true;
+	}
+
+	private void BuyItem(string itemID)
+	{
+		if (_globalData == null) return;
+		EquipmentData item = _globalData.MasterEquipmentDB[itemID];
+
+		float pTech = _globalData.FleetResources["Ancient Tech"].AsSingle();
+		float pRaw = _globalData.FleetResources["Raw Materials"].AsSingle();
+
+		if (pTech >= item.CostTech && pRaw >= item.CostRaw)
+		{
+			_globalData.FleetResources["Ancient Tech"] = pTech - item.CostTech;
+			_globalData.FleetResources["Raw Materials"] = pRaw - item.CostRaw;
+			_globalData.UnequippedInventory.Add(itemID);
+			
+			UpdateResourceUI();
+			OnSaveGamePressed(); // Auto-save after a purchase
+			
+			if (UI != null) UI.CombatLogPanel.Visible = true;
+			LogCombatMessage($"\n[color=green]--- TRANSACTION APPROVED ---[/color]");
+			LogCombatMessage($"Purchased: [color=yellow]{item.Name}[/color] (-{item.CostTech} Tech, -{item.CostRaw} Raw)");
+			
+			if (SfxPlayer != null)
+			{
+				AudioStream buySfx = GD.Load<AudioStream>("res://Sounds/laser.mp3"); 
+				if (buySfx != null) { SfxPlayer.Stream = buySfx; SfxPlayer.PitchScale = 1.2f; SfxPlayer.Play(); }
+			}
+
+			OpenShop(); // Refresh the shop to update the greyed out buttons
+		}
 	}
 
 	// ==========================================
@@ -485,6 +632,7 @@ public partial class BattleMap : Node2D
 	public override void _Input(InputEvent @event)
 	{
 		if (_strandedMenuWrapper != null && _strandedMenuWrapper.Visible) return;
+		if (_shopMenuWrapper != null && _shopMenuWrapper.Visible) return; // Prevent movement while shopping
 
 		if (IsTargetingLongRange)
 		{
@@ -564,7 +712,7 @@ public partial class BattleMap : Node2D
 						
 						if (!Combat.InCombat)
 						{
-							if (MapSpawner.IsHexEmpty(targetHex, HexGrid, HexContents))
+							if (IsHexWalkable(targetHex))
 							{
 								MoveShip(shipHex, targetHex, 0);
 								SelectedHexes[0] = targetHex;
@@ -681,7 +829,7 @@ public partial class BattleMap : Node2D
 				{
 					Vector2I neighbor = currentPos + dir;
 					if (!HexGrid.ContainsKey(neighbor)) continue;
-					if (MapSpawner.IsHexEmpty(neighbor, HexGrid, HexContents))
+					if (IsHexWalkable(neighbor))
 					{
 						int distToTarget = HexMath.HexDistance(neighbor, targetPlayer);
 						if (distToTarget < bestDist) { bestDist = distToTarget; bestNeighbor = neighbor; }
@@ -694,7 +842,7 @@ public partial class BattleMap : Node2D
 				foreach (Vector2I dir in HexMath.Directions)
 				{
 					Vector2I neighbor = currentPos + dir;
-					if (HexGrid.ContainsKey(neighbor) && MapSpawner.IsHexEmpty(neighbor, HexGrid, HexContents))
+					if (IsHexWalkable(neighbor))
 					{
 						if (HexMath.HexDistance(neighbor, targetPlayer) > ScanningRange)
 						{
@@ -1016,29 +1164,6 @@ public partial class BattleMap : Node2D
 		}
 	}
 
-	private void OnTradePressed()
-	{
-		if (_globalData == null) return;
-		float tech = _globalData.FleetResources["Ancient Tech"].AsSingle();
-		
-		if (tech >= 1f)
-		{
-			_globalData.FleetResources["Ancient Tech"] = tech - 1f;
-			float raw = _globalData.FleetResources["Raw Materials"].AsSingle();
-			_globalData.FleetResources["Raw Materials"] = raw + 100f;
-			UpdateResourceUI();
-			
-			UI.CombatLogPanel.Visible = true;
-			LogCombatMessage("\n[color=green]--- TRADE SUCCESSFUL ---[/color]");
-			LogCombatMessage("Sold 1 Ancient Tech for 100 Raw Materials.");
-		}
-		else
-		{
-			UI.CombatLogPanel.Visible = true;
-			LogCombatMessage("\n[color=red]*** INSUFFICIENT ANCIENT TECH ***[/color]");
-		}
-	}
-
 	private void OnScanPressed()
 	{
 		if (IsFleetMoving) return; 
@@ -1202,8 +1327,16 @@ public partial class BattleMap : Node2D
 			{
 				LogCombatMessage($"- {kvp.Key}: {kvp.Value.AsSingle():0.##}");
 			}
+			
+			int weaponCount = _globalData.UnequippedInventory.Count(id => id.StartsWith("WPN_"));
+			int shieldCount = _globalData.UnequippedInventory.Count(id => id.StartsWith("SHLD_"));
+			int armorCount = _globalData.UnequippedInventory.Count(id => id.StartsWith("ARMR_"));
+			
+			LogCombatMessage($"\n[color=cyan]--- UNEQUIPPED UPGRADES ---[/color]");
+			LogCombatMessage($"- Weapons: {weaponCount}");
+			LogCombatMessage($"- Shields: {shieldCount}");
+			LogCombatMessage($"- Armor: {armorCount}");
 		}
-		LogCombatMessage("*(Note: Upgrade module linking requires adjacent fleet positioning.)*");
 	}
 
 	internal void OnRepairPressed()
@@ -1584,43 +1717,36 @@ public partial class BattleMap : Node2D
 	}
 
 	internal Dictionary<Vector2I, int> GetReachableHexes(Vector2I startHex, int movementRange)
-{
-	Dictionary<Vector2I, int> costSoFar = new Dictionary<Vector2I, int>();
-	costSoFar[startHex] = 0;
-	Queue<Vector2I> frontier = new Queue<Vector2I>();
-	frontier.Enqueue(startHex);
-
-	while (frontier.Count > 0)
 	{
-		Vector2I current = frontier.Dequeue();
-		foreach (Vector2I dir in HexMath.Directions)
+		Dictionary<Vector2I, int> costSoFar = new Dictionary<Vector2I, int>();
+		costSoFar[startHex] = 0;
+		Queue<Vector2I> frontier = new Queue<Vector2I>();
+		frontier.Enqueue(startHex);
+
+		while (frontier.Count > 0)
 		{
-			Vector2I next = current + dir;
-			if (!HexGrid.ContainsKey(next)) continue;
-
-			bool isBlocked = false;
-			if (HexContents.ContainsKey(next))
+			Vector2I current = frontier.Dequeue();
+			foreach (Vector2I dir in HexMath.Directions)
 			{
-				string type = HexContents[next].Type;
-				// THE FIX: Added "Outpost" to the blocked list so ships can't run it over!
-				if (type == "Planet" || type == "Base Planet (Player Start)" || type == "Celestial Body" || type == "Player Fleet" || type == "Enemy Fleet" || type == "StarGate" || type == "Outpost") isBlocked = true; 
-			}
+				Vector2I next = current + dir;
+				if (!HexGrid.ContainsKey(next)) continue;
 
-			if (isBlocked) continue;
+				if (!IsHexWalkable(next)) continue;
 
-			int newCost = costSoFar[current] + 1; 
-			if (newCost <= movementRange)
-			{
-				if (!costSoFar.ContainsKey(next) || newCost < costSoFar[next])
+				int newCost = costSoFar[current] + 1; 
+				if (newCost <= movementRange)
 				{
-					costSoFar[next] = newCost;
-					frontier.Enqueue(next);
+					if (!costSoFar.ContainsKey(next) || newCost < costSoFar[next])
+					{
+						costSoFar[next] = newCost;
+						frontier.Enqueue(next);
+					}
 				}
 			}
 		}
+		return costSoFar;
 	}
-	return costSoFar;
-}
+
 	internal void UpdateHighlights()
 	{
 		foreach (Node child in _highlightLayer.GetChildren()) child.QueueFree();
@@ -1668,7 +1794,7 @@ public partial class BattleMap : Node2D
 
 	private Vector2I FindNearestEmptyHex(Vector2I target)
 	{
-		if (HexGrid.ContainsKey(target) && MapSpawner.IsHexEmpty(target, HexGrid, HexContents)) return target;
+		if (IsHexWalkable(target)) return target;
 		int radius = 1;
 		while (radius < 15) 
 		{
@@ -1677,7 +1803,7 @@ public partial class BattleMap : Node2D
 			{
 				for (int j = 0; j < radius; j++)
 				{
-					if (HexGrid.ContainsKey(current) && MapSpawner.IsHexEmpty(current, HexGrid, HexContents)) return current;
+					if (IsHexWalkable(current)) return current;
 					current += HexMath.Directions[i];
 				}
 			}
