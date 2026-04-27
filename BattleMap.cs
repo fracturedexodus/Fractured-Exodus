@@ -71,6 +71,11 @@ public partial class BattleMap : Node2D
 	private CenterContainer _shopMenuWrapper;
 	private VBoxContainer _shopItemList;
 
+	// --- NEW: EQUIP GEAR UI ---
+	private Button _btnEquip;
+	private CenterContainer _equipMenuWrapper;
+	private VBoxContainer _equipItemList;
+
 	public override void _Ready()
 	{
 		_globalData = GetNodeOrNull<GlobalData>("/root/GlobalData");
@@ -144,14 +149,15 @@ public partial class BattleMap : Node2D
 		SetupAudio(); 
 		ConnectUIButtons(); 
 		BuildStrandedMenu(); 
-		BuildShopUI(); // --- NEW: BUILD THE SHOP UI ---
+		BuildShopUI(); 
+		BuildEquipUI(); // --- NEW: BUILD THE EQUIP UI ---
 		
 		_btnTrade = new Button();
-		_btnTrade.Text = "ACCESS OUTPOST EXCHANGE"; // Updated Button Text
+		_btnTrade.Text = "ACCESS OUTPOST EXCHANGE"; 
 		_btnTrade.Visible = false;
 		_btnTrade.CustomMinimumSize = new Vector2(0, 40);
 		_btnTrade.AddThemeColorOverride("font_color", new Color(0f, 1f, 0.8f));
-		_btnTrade.Pressed += OpenShop; // Pointed to the new Shop Menu
+		_btnTrade.Pressed += OpenShop; 
 		
 		if (UI != null && UI.BtnSalvage != null)
 		{
@@ -160,6 +166,23 @@ public partial class BattleMap : Node2D
 		else
 		{
 			AddChild(_btnTrade); 
+		}
+
+		// --- NEW: THE FLEET LOADOUT BUTTON ---
+		_btnEquip = new Button();
+		_btnEquip.Text = "FLEET LOADOUT"; 
+		_btnEquip.Visible = false;
+		_btnEquip.CustomMinimumSize = new Vector2(0, 40);
+		_btnEquip.AddThemeColorOverride("font_color", new Color(1f, 0.6f, 0f));
+		_btnEquip.Pressed += OpenEquipMenu; 
+
+		if (UI != null && UI.BtnRepair != null)
+		{
+			UI.BtnRepair.GetParent().AddChild(_btnEquip);
+		}
+		else
+		{
+			AddChild(_btnEquip); 
 		}
 		
 		MapSpawner.SetupSpaceBackground(_bgLayer, GetViewportRect().Size);
@@ -246,7 +269,6 @@ public partial class BattleMap : Node2D
 		}
 	}
 
-	// --- UNIVERSAL WALKABILITY CHECK ---
 	internal bool IsHexWalkable(Vector2I hex)
 	{
 		if (!HexGrid.ContainsKey(hex)) return false;
@@ -419,8 +441,154 @@ public partial class BattleMap : Node2D
 				if (buySfx != null) { SfxPlayer.Stream = buySfx; SfxPlayer.PitchScale = 1.2f; SfxPlayer.Play(); }
 			}
 
-			OpenShop(); // Refresh the shop to update the greyed out buttons
+			OpenShop(); 
 		}
+	}
+
+	// ==========================================
+	// FLEET LOADOUT UI (NEW)
+	// ==========================================
+
+	private void BuildEquipUI()
+	{
+		CanvasLayer equipLayer = new CanvasLayer { Layer = 165 };
+		AddChild(equipLayer);
+
+		_equipMenuWrapper = new CenterContainer();
+		_equipMenuWrapper.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+		_equipMenuWrapper.MouseFilter = Control.MouseFilterEnum.Stop;
+		_equipMenuWrapper.Visible = false;
+		equipLayer.AddChild(_equipMenuWrapper);
+
+		PanelContainer equipPanel = new PanelContainer();
+		StyleBoxFlat style = new StyleBoxFlat();
+		style.BgColor = new Color(0.05f, 0.05f, 0.1f, 0.95f);
+		style.BorderWidthTop = 2; style.BorderWidthBottom = 2; style.BorderWidthLeft = 2; style.BorderWidthRight = 2;
+		style.BorderColor = new Color(1f, 0.6f, 0f, 0.8f);
+		style.ContentMarginLeft = 25; style.ContentMarginRight = 25; style.ContentMarginTop = 20; style.ContentMarginBottom = 20;
+		equipPanel.AddThemeStyleboxOverride("panel", style);
+		_equipMenuWrapper.AddChild(equipPanel);
+
+		VBoxContainer mainVBox = new VBoxContainer();
+		mainVBox.AddThemeConstantOverride("separation", 15);
+		equipPanel.AddChild(mainVBox);
+
+		Label title = new Label();
+		title.Text = "=== FLEET UPGRADES & LOADOUT ===";
+		title.HorizontalAlignment = HorizontalAlignment.Center;
+		title.AddThemeColorOverride("font_color", new Color(1f, 0.6f, 0f));
+		title.AddThemeFontSizeOverride("font_size", 18);
+		mainVBox.AddChild(title);
+
+		ScrollContainer scroll = new ScrollContainer();
+		scroll.CustomMinimumSize = new Vector2(500, 350);
+		mainVBox.AddChild(scroll);
+
+		_equipItemList = new VBoxContainer();
+		_equipItemList.AddThemeConstantOverride("separation", 15);
+		scroll.AddChild(_equipItemList);
+
+		Button closeBtn = new Button();
+		closeBtn.Text = "CLOSE TERMINAL";
+		closeBtn.CustomMinimumSize = new Vector2(0, 40);
+		closeBtn.Pressed += () => _equipMenuWrapper.Visible = false;
+		mainVBox.AddChild(closeBtn);
+	}
+
+	private void OpenEquipMenu()
+	{
+		if (_globalData == null || CurrentlyViewedShip == null) return;
+		string shipName = CurrentlyViewedShip.Name;
+
+		// Ensure loadout exists for this ship
+		if (!_globalData.FleetLoadouts.ContainsKey(shipName))
+		{
+			_globalData.FleetLoadouts[shipName] = new ShipLoadout();
+		}
+		ShipLoadout loadout = _globalData.FleetLoadouts[shipName];
+
+		foreach (Node child in _equipItemList.GetChildren()) child.QueueFree();
+
+		// --- Display Current Loadout ---
+		RichTextLabel currentLoadoutText = new RichTextLabel();
+		currentLoadoutText.BbcodeEnabled = true;
+		currentLoadoutText.FitContent = true;
+		
+		string wpn = string.IsNullOrEmpty(loadout.WeaponID) ? "None" : _globalData.MasterEquipmentDB[loadout.WeaponID].Name;
+		string shld = string.IsNullOrEmpty(loadout.ShieldID) ? "None" : _globalData.MasterEquipmentDB[loadout.ShieldID].Name;
+		string armr = string.IsNullOrEmpty(loadout.ArmorID) ? "None" : _globalData.MasterEquipmentDB[loadout.ArmorID].Name;
+		
+		currentLoadoutText.Text = $"[color=cyan]--- {shipName.ToUpper()}'s CURRENT LOADOUT ---[/color]\nWeapon: {wpn}\nShield: {shld}\nArmor: {armr}\n\n[color=yellow]--- CARGO HOLD (AVAILABLE INVENTORY) ---[/color]";
+		_equipItemList.AddChild(currentLoadoutText);
+
+		if (_globalData.UnequippedInventory.Count == 0)
+		{
+			Label emptyLabel = new Label { Text = "No unequipped items available in cargo." };
+			_equipItemList.AddChild(emptyLabel);
+		}
+		else
+		{
+			// --- Display Grouped Inventory Items ---
+			foreach (string itemID in _globalData.UnequippedInventory.Distinct())
+			{
+				int count = _globalData.UnequippedInventory.Count(id => id == itemID);
+				EquipmentData item = _globalData.MasterEquipmentDB[itemID];
+				
+				HBoxContainer row = new HBoxContainer();
+				RichTextLabel info = new RichTextLabel();
+				info.BbcodeEnabled = true;
+				info.Text = $"[b]{item.Name}[/b] (x{count})\n{item.Description}";
+				info.CustomMinimumSize = new Vector2(380, 50);
+				info.FitContent = true;
+				row.AddChild(info);
+
+				Button equipBtn = new Button();
+				equipBtn.Text = "EQUIP";
+				equipBtn.CustomMinimumSize = new Vector2(90, 40);
+				equipBtn.SizeFlagsVertical = Control.SizeFlags.ShrinkCenter;
+				equipBtn.Pressed += () => EquipItem(shipName, itemID);
+				row.AddChild(equipBtn);
+				
+				_equipItemList.AddChild(row);
+			}
+		}
+		
+		_equipMenuWrapper.Visible = true;
+	}
+
+	private void EquipItem(string shipName, string itemID)
+	{
+		EquipmentData itemToEquip = _globalData.MasterEquipmentDB[itemID];
+		ShipLoadout loadout = _globalData.FleetLoadouts[shipName];
+
+		// Check the category of the new item, and save whatever was previously in that slot
+		string oldItemID = "";
+		if (itemToEquip.Category == "Weapon") { oldItemID = loadout.WeaponID; loadout.WeaponID = itemID; }
+		else if (itemToEquip.Category == "Shield") { oldItemID = loadout.ShieldID; loadout.ShieldID = itemID; }
+		else if (itemToEquip.Category == "Armor") { oldItemID = loadout.ArmorID; loadout.ArmorID = itemID; }
+
+		// Remove the newly equipped item from your global cargo hold
+		_globalData.UnequippedInventory.Remove(itemID);
+
+		// If you had an old item equipped, toss it back into your cargo hold
+		if (!string.IsNullOrEmpty(oldItemID))
+		{
+			_globalData.UnequippedInventory.Add(oldItemID);
+		}
+
+		OnSaveGamePressed(); // Save state
+		
+		if (SfxPlayer != null)
+		{
+			AudioStream equipSfx = GD.Load<AudioStream>("res://Sounds/laser.mp3"); 
+			if (equipSfx != null) { SfxPlayer.Stream = equipSfx; SfxPlayer.PitchScale = 0.8f; SfxPlayer.Play(); }
+		}
+
+		if (UI != null) UI.CombatLogPanel.Visible = true;
+		LogCombatMessage($"\n[color=green]--- LOADOUT UPDATED ---[/color]");
+		LogCombatMessage($"{shipName} equipped [color=yellow]{itemToEquip.Name}[/color].");
+
+		OpenEquipMenu(); // Refresh the UI to reflect the swap
 	}
 
 	// ==========================================
@@ -632,7 +800,8 @@ public partial class BattleMap : Node2D
 	public override void _Input(InputEvent @event)
 	{
 		if (_strandedMenuWrapper != null && _strandedMenuWrapper.Visible) return;
-		if (_shopMenuWrapper != null && _shopMenuWrapper.Visible) return; // Prevent movement while shopping
+		if (_shopMenuWrapper != null && _shopMenuWrapper.Visible) return; 
+		if (_equipMenuWrapper != null && _equipMenuWrapper.Visible) return; // Prevent movement while equipping
 
 		if (IsTargetingLongRange)
 		{
@@ -1088,6 +1257,7 @@ public partial class BattleMap : Node2D
 		if (UI.BtnLongRange != null) UI.BtnLongRange.Visible = false;
 		
 		if (_btnTrade != null) _btnTrade.Visible = false;
+		if (_btnEquip != null) _btnEquip.Visible = false; // --- NEW: Hide equip by default ---
 
 		if (expand && ship != null)
 		{
@@ -1124,6 +1294,9 @@ public partial class BattleMap : Node2D
 
 			if (isPlayer && !Combat.InCombat)
 			{
+				// --- NEW: Show Equip button for Player Ships out of combat ---
+				if (_btnEquip != null) _btnEquip.Visible = true;
+
 				if (ship.Name == "The Aether Skimmer")
 				{
 					if (UI.BtnLongRange != null)
