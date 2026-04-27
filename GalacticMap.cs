@@ -14,6 +14,9 @@ public partial class GalacticMap : Control
 	private SystemWindow _systemWindow;
 	private GlobalData _globalData; 
 
+	// --- NEW: LIST TO TRACK VISUAL STARS FOR CLEANUP ---
+	private List<Control> _drawnStars = new List<Control>();
+
 	// --- WARP TRAJECTORY DRAWING ---
 	private Vector2 _currentSystemMapPos = Vector2.Zero;
 	private bool _isHoveringStar = false;
@@ -526,7 +529,7 @@ public partial class GalacticMap : Control
 				int numOutposts = rng.RandiRange(1, 3);
 				string[] outpostSprites = {
 					"res://BlackMarketAsteroidExchangeSprite.png",
-					"res://ScrappersFurnaceHubSprite.jpg",
+					"res://ScrappersFurnaceHubSprite.png", // Using .png based on your earlier fix
 					"res://VerdantPactBiosphereOutpostSprite.png"
 				};
 				
@@ -584,6 +587,9 @@ public partial class GalacticMap : Control
 		newStar.Position = data.MapPosition - new Vector2(20, 20); 
 		newStar.MouseDefaultCursorShape = Control.CursorShape.PointingHand; 
 		AddChild(newStar); 
+
+		// --- THE FIX: We track the star right here as soon as it's created! ---
+		_drawnStars.Add(newStar);
 
 		Sprite2D starSprite = new Sprite2D();
 		Texture2D tex = GD.Load<Texture2D>("res://star.png"); 
@@ -740,6 +746,13 @@ public partial class GalacticMap : Control
 	public void _on_randomize_button_pressed()
 	{
 		if (IsInstanceValid(_systemWindow)) _systemWindow.Visible = false;
+
+		// --- THE FIX: DESTROY ALL PREVIOUSLY DRAWN STAR NODES SO THEY DON'T STACK! ---
+		foreach (Control star in _drawnStars)
+		{
+			if (IsInstanceValid(star)) star.QueueFree();
+		}
+		_drawnStars.Clear();
 
 		foreach (Node child in GetChildren())
 		{
