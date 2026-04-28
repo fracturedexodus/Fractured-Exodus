@@ -487,58 +487,22 @@ public partial class Codex : Control
 	
 	private string GetPlayerShipImage(string shipName)
 	{
-		switch (shipName)
-		{
-			case "The Relic Harvester": return "res://Ships/RelicHarvesterSprite.png";
-			case "The Panacea Spire": return "res://Ships/PanaceaSpireSprite.png";
-			case "The Neptune Forge": return "res://Ships/NeptuneForgeSprite.png";
-			case "The Genesis Ark": return "res://Ships/GenesisArkSprite.png";
-			case "The Valkyrie Wing": return "res://Ships/ValkyrieWingSprite.png";
-			case "The Aegis Bastion": return "res://Ships/AegisBastionSprite.png";
-			case "The Aether Skimmer": return "res://Ships/AetherSkimmerSprite.png";
-			default: return "res://Assets/UI/icon.svg";
-		}
+		return Database.GetShipTexturePath(shipName);
 	}
 
 	private string GetPlayerBlueprintImage(string shipName)
 	{
-		switch (shipName)
-		{
-			case "The Aegis Bastion": return "res://Ships/AegisBastion.png";
-			case "The Aether Skimmer": return "res://Ships/AetherSkimmer.png";
-			case "The Panacea Spire": return "res://Ships/PanaceSpire.png"; 
-			case "The Neptune Forge": return "res://Ships/NeptuneForge.png";
-			case "The Genesis Ark": return "res://Ships/GenesisArk.png";
-			case "The Relic Harvester": return "res://Ships/RelicHarvester.png";
-			case "The Valkyrie Wing": return "res://Ships/ValkyrieWing.png";
-			default: return ""; 
-		}
+		return Database.GetShipBlueprintPath(shipName);
 	}
 
 	private string GetEnemyShipImage(string shipName)
 	{
-		switch (shipName)
-		{
-			case "Aether Censor Obelisk": return "res://EnemyShips/AetherCensorObeliskSprite.png";
-			case "Custodian Logic Barge": return "res://EnemyShips/CustodianLogicBargeSprite.png";
-			case "Ignis Repurposed Terraformer": return "res://EnemyShips/IgnisRepurposedTerraformerSprite.png";
-			case "Reformatter Dreadnought": return "res://EnemyShips/ReformatterDreadnoughtSprite.png";
-			case "Scrap-Stick Subversion Drone": return "res://EnemyShips/ScrapStickSubversionDroneSprite.png";
-			default: return "res://Assets/UI/icon.svg";
-		}
+		return Database.GetShipTexturePath(shipName);
 	}
 
 	private string GetEnemyBlueprintImage(string shipName)
 	{
-		switch (shipName)
-		{
-			case "Aether Censor Obelisk": return "res://EnemyShips/AetherCensorObelisk.png";
-			case "Custodian Logic Barge": return "res://EnemyShips/CustodianLogicBarge.png";
-			case "Ignis Repurposed Terraformer": return "res://EnemyShips/IgnisRepurposedTerraformer.png";
-			case "Reformatter Dreadnought": return "res://EnemyShips/ReformatterDreadnought.png";
-			case "Scrap-Stick Subversion Drone": return "res://EnemyShips/ScraptickSubversionDrone.png";
-			default: return ""; 
-		}
+		return Database.GetShipBlueprintPath(shipName);
 	}
 
 	private string GetPlanetTypeString(int typeIndex)
@@ -565,61 +529,16 @@ public partial class Codex : Control
 
 	private int GetShipBaseActions(string shipName)
 	{
-		switch (shipName)
-		{
-			case "The Aether Skimmer": return 5;
-			case "The Valkyrie Wing": return 4;
-			case "The Genesis Ark": return 3;
-			case "The Panacea Spire": return 3;
-			case "The Relic Harvester": return 3;
-			case "The Neptune Forge": return 2;
-			case "The Aegis Bastion": return 2;
-			case "Scrap-Stick Subversion Drone": return 5; 
-			case "Aether Censor Obelisk": return 4; 
-			case "Custodian Logic Barge": return 3; 
-			case "Ignis Repurposed Terraformer": return 2; 
-			case "Reformatter Dreadnought": return 2; 
-			default: return 3; 
-		}
+		return Database.GetShipBaseActions(shipName);
 	}
 
 	private (int hp, int shields) GetShipCombatStats(string shipName)
 	{
-		switch (shipName)
-		{
-			case "The Aegis Bastion": return (100, 50);   
-			case "The Neptune Forge": return (80, 20);    
-			case "The Genesis Ark": return (50, 30);      
-			case "The Panacea Spire": return (40, 40);    
-			case "The Relic Harvester": return (50, 20);  
-			case "The Valkyrie Wing": return (30, 20);    
-			case "The Aether Skimmer": return (20, 10);   
-			case "Reformatter Dreadnought": return (100, 50); 
-			case "Ignis Repurposed Terraformer": return (80, 20); 
-			case "Custodian Logic Barge": return (50, 30); 
-			case "Aether Censor Obelisk": return (30, 20); 
-			case "Scrap-Stick Subversion Drone": return (20, 10); 
-			default: return (50, 25); 
-		}
+		return Database.GetShipCombatStats(shipName);
 	}
 
 	private (int range, int damage) GetShipWeaponStats(string shipName)
 	{
-		switch (shipName)
-		{
-			case "The Aegis Bastion": return (2, 25);   
-			case "The Neptune Forge": return (2, 30);    
-			case "The Genesis Ark": return (3, 20);      
-			case "The Panacea Spire": return (2, 15);    
-			case "The Relic Harvester": return (1, 35);  
-			case "The Valkyrie Wing": return (2, 15);    
-			case "The Aether Skimmer": return (1, 20);   
-			case "Reformatter Dreadnought": return (2, 25); 
-			case "Ignis Repurposed Terraformer": return (2, 30); 
-			case "Custodian Logic Barge": return (3, 20); 
-			case "Aether Censor Obelisk": return (2, 15); 
-			case "Scrap-Stick Subversion Drone": return (1, 20); 
-			default: return (2, 20); 
-		}
+		return Database.GetShipWeaponStats(shipName);
 	}
 }
