@@ -24,6 +24,11 @@ public class CombatManager
 	public void CheckForCombatTrigger()
 	{
 		if (InCombat) return;
+		if (_map.IsFleetMoving)
+		{
+			_map.RunAfterMovementCompletes(CheckForCombatTrigger);
+			return;
+		}
 
 		List<Vector2I> players = new List<Vector2I>();
 		List<Vector2I> enemies = new List<Vector2I>();

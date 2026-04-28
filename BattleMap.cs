@@ -37,6 +37,7 @@ public partial class BattleMap : Node2D
 
 	public int ActiveMovementTweens = 0;
 	public bool IsFleetMoving => ActiveMovementTweens > 0;
+	private readonly List<Action> _pendingMovementCallbacks = new List<Action>();
 
 	private int _maxMapRadius = 35; 
 	private PackedScene _hexScene = GD.Load<PackedScene>("res://hex_tile.tscn");
@@ -863,7 +864,7 @@ public partial class BattleMap : Node2D
 
 				if (playerActuallyMoved && !Combat.InCombat)
 				{
-					AdvanceExplorationTurn(); 
+					RunAfterMovementCompletes(AdvanceExplorationTurn);
 				}
 			}
 		}
@@ -923,18 +924,27 @@ public partial class BattleMap : Node2D
 		if (Combat.InCombat || _explorationTurnService == null) return;
 
 		List<EnemyRoamingMove> plannedMoves = _explorationTurnService.PlanRoamingEnemyMoves(HexContents, HexGrid.Keys, ScanningRange);
+		if (plannedMoves.Count == 0)
+		{
+			if (Combat != null && !Combat.InCombat)
+			{
+				Combat.CheckForCombatTrigger();
+			}
+			return;
+		}
+
 		foreach (EnemyRoamingMove move in plannedMoves)
 		{
 			MoveShip(move.FromHex, move.ToHex, 0);
 		}
 
-		GetTree().CreateTimer(0.5f).Timeout += () => 
+		RunAfterMovementCompletes(() =>
 		{
-			if (Combat != null && !Combat.InCombat) 
+			if (Combat != null && !Combat.InCombat)
 			{
 				Combat.CheckForCombatTrigger();
 			}
-		};
+		});
 	}
 
 	public override void _Process(double delta)
@@ -1607,12 +1617,38 @@ public partial class BattleMap : Node2D
 		
 		tween.TweenCallback(Callable.From(() => 
 		{
-			ActiveMovementTweens--;
+			ActiveMovementTweens = Math.Max(0, ActiveMovementTweens - 1);
 			if (ActiveMovementTweens <= 0) 
 			{
 				Fog.UpdateVisibility(); 
+				FlushMovementCallbacks();
 			}
 		}));
+	}
+
+	internal void RunAfterMovementCompletes(Action callback)
+	{
+		if (callback == null) return;
+		if (!IsFleetMoving)
+		{
+			callback();
+			return;
+		}
+
+		_pendingMovementCallbacks.Add(callback);
+	}
+
+	private void FlushMovementCallbacks()
+	{
+		if (IsFleetMoving || _pendingMovementCallbacks.Count == 0) return;
+
+		List<Action> callbacksToRun = _pendingMovementCallbacks.ToList();
+		_pendingMovementCallbacks.Clear();
+
+		foreach (Action callback in callbacksToRun)
+		{
+			callback();
+		}
 	}
 
 	internal void MoveGroup(List<Vector2I> shipsToMove, Vector2I targetHex)
