@@ -11,6 +11,10 @@ public class InventoryStack
 
 public class FleetInventoryService
 {
+	public const string DefaultWeaponName = "Mark I Laser";
+	public const string DefaultHullName = "Standard Hull";
+	public const string DefaultShieldName = "Standard Shields";
+
 	private readonly GlobalData _globalData;
 
 	public FleetInventoryService(GlobalData globalData)
@@ -89,6 +93,42 @@ public class FleetInventoryService
 	{
 		EquipmentData item = GetEquipment(itemID);
 		return item?.Name ?? "None";
+	}
+
+	public string GetActiveWeaponName(string shipName)
+	{
+		ShipLoadout loadout = GetLoadout(shipName);
+		if (loadout == null || string.IsNullOrEmpty(loadout.WeaponID))
+		{
+			return DefaultWeaponName;
+		}
+
+		EquipmentData item = GetEquipment(loadout.WeaponID);
+		return item?.Name ?? DefaultWeaponName;
+	}
+
+	public string GetActiveShieldName(string shipName)
+	{
+		ShipLoadout loadout = GetLoadout(shipName);
+		if (loadout == null || string.IsNullOrEmpty(loadout.ShieldID))
+		{
+			return DefaultShieldName;
+		}
+
+		EquipmentData item = GetEquipment(loadout.ShieldID);
+		return item?.Name ?? DefaultShieldName;
+	}
+
+	public string GetActiveHullName(string shipName)
+	{
+		ShipLoadout loadout = GetLoadout(shipName);
+		if (loadout == null || string.IsNullOrEmpty(loadout.ArmorID))
+		{
+			return DefaultHullName;
+		}
+
+		EquipmentData item = GetEquipment(loadout.ArmorID);
+		return item?.Name ?? DefaultHullName;
 	}
 
 	public List<InventoryStack> GetGroupedInventory()
@@ -205,5 +245,15 @@ public class FleetInventoryService
 
 		EquipmentData item = globalData.MasterEquipmentDB[itemID];
 		return item.Category == category ? item.BonusStat : 0;
+	}
+
+	private ShipLoadout GetLoadout(string shipName)
+	{
+		if (_globalData == null || string.IsNullOrEmpty(shipName) || _globalData.FleetLoadouts == null)
+		{
+			return null;
+		}
+
+		return _globalData.FleetLoadouts.ContainsKey(shipName) ? _globalData.FleetLoadouts[shipName] : null;
 	}
 }

@@ -37,8 +37,9 @@ public partial class BattleUI : CanvasLayer
 	[Export] public Label ShipMenuDetails;
 	
 	[ExportSubgroup("Terminal Buttons")]
-	[Export] public Button BtnWeapons;
-	[Export] public Button BtnShields;
+	[Export] public Label WeaponNameLabel;
+	[Export] public Label HullNameLabel;
+	[Export] public Label ShieldNameLabel;
 	[Export] public Button BtnRepair;
 	[Export] public Button BtnScan;
 	[Export] public Button BtnSalvage;

@@ -169,6 +169,7 @@ public partial class BattleMap : Node2D
 		_btnTrade.Text = "ACCESS OUTPOST EXCHANGE"; 
 		_btnTrade.Visible = false;
 		_btnTrade.CustomMinimumSize = new Vector2(0, 40);
+		_btnTrade.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
 		_btnTrade.AddThemeColorOverride("font_color", new Color(0f, 1f, 0.8f));
 		_btnTrade.Pressed += OpenShop; 
 		
@@ -186,6 +187,7 @@ public partial class BattleMap : Node2D
 		_btnEquip.Text = "FLEET LOADOUT"; 
 		_btnEquip.Visible = false;
 		_btnEquip.CustomMinimumSize = new Vector2(0, 40);
+		_btnEquip.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
 		_btnEquip.AddThemeColorOverride("font_color", new Color(1f, 0.6f, 0f));
 		_btnEquip.Pressed += OpenEquipMenu; 
 
@@ -276,7 +278,7 @@ public partial class BattleMap : Node2D
 			UI.CombatLogPanel.Visible = false;
 			UI.AttackButton.Visible = false;
 			UI.JumpButton.Visible = false;
-			UI.ShipMenuPanel.Position = new Vector2(GetViewportRect().Size.X + 50, UI.ShipMenuPanel.Position.Y);
+			UI.ShipMenuPanel.Position = new Vector2(GetCollapsedShipMenuX(), UI.ShipMenuPanel.Position.Y);
 
 			UpdateResourceUI();
 		}
@@ -1083,8 +1085,7 @@ public partial class BattleMap : Node2D
 	{
 		if (UI == null) return;
 		Tween tween = CreateTween();
-		Vector2 screenSize = GetViewportRect().Size;
-		float targetX = expand ? screenSize.X - 320 : screenSize.X + 50; 
+		float targetX = expand ? GetExpandedShipMenuX() : GetCollapsedShipMenuX();
 		tween.TweenProperty(UI.ShipMenuPanel, "position:x", targetX, 0.3f).SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.Out);
 		
 		if (UI.BtnLongRange != null) UI.BtnLongRange.Visible = false;
@@ -1117,10 +1118,18 @@ public partial class BattleMap : Node2D
 			UI.ShieldLabel.Text = $"SHIELD CAPACITORS: {ship.CurrentShields}/{ship.MaxShields}";
 
 			UI.ShipMenuDetails.Text = menuState.DetailsText;
+
+			string weaponName = _inventoryService?.GetActiveWeaponName(ship.Name) ?? FleetInventoryService.DefaultWeaponName;
+			string hullName = _inventoryService?.GetActiveHullName(ship.Name) ?? FleetInventoryService.DefaultHullName;
+			string shieldName = _inventoryService?.GetActiveShieldName(ship.Name) ?? FleetInventoryService.DefaultShieldName;
+			UI.WeaponNameLabel.Text = $"WEAPON: {weaponName}";
+			UI.HullNameLabel.Text = $"HULL: {hullName}";
+			UI.ShieldNameLabel.Text = $"SHIELD: {shieldName}";
 				
 			bool isPlayer = menuState.IsPlayerShip;
-			UI.BtnWeapons.Visible = isPlayer;
-			UI.BtnShields.Visible = isPlayer;
+			UI.WeaponNameLabel.Visible = true;
+			UI.HullNameLabel.Visible = true;
+			UI.ShieldNameLabel.Visible = true;
 			UI.BtnRepair.Visible = isPlayer;
 			UI.BtnRepair.Disabled = !menuState.CanRepair;
 			UI.CodexButton.Visible = isPlayer;
@@ -1165,6 +1174,19 @@ public partial class BattleMap : Node2D
 				}
 			}
 		}
+	}
+
+	private float GetExpandedShipMenuX()
+	{
+		if (UI?.ShipMenuPanel == null) return GetViewportRect().Size.X;
+		float panelWidth = UI.ShipMenuPanel.Size.X > 0f ? UI.ShipMenuPanel.Size.X : UI.ShipMenuPanel.CustomMinimumSize.X;
+		return GetViewportRect().Size.X - panelWidth;
+	}
+
+	private float GetCollapsedShipMenuX()
+	{
+		if (UI?.ShipMenuPanel == null) return GetViewportRect().Size.X + 24f;
+		return GetViewportRect().Size.X + 24f;
 	}
 
 	private void OnScanPressed()
