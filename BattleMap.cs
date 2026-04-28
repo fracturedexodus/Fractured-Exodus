@@ -84,6 +84,8 @@ public partial class BattleMap : Node2D
 	private ExplorationTurnService _explorationTurnService;
 	private DistressSignalService _distressSignalService;
 	private JumpService _jumpService;
+	private ShipMenuPresenterService _shipMenuPresenterService;
+	private TerminalMenuPresenterService _terminalMenuPresenterService;
 
 	public override void _Ready()
 	{
@@ -94,6 +96,8 @@ public partial class BattleMap : Node2D
 		if (_globalData != null) _distressSignalService = new DistressSignalService(_globalData);
 		if (_globalData != null) _jumpService = new JumpService(_globalData);
 		_explorationTurnService = new ExplorationTurnService();
+		_shipMenuPresenterService = new ShipMenuPresenterService();
+		_terminalMenuPresenterService = new TerminalMenuPresenterService();
 		if (_globalData != null && _globalData.CurrentTurn > 0) CurrentTurn = _globalData.CurrentTurn;
 		
 		Texture2D cursorTex = GD.Load<Texture2D>("res://Assets/UI/Cursor.png");
@@ -391,105 +395,20 @@ public partial class BattleMap : Node2D
 
 	private void OpenShop()
 	{
-		if (_inventoryService == null) return;
+		if (_inventoryService == null || _terminalMenuPresenterService == null) return;
 		string outpostName = GetCurrentTradeOutpostName();
 		int standardSaleValue = _inventoryService.GetStandardIssueSaleValue(outpostName);
-
-		foreach (Node child in _shopItemList.GetChildren()) child.QueueFree();
-
-		Label buyTitle = new Label();
-		buyTitle.Text = "AVAILABLE UPGRADES";
-		buyTitle.AddThemeColorOverride("font_color", new Color(0f, 1f, 0.8f));
-		_shopItemList.AddChild(buyTitle);
-
-		foreach (EquipmentData item in _inventoryService.GetShopItems())
-		{
-			HBoxContainer row = new HBoxContainer();
-
-			RichTextLabel info = new RichTextLabel();
-			info.BbcodeEnabled = true;
-			info.Text = $"[b][color=yellow]{item.Name}[/color][/b] ({item.Category})\n{item.Description}\n[color=cyan]Cost: {item.CostTech} Tech, {item.CostRaw} Raw[/color]";
-			info.CustomMinimumSize = new Vector2(380, 75);
-			info.FitContent = true;
-			row.AddChild(info);
-
-			Button buyBtn = new Button();
-			buyBtn.Text = "BUY";
-			buyBtn.CustomMinimumSize = new Vector2(90, 40);
-			buyBtn.SizeFlagsVertical = Control.SizeFlags.ShrinkCenter;
-
-			if (!_inventoryService.CanAfford(item.ItemID))
-			{
-				buyBtn.Disabled = true;
-				buyBtn.Text = "FUNDS";
-			}
-
-			buyBtn.Pressed += () => BuyItem(item.ItemID);
-			row.AddChild(buyBtn);
-
-			_shopItemList.AddChild(row);
-		}
-
-		HSeparator separator = new HSeparator();
-		_shopItemList.AddChild(separator);
-
-		Label sellTitle = new Label();
-		sellTitle.Text = $"SALVAGE BUYBACK: {outpostName.ToUpper()}";
-		sellTitle.AddThemeColorOverride("font_color", new Color(1f, 0.7f, 0.2f));
-		_shopItemList.AddChild(sellTitle);
-
-		bool hasSellables = false;
-		int ancientTechCount = _inventoryService.GetAncientTechUnitCount();
-		if (ancientTechCount > 0)
-		{
-			HBoxContainer ancientTechRow = new HBoxContainer();
-
-			RichTextLabel info = new RichTextLabel();
-			info.BbcodeEnabled = true;
-			info.Text = $"[b][color=yellow]{GameConstants.ResourceKeys.AncientTech}[/color][/b] (x{ancientTechCount})\nExchange Rate: [color=cyan]{GameConstants.StandardEquipment.AncientTechSaleRaw} {GameConstants.ResourceKeys.RawMaterials} each[/color]";
-			info.CustomMinimumSize = new Vector2(380, 70);
-			info.FitContent = true;
-			ancientTechRow.AddChild(info);
-
-			Button sellBtn = new Button();
-			sellBtn.Text = "SELL 1";
-			sellBtn.CustomMinimumSize = new Vector2(90, 40);
-			sellBtn.SizeFlagsVertical = Control.SizeFlags.ShrinkCenter;
-			sellBtn.Pressed += SellAncientTech;
-			ancientTechRow.AddChild(sellBtn);
-
-			_shopItemList.AddChild(ancientTechRow);
-			hasSellables = true;
-		}
-
-		foreach (InventoryStack stack in _inventoryService.GetGroupedSellableInventory())
-		{
-			HBoxContainer row = new HBoxContainer();
-
-			RichTextLabel info = new RichTextLabel();
-			info.BbcodeEnabled = true;
-			info.Text = $"[b][color=yellow]{stack.Item.Name}[/color][/b] (x{stack.Count})\n{stack.Item.Description}\n[color=cyan]Sell Value: {standardSaleValue} {GameConstants.ResourceKeys.RawMaterials}[/color]";
-			info.CustomMinimumSize = new Vector2(380, 75);
-			info.FitContent = true;
-			row.AddChild(info);
-
-			Button sellBtn = new Button();
-			sellBtn.Text = "SELL 1";
-			sellBtn.CustomMinimumSize = new Vector2(90, 40);
-			sellBtn.SizeFlagsVertical = Control.SizeFlags.ShrinkCenter;
-			sellBtn.Pressed += () => SellInventoryItem(stack.ItemID, stack.Item.Name, standardSaleValue);
-			row.AddChild(sellBtn);
-
-			_shopItemList.AddChild(row);
-			hasSellables = true;
-		}
-
-		if (!hasSellables)
-		{
-			Label emptySellLabel = new Label();
-			emptySellLabel.Text = "No standard gear or Ancient Tech available to sell.";
-			_shopItemList.AddChild(emptySellLabel);
-		}
+		_terminalMenuPresenterService.PopulateShopMenu(
+			_shopItemList,
+			_inventoryService.GetShopItems(),
+			_inventoryService.CanAfford,
+			BuyItem,
+			_inventoryService.GetAncientTechUnitCount(),
+			SellAncientTech,
+			_inventoryService.GetGroupedSellableInventory(),
+			standardSaleValue,
+			outpostName,
+			SellInventoryItem);
 
 		_shopMenuWrapper.Visible = true;
 	}
@@ -599,54 +518,23 @@ public partial class BattleMap : Node2D
 
 	private void OpenEquipMenu()
 	{
-		if (_inventoryService == null || CurrentlyViewedShip == null) return;
+		if (_inventoryService == null || _terminalMenuPresenterService == null || CurrentlyViewedShip == null) return;
 		string shipName = CurrentlyViewedShip.Name;
 
 		ShipLoadout loadout = _inventoryService.GetOrCreateLoadout(shipName);
 		if (loadout == null) return;
-
-		foreach (Node child in _equipItemList.GetChildren()) child.QueueFree();
-
-		// --- Display Current Loadout ---
-		RichTextLabel currentLoadoutText = new RichTextLabel();
-		currentLoadoutText.BbcodeEnabled = true;
-		currentLoadoutText.FitContent = true;
 		
 		string wpn = _inventoryService.GetEquippedItemName(loadout.WeaponID);
 		string shld = _inventoryService.GetEquippedItemName(loadout.ShieldID);
 		string armr = _inventoryService.GetEquippedItemName(loadout.ArmorID);
-		
-		currentLoadoutText.Text = $"[color=cyan]--- {shipName.ToUpper()}'s CURRENT LOADOUT ---[/color]\nWeapon: {wpn}\nShield: {shld}\nArmor: {armr}\n\n[color=yellow]--- CARGO HOLD (AVAILABLE INVENTORY) ---[/color]";
-		_equipItemList.AddChild(currentLoadoutText);
-
-		List<InventoryStack> inventoryStacks = _inventoryService.GetGroupedEquippableInventory();
-		if (inventoryStacks.Count == 0)
-		{
-			Label emptyLabel = new Label { Text = "No unequipped items available in cargo." };
-			_equipItemList.AddChild(emptyLabel);
-		}
-		else
-		{
-			foreach (InventoryStack stack in inventoryStacks)
-			{
-				HBoxContainer row = new HBoxContainer();
-				RichTextLabel info = new RichTextLabel();
-				info.BbcodeEnabled = true;
-				info.Text = $"[b]{stack.Item.Name}[/b] (x{stack.Count})\n{stack.Item.Description}";
-				info.CustomMinimumSize = new Vector2(380, 50);
-				info.FitContent = true;
-				row.AddChild(info);
-
-				Button equipBtn = new Button();
-				equipBtn.Text = "EQUIP";
-				equipBtn.CustomMinimumSize = new Vector2(90, 40);
-				equipBtn.SizeFlagsVertical = Control.SizeFlags.ShrinkCenter;
-				equipBtn.Pressed += () => EquipItem(shipName, stack.ItemID);
-				row.AddChild(equipBtn);
-				
-				_equipItemList.AddChild(row);
-			}
-		}
+		_terminalMenuPresenterService.PopulateEquipMenu(
+			_equipItemList,
+			shipName,
+			wpn,
+			shld,
+			armr,
+			_inventoryService.GetGroupedEquippableInventory(),
+			itemId => EquipItem(shipName, itemId));
 		
 		_equipMenuWrapper.Visible = true;
 	}
@@ -1308,7 +1196,7 @@ public partial class BattleMap : Node2D
 		float targetX = expand ? GetExpandedShipMenuX() : GetCollapsedShipMenuX();
 		tween.TweenProperty(UI.ShipMenuPanel, "position:x", targetX, 0.3f).SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.Out);
 		
-		if (UI.BtnLongRange != null) UI.BtnLongRange.Visible = false;
+		_shipMenuPresenterService?.ResetMenu(UI);
 		
 		if (_btnTrade != null) _btnTrade.Visible = false;
 		if (_btnEquip != null) _btnEquip.Visible = false; // --- NEW: Hide equip by default ---
@@ -1318,80 +1206,20 @@ public partial class BattleMap : Node2D
 			CurrentlyViewedShip = ship;
 			ShipMenuState menuState = _shipContextService?.BuildMenuState(ship, Combat.InCombat, HexContents);
 			if (menuState == null) return;
-			UI.ShipMenuTitle.Text = menuState.Title;
-
-			string imagePath = menuState.ImagePath;
-			if (!string.IsNullOrEmpty(imagePath))
-			{
-				Texture2D tex = GD.Load<Texture2D>(imagePath);
-				if (tex != null) UI.ShipImageDisplay.Texture = tex;
-			}
-			
-			float hpPercent = menuState.HpPercent;
-			UI.ShipImageDisplay.Modulate = new Color(1f, hpPercent, hpPercent); 
-
-			UI.HpBar.MaxValue = ship.MaxHP;
-			UI.HpBar.Value = ship.CurrentHP;
-			UI.HpLabel.Text = $"HULL INTEGRITY: {ship.CurrentHP}/{ship.MaxHP}";
-			UI.ShieldBar.MaxValue = ship.MaxShields;
-			UI.ShieldBar.Value = ship.CurrentShields;
-			UI.ShieldLabel.Text = $"SHIELD CAPACITORS: {ship.CurrentShields}/{ship.MaxShields}";
-
-			UI.ShipMenuDetails.Text = menuState.DetailsText;
 
 			string weaponName = _inventoryService?.GetActiveWeaponName(ship.Name) ?? FleetInventoryService.DefaultWeaponName;
 			string hullName = _inventoryService?.GetActiveHullName(ship.Name) ?? FleetInventoryService.DefaultHullName;
 			string shieldName = _inventoryService?.GetActiveShieldName(ship.Name) ?? FleetInventoryService.DefaultShieldName;
-			UI.WeaponNameLabel.Text = $"WEAPON: {weaponName}";
-			UI.HullNameLabel.Text = $"HULL: {hullName}";
-			UI.ShieldNameLabel.Text = $"SHIELD: {shieldName}";
-				
-			bool isPlayer = menuState.IsPlayerShip;
-			UI.WeaponNameLabel.Visible = true;
-			UI.HullNameLabel.Visible = true;
-			UI.ShieldNameLabel.Visible = true;
-			UI.BtnRepair.Visible = isPlayer;
-			UI.BtnRepair.Disabled = !menuState.CanRepair;
-			UI.CodexButton.Visible = isPlayer;
-			UI.BtnScan.Visible = false;
-			UI.BtnSalvage.Visible = false;
+			_shipMenuPresenterService?.ApplyMenuState(UI, ship, menuState, weaponName, hullName, shieldName);
 
 			if (menuState.ShowEquip && _btnEquip != null)
 			{
 				_btnEquip.Visible = true;
 			}
 
-			if (menuState.ShowLongRange && UI.BtnLongRange != null)
-			{
-				UI.BtnLongRange.Visible = true;
-				UI.BtnLongRange.Disabled = menuState.DisableLongRange;
-			}
-
-			if (menuState.ShowScan)
-			{
-				UI.BtnScan.Visible = true;
-				UI.BtnScan.Disabled = menuState.DisableScan;
-				UI.BtnScan.Text = menuState.ScanText;
-			}
-
-			if (menuState.ShowSalvage)
-			{
-				UI.BtnSalvage.Visible = true;
-				UI.BtnSalvage.Disabled = menuState.DisableSalvage;
-				UI.BtnSalvage.Text = menuState.SalvageText;
-			}
-
 			if (menuState.ShowTrade && _btnTrade != null)
 			{
 				_btnTrade.Visible = true;
-			}
-
-			if (isPlayer && !Combat.InCombat)
-			{
-				if (!menuState.ShowLongRange && UI.BtnLongRange != null)
-				{
-					UI.BtnLongRange.Visible = false;
-				}
 			}
 		}
 	}
