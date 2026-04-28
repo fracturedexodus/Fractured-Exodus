@@ -13,6 +13,7 @@ public partial class GalacticMap : Control
 	private PackedScene starScene = GD.Load<PackedScene>("res://star_node.tscn");
 	private SystemWindow _systemWindow;
 	private GlobalData _globalData; 
+	private JumpService _jumpService;
 
 	// --- NEW: LIST TO TRACK VISUAL STARS FOR CLEANUP ---
 	private List<Control> _drawnStars = new List<Control>();
@@ -76,6 +77,7 @@ public partial class GalacticMap : Control
 	public override void _Ready()
 	{
 		_globalData = GetNode<GlobalData>("/root/GlobalData");
+		_jumpService = new JumpService(_globalData);
 		_systemWindow = GetNode<SystemWindow>("SystemWindow");
 		_systemWindow.Visible = false;
 
@@ -212,26 +214,16 @@ public partial class GalacticMap : Control
 			}
 			else
 			{
-				float rawCost = Mathf.Max(1f, Mathf.Round(dist * 2.0f));
-				float energyCost = 1.0f; 
+				GalacticJumpPreview preview = _jumpService != null
+					? _jumpService.BuildGalacticJumpPreview(_currentSystemMapPos, targetPos)
+					: new GalacticJumpPreview();
 				
-				bool canAfford = true;
-				float cRaw = 0f;
-				float cEne = 0f;
-
-				if (_globalData.FleetResources != null && _globalData.FleetResources.ContainsKey(GameConstants.ResourceKeys.RawMaterials))
-				{
-					 cRaw = _globalData.FleetResources[GameConstants.ResourceKeys.RawMaterials].AsSingle();
-					 cEne = _globalData.FleetResources[GameConstants.ResourceKeys.EnergyCores].AsSingle();
-					 if (cRaw < rawCost || cEne < energyCost) canAfford = false;
-				}
-				
-				_warpLine.DefaultColor = canAfford ? new Color(0f, 1f, 0.5f, 0.8f) : new Color(1f, 0f, 0f, 0.8f);
+				_warpLine.DefaultColor = preview.CanAfford ? new Color(0f, 1f, 0.5f, 0.8f) : new Color(1f, 0f, 0f, 0.8f);
 
 				if (_isHoveringStar && IsInstanceValid(_jumpInfoPanel))
 				{
-					_jumpInfoText.Text = $"[color=yellow][b]=== FTL TRAJECTORY ===[/b][/color]\n\nDistance: {Mathf.Round(dist)}ly\n\n[b]JUMP COST:[/b]\n{GameConstants.ResourceKeys.RawMaterials}: {rawCost}\n{GameConstants.ResourceKeys.EnergyCores}: {energyCost}\n\n" +
-										 (canAfford ? "[color=green]RESOURCES OPTIMAL[/color]" : $"[color=red]INSUFFICIENT RESOURCES[/color]\nAvailable: {cRaw:0.#} Raw, {cEne:0.#} Energy");
+					_jumpInfoText.Text = $"[color=yellow][b]=== FTL TRAJECTORY ===[/b][/color]\n\nDistance: {Mathf.Round(preview.DistanceLy)}ly\n\n[b]JUMP COST:[/b]\n{GameConstants.ResourceKeys.RawMaterials}: {preview.RawCost}\n{GameConstants.ResourceKeys.EnergyCores}: {preview.EnergyCost}\n\n" +
+										 (preview.CanAfford ? "[color=green]RESOURCES OPTIMAL[/color]" : $"[color=red]INSUFFICIENT RESOURCES[/color]\nAvailable: {preview.AvailableRaw:0.#} Raw, {preview.AvailableEnergy:0.#} Energy");
 					
 					Vector2 jumpPos = mousePos + new Vector2(20, -20);
 					
@@ -674,56 +666,22 @@ public partial class GalacticMap : Control
 
 		if (_globalData.JustJumped)
 		{
-			if (data.SystemName == _globalData.SavedSystem)
+			GalacticJumpResult jumpResult = _jumpService != null
+				? _jumpService.ExecuteGalacticMapJump(data.SystemName, _currentSystemMapPos, data.MapPosition)
+				: new GalacticJumpResult();
+			if (!jumpResult.Allowed)
 			{
-				var cancelTransitioner = GetNodeOrNull<SceneTransition>("/root/SceneTransition");
-				if (cancelTransitioner != null) 
-				{
-					cancelTransitioner.ChangeScene("res://exploration_battle.tscn");
-				}
-				else 
-				{
-					GetTree().ChangeSceneToFile("res://exploration_battle.tscn");
-				}
-				return; 
+				return;
 			}
-
-			Vector2 FTLTarget = data.MapPosition;
-			float distance = _currentSystemMapPos.DistanceTo(FTLTarget);
-			
-			float rawCost = Mathf.Max(1f, Mathf.Round(distance * 2.0f));
-			float energyCost = 1.0f;
-
-			float currentRaw = 0f;
-			float currentEnergy = 0f;
-			
-			if (_globalData.FleetResources != null && _globalData.FleetResources.ContainsKey(GameConstants.ResourceKeys.RawMaterials))
-			{
-				currentRaw = _globalData.FleetResources[GameConstants.ResourceKeys.RawMaterials].AsSingle();
-				currentEnergy = _globalData.FleetResources[GameConstants.ResourceKeys.EnergyCores].AsSingle();
-			}
-
-			if (currentRaw < rawCost || currentEnergy < energyCost)
-			{
-				return; 
-			}
-
-			if (_globalData.FleetResources != null && _globalData.FleetResources.ContainsKey(GameConstants.ResourceKeys.RawMaterials))
-			{
-				_globalData.FleetResources[GameConstants.ResourceKeys.RawMaterials] = currentRaw - rawCost;
-				_globalData.FleetResources[GameConstants.ResourceKeys.EnergyCores] = currentEnergy - energyCost;
-			}
-
-			_globalData.SavedSystem = data.SystemName; 
 			
 			var transitioner = GetNodeOrNull<SceneTransition>("/root/SceneTransition");
 			if (transitioner != null) 
 			{
-				transitioner.ChangeScene("res://exploration_battle.tscn");
+				transitioner.ChangeScene(jumpResult.NextScene);
 			}
 			else 
 			{
-				GetTree().ChangeSceneToFile("res://exploration_battle.tscn");
+				GetTree().ChangeSceneToFile(jumpResult.NextScene);
 			}
 			return; 
 		}
