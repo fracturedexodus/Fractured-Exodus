@@ -294,6 +294,7 @@ public static class MapSpawner
 					BaseRotationOffset = Database.GetShipRotationOffset(shipName),
 					CurrentInitiativeRoll = shipDict.ContainsKey("CurrentInitiativeRoll") ? (int)shipDict["CurrentInitiativeRoll"] : 0
 				};
+				FleetInventoryService.ApplyLoadoutStats(globalData, shipData);
 				
 				SpawnEntityAtHex(spawnPos, Database.GetShipTexturePath(shipName), shipData, 0.2f, hexSize, hexGrid, hexContents, entityLayer); 
 			}
@@ -321,6 +322,7 @@ public static class MapSpawner
 							InitiativeBonus = Database.GetShipInitiativeBonus(shipName),
 							BaseRotationOffset = Database.GetShipRotationOffset(shipName)
 						};
+						FleetInventoryService.ApplyLoadoutStats(globalData, shipData);
 						
 						SpawnEntityAtHex(spawnPos, Database.GetShipTexturePath(shipName), shipData, 0.2f, hexSize, hexGrid, hexContents, entityLayer); 
 						break; 

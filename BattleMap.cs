@@ -75,10 +75,18 @@ public partial class BattleMap : Node2D
 	private Button _btnEquip;
 	private CenterContainer _equipMenuWrapper;
 	private VBoxContainer _equipItemList;
+	private FleetInventoryService _inventoryService;
+	private ShipContextService _shipContextService;
+	private ExplorationActionService _explorationActionService;
+	private ExplorationTurnService _explorationTurnService;
 
 	public override void _Ready()
 	{
 		_globalData = GetNodeOrNull<GlobalData>("/root/GlobalData");
+		if (_globalData != null) _inventoryService = new FleetInventoryService(_globalData);
+		if (_globalData != null) _shipContextService = new ShipContextService(_globalData);
+		if (_globalData != null) _explorationActionService = new ExplorationActionService(_globalData);
+		_explorationTurnService = new ExplorationTurnService();
 		if (_globalData != null && _globalData.CurrentTurn > 0) CurrentTurn = _globalData.CurrentTurn;
 		
 		Texture2D cursorTex = GD.Load<Texture2D>("res://cursor.png");
@@ -264,7 +272,7 @@ public partial class BattleMap : Node2D
 			UI.AttackButton.Visible = false;
 			UI.JumpButton.Visible = false;
 			UI.ShipMenuPanel.Position = new Vector2(GetViewportRect().Size.X + 50, UI.ShipMenuPanel.Position.Y);
-			
+
 			UpdateResourceUI();
 		}
 	}
@@ -374,19 +382,14 @@ public partial class BattleMap : Node2D
 
 	private void OpenShop()
 	{
-		if (_globalData == null || _globalData.MasterEquipmentDB == null) return;
+		if (_inventoryService == null) return;
 
 		foreach (Node child in _shopItemList.GetChildren()) child.QueueFree();
 
-		float pTech = _globalData.FleetResources["Ancient Tech"].AsSingle();
-		float pRaw = _globalData.FleetResources["Raw Materials"].AsSingle();
-
-		foreach (var kvp in _globalData.MasterEquipmentDB)
+		foreach (EquipmentData item in _inventoryService.GetShopItems())
 		{
-			EquipmentData item = kvp.Value;
-			
 			HBoxContainer row = new HBoxContainer();
-			
+
 			RichTextLabel info = new RichTextLabel();
 			info.BbcodeEnabled = true;
 			info.Text = $"[b][color=yellow]{item.Name}[/color][/b] ({item.Category})\n{item.Description}\n[color=cyan]Cost: {item.CostTech} Tech, {item.CostRaw} Raw[/color]";
@@ -398,8 +401,8 @@ public partial class BattleMap : Node2D
 			buyBtn.Text = "BUY";
 			buyBtn.CustomMinimumSize = new Vector2(90, 40);
 			buyBtn.SizeFlagsVertical = Control.SizeFlags.ShrinkCenter;
-			
-			if (pTech < item.CostTech || pRaw < item.CostRaw) 
+
+			if (!_inventoryService.CanAfford(item.ItemID))
 			{
 				buyBtn.Disabled = true;
 				buyBtn.Text = "FUNDS";
@@ -416,18 +419,12 @@ public partial class BattleMap : Node2D
 
 	private void BuyItem(string itemID)
 	{
-		if (_globalData == null) return;
-		EquipmentData item = _globalData.MasterEquipmentDB[itemID];
+		if (_inventoryService == null) return;
+		EquipmentData item = _inventoryService.GetEquipment(itemID);
+		if (item == null) return;
 
-		float pTech = _globalData.FleetResources["Ancient Tech"].AsSingle();
-		float pRaw = _globalData.FleetResources["Raw Materials"].AsSingle();
-
-		if (pTech >= item.CostTech && pRaw >= item.CostRaw)
+		if (_inventoryService.BuyItem(itemID))
 		{
-			_globalData.FleetResources["Ancient Tech"] = pTech - item.CostTech;
-			_globalData.FleetResources["Raw Materials"] = pRaw - item.CostRaw;
-			_globalData.UnequippedInventory.Add(itemID);
-			
 			UpdateResourceUI();
 			OnSaveGamePressed(); // Auto-save after a purchase
 			
@@ -497,15 +494,11 @@ public partial class BattleMap : Node2D
 
 	private void OpenEquipMenu()
 	{
-		if (_globalData == null || CurrentlyViewedShip == null) return;
+		if (_inventoryService == null || CurrentlyViewedShip == null) return;
 		string shipName = CurrentlyViewedShip.Name;
 
-		// Ensure loadout exists for this ship
-		if (!_globalData.FleetLoadouts.ContainsKey(shipName))
-		{
-			_globalData.FleetLoadouts[shipName] = new ShipLoadout();
-		}
-		ShipLoadout loadout = _globalData.FleetLoadouts[shipName];
+		ShipLoadout loadout = _inventoryService.GetOrCreateLoadout(shipName);
+		if (loadout == null) return;
 
 		foreach (Node child in _equipItemList.GetChildren()) child.QueueFree();
 
@@ -514,30 +507,27 @@ public partial class BattleMap : Node2D
 		currentLoadoutText.BbcodeEnabled = true;
 		currentLoadoutText.FitContent = true;
 		
-		string wpn = string.IsNullOrEmpty(loadout.WeaponID) ? "None" : _globalData.MasterEquipmentDB[loadout.WeaponID].Name;
-		string shld = string.IsNullOrEmpty(loadout.ShieldID) ? "None" : _globalData.MasterEquipmentDB[loadout.ShieldID].Name;
-		string armr = string.IsNullOrEmpty(loadout.ArmorID) ? "None" : _globalData.MasterEquipmentDB[loadout.ArmorID].Name;
+		string wpn = _inventoryService.GetEquippedItemName(loadout.WeaponID);
+		string shld = _inventoryService.GetEquippedItemName(loadout.ShieldID);
+		string armr = _inventoryService.GetEquippedItemName(loadout.ArmorID);
 		
 		currentLoadoutText.Text = $"[color=cyan]--- {shipName.ToUpper()}'s CURRENT LOADOUT ---[/color]\nWeapon: {wpn}\nShield: {shld}\nArmor: {armr}\n\n[color=yellow]--- CARGO HOLD (AVAILABLE INVENTORY) ---[/color]";
 		_equipItemList.AddChild(currentLoadoutText);
 
-		if (_globalData.UnequippedInventory.Count == 0)
+		List<InventoryStack> inventoryStacks = _inventoryService.GetGroupedInventory();
+		if (inventoryStacks.Count == 0)
 		{
 			Label emptyLabel = new Label { Text = "No unequipped items available in cargo." };
 			_equipItemList.AddChild(emptyLabel);
 		}
 		else
 		{
-			// --- Display Grouped Inventory Items ---
-			foreach (string itemID in _globalData.UnequippedInventory.Distinct())
+			foreach (InventoryStack stack in inventoryStacks)
 			{
-				int count = _globalData.UnequippedInventory.Count(id => id == itemID);
-				EquipmentData item = _globalData.MasterEquipmentDB[itemID];
-				
 				HBoxContainer row = new HBoxContainer();
 				RichTextLabel info = new RichTextLabel();
 				info.BbcodeEnabled = true;
-				info.Text = $"[b]{item.Name}[/b] (x{count})\n{item.Description}";
+				info.Text = $"[b]{stack.Item.Name}[/b] (x{stack.Count})\n{stack.Item.Description}";
 				info.CustomMinimumSize = new Vector2(380, 50);
 				info.FitContent = true;
 				row.AddChild(info);
@@ -546,7 +536,7 @@ public partial class BattleMap : Node2D
 				equipBtn.Text = "EQUIP";
 				equipBtn.CustomMinimumSize = new Vector2(90, 40);
 				equipBtn.SizeFlagsVertical = Control.SizeFlags.ShrinkCenter;
-				equipBtn.Pressed += () => EquipItem(shipName, itemID);
+				equipBtn.Pressed += () => EquipItem(shipName, stack.ItemID);
 				row.AddChild(equipBtn);
 				
 				_equipItemList.AddChild(row);
@@ -558,22 +548,12 @@ public partial class BattleMap : Node2D
 
 	private void EquipItem(string shipName, string itemID)
 	{
-		EquipmentData itemToEquip = _globalData.MasterEquipmentDB[itemID];
-		ShipLoadout loadout = _globalData.FleetLoadouts[shipName];
-
-		// Check the category of the new item, and save whatever was previously in that slot
-		string oldItemID = "";
-		if (itemToEquip.Category == "Weapon") { oldItemID = loadout.WeaponID; loadout.WeaponID = itemID; }
-		else if (itemToEquip.Category == "Shield") { oldItemID = loadout.ShieldID; loadout.ShieldID = itemID; }
-		else if (itemToEquip.Category == "Armor") { oldItemID = loadout.ArmorID; loadout.ArmorID = itemID; }
-
-		// Remove the newly equipped item from your global cargo hold
-		_globalData.UnequippedInventory.Remove(itemID);
-
-		// If you had an old item equipped, toss it back into your cargo hold
-		if (!string.IsNullOrEmpty(oldItemID))
+		if (_inventoryService == null) return;
+		EquipmentData itemToEquip = _inventoryService.GetEquipment(itemID);
+		if (itemToEquip == null || !_inventoryService.EquipItem(shipName, itemID)) return;
+		if (CurrentlyViewedShip != null && CurrentlyViewedShip.Name == shipName)
 		{
-			_globalData.UnequippedInventory.Add(oldItemID);
+			_inventoryService.ApplyLoadoutStats(CurrentlyViewedShip);
 		}
 
 		OnSaveGamePressed(); // Save state
@@ -967,69 +947,12 @@ public partial class BattleMap : Node2D
 
 	internal void ProcessRoamingEnemies()
 	{
-		if (Combat.InCombat) return;
+		if (Combat.InCombat || _explorationTurnService == null) return;
 
-		List<Vector2I> playerPositions = new List<Vector2I>();
-		foreach (var kvp in HexContents) if (kvp.Value.Type == "Player Fleet") playerPositions.Add(kvp.Key);
-		if (playerPositions.Count == 0) return;
-
-		List<KeyValuePair<Vector2I, MapEntity>> enemies = HexContents.Where(kvp => kvp.Value.Type == "Enemy Fleet").ToList();
-		Random rng = new Random();
-
-		foreach (var kvp in enemies)
+		List<EnemyRoamingMove> plannedMoves = _explorationTurnService.PlanRoamingEnemyMoves(HexContents, HexGrid.Keys, ScanningRange);
+		foreach (EnemyRoamingMove move in plannedMoves)
 		{
-			Vector2I currentPos = kvp.Key;
-			MapEntity enemyShip = kvp.Value;
-			Vector2I targetPlayer = playerPositions[0];
-			int minDistance = HexMath.HexDistance(currentPos, targetPlayer);
-			
-			foreach (Vector2I playerHex in playerPositions)
-			{
-				int dist = HexMath.HexDistance(currentPos, playerHex);
-				if (dist < minDistance) { minDistance = dist; targetPlayer = playerHex; }
-			}
-			
-			Vector2I bestNeighbor = currentPos;
-
-			if (minDistance <= ScanningRange + 2)
-			{
-				int bestDist = minDistance;
-				foreach (Vector2I dir in HexMath.Directions)
-				{
-					Vector2I neighbor = currentPos + dir;
-					if (!HexGrid.ContainsKey(neighbor)) continue;
-					if (IsHexWalkable(neighbor))
-					{
-						int distToTarget = HexMath.HexDistance(neighbor, targetPlayer);
-						if (distToTarget < bestDist) { bestDist = distToTarget; bestNeighbor = neighbor; }
-					}
-				}
-			}
-			else 
-			{
-				List<Vector2I> validMoves = new List<Vector2I>();
-				foreach (Vector2I dir in HexMath.Directions)
-				{
-					Vector2I neighbor = currentPos + dir;
-					if (IsHexWalkable(neighbor))
-					{
-						if (HexMath.HexDistance(neighbor, targetPlayer) > ScanningRange)
-						{
-							validMoves.Add(neighbor);
-						}
-					}
-				}
-
-				if (validMoves.Count > 0)
-				{
-					bestNeighbor = validMoves[rng.Next(validMoves.Count)];
-				}
-			}
-			
-			if (bestNeighbor != currentPos)
-			{
-				MoveShip(currentPos, bestNeighbor, 0); 
-			}
+			MoveShip(move.FromHex, move.ToHex, 0);
 		}
 
 		GetTree().CreateTimer(0.5f).Timeout += () => 
@@ -1212,40 +1135,6 @@ public partial class BattleMap : Node2D
 		return false;
 	}
 
-	private MapEntity GetAdjacentPlanet(MapEntity ship)
-	{
-		Vector2I shipHex = Vector2I.Zero;
-		foreach(var kvp in HexContents) if (kvp.Value == ship) shipHex = kvp.Key;
-		foreach(Vector2I dir in HexMath.Directions)
-		{
-			Vector2I n = shipHex + dir;
-			if (HexContents.ContainsKey(n) && HexContents[n].Type == "Planet") return HexContents[n];
-		}
-		return null;
-	}
-	
-	private MapEntity GetAdjacentOutpost(MapEntity ship)
-	{
-		Vector2I shipHex = Vector2I.Zero;
-		foreach(var kvp in HexContents) if (kvp.Value == ship) shipHex = kvp.Key;
-		foreach(Vector2I dir in HexMath.Directions)
-		{
-			Vector2I n = shipHex + dir;
-			if (HexContents.ContainsKey(n) && HexContents[n].Type == "Outpost") return HexContents[n];
-		}
-		return null;
-	}
-
-	private PlanetData GetPlanetData(string planetName)
-	{
-		if (_globalData == null || string.IsNullOrEmpty(_globalData.SavedSystem)) return null;
-		if (!_globalData.ExploredSystems.ContainsKey(_globalData.SavedSystem)) return null;
-		
-		SystemData currentSystem = _globalData.ExploredSystems[_globalData.SavedSystem];
-		foreach (PlanetData p in currentSystem.Planets) if (p.Name == planetName) return p;
-		return null;
-	}
-
 	internal void ToggleShipMenu(bool expand, MapEntity ship = null)
 	{
 		if (UI == null) return;
@@ -1262,16 +1151,18 @@ public partial class BattleMap : Node2D
 		if (expand && ship != null)
 		{
 			CurrentlyViewedShip = ship;
-			UI.ShipMenuTitle.Text = $"== {ship.Name.ToUpper()} ==";
+			ShipMenuState menuState = _shipContextService?.BuildMenuState(ship, Combat.InCombat, HexContents);
+			if (menuState == null) return;
+			UI.ShipMenuTitle.Text = menuState.Title;
 
-			string imagePath = Database.GetShipTexturePath(ship.Name);
+			string imagePath = menuState.ImagePath;
 			if (!string.IsNullOrEmpty(imagePath))
 			{
 				Texture2D tex = GD.Load<Texture2D>(imagePath);
 				if (tex != null) UI.ShipImageDisplay.Texture = tex;
 			}
 			
-			float hpPercent = (float)ship.CurrentHP / ship.MaxHP;
+			float hpPercent = menuState.HpPercent;
 			UI.ShipImageDisplay.Modulate = new Color(1f, hpPercent, hpPercent); 
 
 			UI.HpBar.MaxValue = ship.MaxHP;
@@ -1281,57 +1172,52 @@ public partial class BattleMap : Node2D
 			UI.ShieldBar.Value = ship.CurrentShields;
 			UI.ShieldLabel.Text = $"SHIELD CAPACITORS: {ship.CurrentShields}/{ship.MaxShields}";
 
-			UI.ShipMenuDetails.Text = $"Classification: {ship.Type}\nAction Points: {ship.CurrentActions}/{ship.MaxActions}\nWeapon Payload: 0-{ship.AttackDamage} Dmg\nTargeting Range: {ship.AttackRange} Hexes\n";
+			UI.ShipMenuDetails.Text = menuState.DetailsText;
 				
-			bool isPlayer = ship.Type == "Player Fleet";
+			bool isPlayer = menuState.IsPlayerShip;
 			UI.BtnWeapons.Visible = isPlayer;
 			UI.BtnShields.Visible = isPlayer;
 			UI.BtnRepair.Visible = isPlayer;
-			UI.BtnRepair.Disabled = ship.CurrentActions < 2;
+			UI.BtnRepair.Disabled = !menuState.CanRepair;
 			UI.CodexButton.Visible = isPlayer;
 			UI.BtnScan.Visible = false;
 			UI.BtnSalvage.Visible = false;
 
+			if (menuState.ShowEquip && _btnEquip != null)
+			{
+				_btnEquip.Visible = true;
+			}
+
+			if (menuState.ShowLongRange && UI.BtnLongRange != null)
+			{
+				UI.BtnLongRange.Visible = true;
+				UI.BtnLongRange.Disabled = menuState.DisableLongRange;
+			}
+
+			if (menuState.ShowScan)
+			{
+				UI.BtnScan.Visible = true;
+				UI.BtnScan.Disabled = menuState.DisableScan;
+				UI.BtnScan.Text = menuState.ScanText;
+			}
+
+			if (menuState.ShowSalvage)
+			{
+				UI.BtnSalvage.Visible = true;
+				UI.BtnSalvage.Disabled = menuState.DisableSalvage;
+				UI.BtnSalvage.Text = menuState.SalvageText;
+			}
+
+			if (menuState.ShowTrade && _btnTrade != null)
+			{
+				_btnTrade.Visible = true;
+			}
+
 			if (isPlayer && !Combat.InCombat)
 			{
-				// --- NEW: Show Equip button for Player Ships out of combat ---
-				if (_btnEquip != null) _btnEquip.Visible = true;
-
-				if (ship.Name == "The Aether Skimmer")
+				if (!menuState.ShowLongRange && UI.BtnLongRange != null)
 				{
-					if (UI.BtnLongRange != null)
-					{
-						UI.BtnLongRange.Visible = true;
-						UI.BtnLongRange.Disabled = _globalData.FleetResources["Energy Cores"].AsSingle() < 5f;
-					}
-				}
-
-				MapEntity adjPlanet = GetAdjacentPlanet(ship);
-				if (adjPlanet != null)
-				{
-					PlanetData pData = GetPlanetData(adjPlanet.Name);
-					if (pData != null)
-					{
-						if (ship.Name == "The Aether Skimmer" || ship.Name == "The Relic Harvester")
-						{
-							UI.BtnScan.Visible = true;
-							UI.BtnScan.Disabled = pData.HasBeenScanned || ship.CurrentActions < 1;
-							UI.BtnScan.Text = pData.HasBeenScanned ? "SCANNED" : "SCAN";
-						}
-						
-						if (ship.Name == "The Relic Harvester" || ship.Name == "The Neptune Forge")
-						{
-							UI.BtnSalvage.Visible = true;
-							UI.BtnSalvage.Disabled = pData.HasBeenSalvaged || ship.CurrentActions < 1;
-							UI.BtnSalvage.Text = pData.HasBeenSalvaged ? "SALVAGED" : "SALVAGE";
-						}
-					}
-				}
-				
-				MapEntity adjOutpost = GetAdjacentOutpost(ship);
-				if (adjOutpost != null && _btnTrade != null)
-				{
-					_btnTrade.Visible = true;
+					UI.BtnLongRange.Visible = false;
 				}
 			}
 		}
@@ -1341,49 +1227,40 @@ public partial class BattleMap : Node2D
 	{
 		if (IsFleetMoving) return; 
 		if (CurrentlyViewedShip == null || CurrentlyViewedShip.CurrentActions < 1) return;
-		MapEntity planet = GetAdjacentPlanet(CurrentlyViewedShip);
+		if (_explorationActionService == null) return;
+		MapEntity planet = _shipContextService?.GetAdjacentPlanet(CurrentlyViewedShip, HexContents);
 		if (planet == null) return;
 
-		PlanetData pData = GetPlanetData(planet.Name);
+		PlanetData pData = _shipContextService?.GetAdjacentPlanetData(CurrentlyViewedShip, HexContents);
 		if (pData != null && pData.HasBeenScanned) return; 
 
-		if (_globalData != null)
+		ScanActionResult result = _explorationActionService.PerformScan(CurrentlyViewedShip, planet, pData, ConversationUI != null);
+		if (!result.Allowed)
 		{
-			float currentCores = _globalData.FleetResources["Energy Cores"].AsSingle();
-			if (currentCores < 0.5f)
+			if (!string.IsNullOrEmpty(result.FailureMessage))
 			{
 				UI.CombatLogPanel.Visible = true;
-				LogCombatMessage($"\n[color=red]*** SCAN FAILED: INSUFFICIENT ENERGY CORES (0.5 Req) ***[/color]");
-				return;
+				LogCombatMessage($"\n[color=red]{result.FailureMessage}[/color]");
 			}
-			_globalData.FleetResources["Energy Cores"] = currentCores - 0.5f;
-			UpdateResourceUI(); 
+			return;
 		}
 
-		CurrentlyViewedShip.CurrentActions -= 1;
-		if (pData != null) pData.HasBeenScanned = true;
+		UpdateResourceUI();
 
-		Random rng = new Random();
-		
-		if (rng.Next(0, 100) < 30 && ConversationUI != null) 
+		if (result.TriggerConversation && ConversationUI != null)
 		{
 			UI.CombatLogPanel.Visible = true;
 			LogCombatMessage($"\n[color=yellow]*** INCOMING TRANSMISSION FROM SURFACE ***[/color]");
-			
-			ConversationUI.StartConversation("Stranded_Miner"); 
-			
+			ConversationUI.StartConversation(result.ConversationId);
 			ToggleShipMenu(true, CurrentlyViewedShip);
-			return; 
+			return;
 		}
 
-		float scale = planet.VisualSprite.Scale.X;
-		string sizeClass = scale > 0.6f ? "Massive" : (scale > 0.5f ? "Standard" : "Dwarf");
-		
 		UI.CombatLogPanel.Visible = true;
-		LogCombatMessage($"\n[color=#00ffff]--- SENSOR SWEEP COMPLETED (-0.5 Energy) ---[/color]");
+		LogCombatMessage($"\n[color=#00ffff]--- SENSOR SWEEP COMPLETED (-{result.EnergyCost:0.#} Energy) ---[/color]");
 		LogCombatMessage($"Target: {planet.Name}");
-		LogCombatMessage($"Size Class: {sizeClass}");
-		LogCombatMessage($"Projected Salvage Operation: {Mathf.Max(1, Mathf.RoundToInt(scale * 5f))} Turns");
+		LogCombatMessage($"Size Class: {result.SizeClass}");
+		LogCombatMessage($"Projected Salvage Operation: {result.ProjectedSalvageTurns} Turns");
 		LogCombatMessage($"Caution: extended operations carry risk of hostile detection.");
 
 		ToggleShipMenu(true, CurrentlyViewedShip); 
@@ -1393,91 +1270,48 @@ public partial class BattleMap : Node2D
 	{
 		if (IsFleetMoving) return; 
 		if (CurrentlyViewedShip == null || CurrentlyViewedShip.CurrentActions < 1) return;
-		MapEntity planet = GetAdjacentPlanet(CurrentlyViewedShip);
+		if (_explorationActionService == null) return;
+		MapEntity planet = _shipContextService?.GetAdjacentPlanet(CurrentlyViewedShip, HexContents);
 		if (planet == null) return;
 
-		PlanetData pData = GetPlanetData(planet.Name);
+		PlanetData pData = _shipContextService?.GetAdjacentPlanetData(CurrentlyViewedShip, HexContents);
 		if (pData != null && pData.HasBeenSalvaged) return; 
 
-		if (_globalData != null)
+		SalvageActionResult result = _explorationActionService.PerformSalvage(
+			CurrentlyViewedShip,
+			planet,
+			pData,
+			HexContents,
+			ScanningRange,
+			AdvanceExplorationTurn);
+
+		if (!result.Allowed)
 		{
-			float currentRaw = _globalData.FleetResources["Raw Materials"].AsSingle();
-			if (currentRaw < 1.0f)
+			if (!string.IsNullOrEmpty(result.FailureMessage))
 			{
 				UI.CombatLogPanel.Visible = true;
-				LogCombatMessage($"\n[color=red]*** SALVAGE FAILED: INSUFFICIENT RAW MATERIALS (1.0 Req) ***[/color]");
-				return;
+				LogCombatMessage($"\n[color=red]{result.FailureMessage}[/color]");
 			}
-			_globalData.FleetResources["Raw Materials"] = currentRaw - 1.0f;
-			UpdateResourceUI(); 
+			return;
 		}
-
-		float scale = planet.VisualSprite.Scale.X;
-		int turnsNeeded = Mathf.Max(1, Mathf.RoundToInt(scale * 5f)); 
-
-		CurrentlyViewedShip.CurrentActions = 0; 
 
 		UI.CombatLogPanel.Visible = true;
-		LogCombatMessage($"\n[color=yellow]--- SALVAGE OPERATION COMMENCED (-1.0 Raw Materials) ---[/color]");
+		LogCombatMessage($"\n[color=yellow]--- SALVAGE OPERATION COMMENCED (-{result.RawCost:0.#} Raw Materials) ---[/color]");
+		UpdateResourceUI();
 
-		bool ambushed = false;
-
-		for (int i = 0; i < turnsNeeded; i++)
+		if (result.Ambushed)
 		{
-			AdvanceExplorationTurn();
-
-			List<Vector2I> players = new List<Vector2I>();
-			List<Vector2I> enemies = new List<Vector2I>();
-			foreach (var kvp in HexContents)
-			{
-				if (kvp.Value.Type == "Player Fleet") players.Add(kvp.Key);
-				if (kvp.Value.Type == "Enemy Fleet") enemies.Add(kvp.Key);
-			}
-
-			foreach (Vector2I p in players)
-			{
-				foreach (Vector2I e in enemies)
-				{
-					if (HexMath.HexDistance(p, e) <= ScanningRange)
-					{
-						ambushed = true;
-						break;
-					}
-				}
-				if (ambushed) break;
-			}
-
-			if (ambushed)
-			{
-				LogCombatMessage($"[color=red]*** HOSTILES DETECTED! SALVAGE ABORTED! ***[/color]");
-				Combat.CheckForCombatTrigger();
-				break;
-			}
+			LogCombatMessage($"[color=red]*** HOSTILES DETECTED! SALVAGE ABORTED! ***[/color]");
+			Combat.CheckForCombatTrigger();
+			ToggleShipMenu(true, CurrentlyViewedShip);
+			return;
 		}
 
-		if (!ambushed)
-		{
-			if (pData != null) pData.HasBeenSalvaged = true; 
-
-			Random rng = new Random();
-			float rawYield = rng.Next(50, 151); 
-			float energyYield = rng.Next(1, 9); 
-			float techYield = rng.Next(1, 4); 
-
-			if (_globalData != null)
-			{
-				_globalData.FleetResources["Raw Materials"] = _globalData.FleetResources["Raw Materials"].AsSingle() + rawYield;
-				_globalData.FleetResources["Energy Cores"] = _globalData.FleetResources["Energy Cores"].AsSingle() + energyYield;
-				_globalData.FleetResources["Ancient Tech"] = _globalData.FleetResources["Ancient Tech"].AsSingle() + techYield;
-				UpdateResourceUI(); 
-			}
-
-			LogCombatMessage($"[color=green]Operation Successful. Acquired:[/color]");
-			LogCombatMessage($"[color=green]- {rawYield} Raw Materials[/color]");
-			LogCombatMessage($"[color=green]- {energyYield} Energy Cores[/color]");
-			LogCombatMessage($"[color=green]- {techYield} Ancient Tech[/color]");
-		}
-
+		UpdateResourceUI();
+		LogCombatMessage($"[color=green]Operation Successful. Acquired:[/color]");
+		LogCombatMessage($"[color=green]- {result.RawYield} Raw Materials[/color]");
+		LogCombatMessage($"[color=green]- {result.EnergyYield} Energy Cores[/color]");
+		LogCombatMessage($"[color=green]- {result.TechYield} Ancient Tech[/color]");
 		ToggleShipMenu(true, CurrentlyViewedShip); 
 	}
 
@@ -1515,13 +1349,9 @@ public partial class BattleMap : Node2D
 	internal void OnRepairPressed()
 	{
 		if (IsFleetMoving) return; 
-		if (CurrentlyViewedShip == null || CurrentlyViewedShip.IsDead || CurrentlyViewedShip.Type != "Player Fleet") return;
-		if (CurrentlyViewedShip.CurrentActions < 2) return;
-		CurrentlyViewedShip.CurrentActions -= 2;
-		
-		Random rng = new Random();
-		int healAmount = rng.Next(15, 30); 
-		CurrentlyViewedShip.CurrentHP = Mathf.Min(CurrentlyViewedShip.CurrentHP + healAmount, CurrentlyViewedShip.MaxHP);
+		if (_explorationActionService == null) return;
+		ShipRepairResult result = _explorationActionService.PerformShipRepair(CurrentlyViewedShip);
+		if (!result.Allowed) return;
 		
 		if (SfxPlayer != null)
 		{
@@ -1535,67 +1365,22 @@ public partial class BattleMap : Node2D
 	private void OnRepairFleetPressed()
 	{
 		if (IsFleetMoving || Combat.InCombat) return; 
+		if (_explorationActionService == null) return;
 
-		int totalMissing = 0;
-		foreach (var kvp in HexContents)
-		{
-			if (kvp.Value.Type == "Player Fleet")
-			{
-				totalMissing += (kvp.Value.MaxHP - kvp.Value.CurrentHP) + (kvp.Value.MaxShields - kvp.Value.CurrentShields);
-			}
-		}
+		FleetRepairResult result = _explorationActionService.PerformFleetRepair(HexContents, ScanningRange, AdvanceExplorationTurn);
+		if (!result.Allowed) return;
 
-		if (totalMissing == 0) return;
-
-		int turnsNeeded = (totalMissing / 20) + 1; 
 		UI.CombatLogPanel.Visible = true;
-		LogCombatMessage($"\n[color=cyan]--- REPAIRING FLEET (Estimated {turnsNeeded} Turns) ---[/color]");
+		LogCombatMessage($"\n[color=cyan]--- REPAIRING FLEET (Estimated {result.TurnsNeeded} Turns) ---[/color]");
 
-		bool ambushed = false;
-
-		for (int i = 0; i < turnsNeeded; i++)
+		if (result.Ambushed)
 		{
-			AdvanceExplorationTurn();
-
-			foreach (var kvp in HexContents)
-			{
-				if (kvp.Value.Type == "Player Fleet")
-				{
-					kvp.Value.CurrentHP = Mathf.Min(kvp.Value.CurrentHP + 15, kvp.Value.MaxHP);
-					kvp.Value.CurrentShields = Mathf.Min(kvp.Value.CurrentShields + 10, kvp.Value.MaxShields);
-				}
-			}
-
-			List<Vector2I> players = new List<Vector2I>();
-			List<Vector2I> enemies = new List<Vector2I>();
-			foreach (var kvp in HexContents)
-			{
-				if (kvp.Value.Type == "Player Fleet") players.Add(kvp.Key);
-				if (kvp.Value.Type == "Enemy Fleet") enemies.Add(kvp.Key);
-			}
-
-			foreach (Vector2I p in players)
-			{
-				foreach (Vector2I e in enemies)
-				{
-					if (HexMath.HexDistance(p, e) <= ScanningRange)
-					{
-						ambushed = true;
-						break;
-					}
-				}
-				if (ambushed) break;
-			}
-
-			if (ambushed)
-			{
-				LogCombatMessage($"[color=red]*** REPAIRS INTERRUPTED BY ENEMY FLEET! ***[/color]");
-				Combat.CheckForCombatTrigger();
-				break;
-			}
+			LogCombatMessage($"[color=red]*** REPAIRS INTERRUPTED BY ENEMY FLEET! ***[/color]");
+			Combat.CheckForCombatTrigger();
+			return;
 		}
 
-		if (!ambushed) LogCombatMessage($"[color=green]Fleet repairs complete.[/color]");
+		if (result.FullyRepaired) LogCombatMessage($"[color=green]Fleet repairs complete.[/color]");
 	}
 
 	internal void OnEndTurnPressed()
@@ -1616,11 +1401,9 @@ public partial class BattleMap : Node2D
 
 	private void AdvanceExplorationTurn()
 	{
-		CurrentTurn++;
-		foreach (var kvp in HexContents)
-		{
-			if (kvp.Value.Type == "Player Fleet" || kvp.Value.Type == "Enemy Fleet") kvp.Value.CurrentActions = kvp.Value.MaxActions; 
-		}
+		CurrentTurn = _explorationTurnService != null
+			? _explorationTurnService.AdvanceTurn(CurrentTurn, HexContents)
+			: CurrentTurn + 1;
 		if (UI != null) UI.TurnLabel.Text = $"TURN {CurrentTurn}";
 		
 		ProcessRoamingEnemies(); 
