@@ -6,6 +6,8 @@ public static class BattleVFX
 {
 	public static void DrawLaserBeam(Node2D parentLayer, Vector2 startPos, Vector2 endPos, string attackerType)
 	{
+		if (!IsNodeAlive(parentLayer)) return;
+
 		Line2D laser = new Line2D();
 		laser.AddPoint(startPos);
 		laser.AddPoint(endPos);
@@ -16,13 +18,18 @@ public static class BattleVFX
 		
 		parentLayer.AddChild(laser);
 
-		Tween tween = parentLayer.CreateTween();
+		Tween tween = laser.CreateTween();
 		tween.TweenProperty(laser, "modulate", new Color(1, 1, 1, 0), 0.4f);
-		tween.TweenCallback(Callable.From(laser.QueueFree)); 
+		tween.TweenCallback(Callable.From(() =>
+		{
+			if (GodotObject.IsInstanceValid(laser)) laser.QueueFree();
+		}));
 	}
 
 	public static void DrawExplosion(Node2D parentLayer, Vector2 pos, float hexSize)
 	{
+		if (!IsNodeAlive(parentLayer)) return;
+
 		Polygon2D shockwave = new Polygon2D();
 		Vector2[] points = new Vector2[32];
 		for (int i = 0; i < 32; i++)
@@ -35,10 +42,13 @@ public static class BattleVFX
 		shockwave.Position = pos;
 		parentLayer.AddChild(shockwave);
 
-		Tween flashTween = parentLayer.CreateTween();
+		Tween flashTween = shockwave.CreateTween();
 		flashTween.TweenProperty(shockwave, "scale", new Vector2(3.0f, 3.0f), 0.8f).SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.Out);
 		flashTween.Parallel().TweenProperty(shockwave, "color", new Color(1f, 0.4f, 0f, 0f), 0.8f); 
-		flashTween.TweenCallback(Callable.From(shockwave.QueueFree)); 
+		flashTween.TweenCallback(Callable.From(() =>
+		{
+			if (GodotObject.IsInstanceValid(shockwave)) shockwave.QueueFree();
+		}));
 
 		CpuParticles2D particles = new CpuParticles2D();
 		particles.Position = pos;
@@ -73,10 +83,18 @@ public static class BattleVFX
 		parentLayer.AddChild(particles);
 		particles.Emitting = true; 
 
-		parentLayer.GetTree().CreateTimer(3.0f).Timeout += () => 
+		SceneTree tree = parentLayer.GetTree();
+		if (tree == null) return;
+
+		tree.CreateTimer(3.0f).Timeout += () =>
 		{
 			if (GodotObject.IsInstanceValid(particles)) particles.QueueFree();
 		};
+	}
+
+	private static bool IsNodeAlive(Node node)
+	{
+		return node != null && GodotObject.IsInstanceValid(node);
 	}
 
 	public static void AddSunVFX(Sprite2D sunSprite)

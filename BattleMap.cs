@@ -96,7 +96,7 @@ public partial class BattleMap : Node2D
 		_explorationTurnService = new ExplorationTurnService();
 		if (_globalData != null && _globalData.CurrentTurn > 0) CurrentTurn = _globalData.CurrentTurn;
 		
-		Texture2D cursorTex = GD.Load<Texture2D>("res://cursor.png");
+		Texture2D cursorTex = GD.Load<Texture2D>("res://Assets/UI/Cursor.png");
 		if (cursorTex != null)
 		{
 			Input.SetCustomMouseCursor(cursorTex, Input.CursorShape.Arrow, Vector2.Zero);
@@ -829,7 +829,7 @@ public partial class BattleMap : Node2D
 	{ 
 		_bgmPlayer = new AudioStreamPlayer();
 		AddChild(_bgmPlayer);
-		AudioStream bgmStream = GD.Load<AudioStream>("res://battle_theme.mp3"); 
+		AudioStream bgmStream = GD.Load<AudioStream>("res://Sounds/battle_theme.mp3");
 		if (bgmStream != null) { _bgmPlayer.Stream = bgmStream; _bgmPlayer.VolumeDb = -15.0f; _bgmPlayer.Play(); }
 
 		SfxPlayer = new AudioStreamPlayer();

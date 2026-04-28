@@ -1,7 +1,7 @@
 [gd_scene format=3 uid="uid://capn403bidskx"]
 
 [ext_resource type="Texture2D" uid="uid://dmpdi1up5l0xq" path="res://Planets/terra_planet.png" id="1_rjrc8"]
-[ext_resource type="FontFile" uid="uid://cs2qy7wansjjb" path="res://Orbitron-VariableFont_wght.ttf" id="2_eog3t"]
+[ext_resource type="FontFile" uid="uid://cs2qy7wansjjb" path="res://Assets/UI/Orbitron-VariableFont_wght.ttf" id="2_eog3t"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_rjrc8"]
 radius = 101.17806

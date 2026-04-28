@@ -1,7 +1,7 @@
 [gd_scene format=3 uid="uid://dd2mpvnbwpra5"]
 
 [ext_resource type="Script" uid="uid://0t084sfj14bk" path="res://FleetSelection.cs" id="1_6xdos"]
-[ext_resource type="FontFile" uid="uid://cs2qy7wansjjb" path="res://Orbitron-VariableFont_wght.ttf" id="2_75uhs"]
+[ext_resource type="FontFile" uid="uid://cs2qy7wansjjb" path="res://Assets/UI/Orbitron-VariableFont_wght.ttf" id="2_75uhs"]
 [ext_resource type="AudioStream" uid="uid://d3ahvamffnu1r" path="res://Ships/Stellar_Cartography.mp3" id="2_le7cs"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_6xdos"]

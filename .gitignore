@@ -14,3 +14,9 @@ export_credentials.cfg
 .mono/
 data_*/
 mono_crash.*.json
+
+# Local CLI/runtime cache
+.dotnet-cli/
+
+# Local exported builds
+exports/

@@ -34,7 +34,7 @@ public partial class Codex : Control
 		// 1. Setup Background
 		TextureRect bg = new TextureRect();
 		if (CodexBackgroundImage != null) bg.Texture = CodexBackgroundImage;
-		else bg.Texture = GD.Load<Texture2D>("res://CodexScreen.jpg"); 
+		else bg.Texture = GD.Load<Texture2D>("res://Assets/UI/CodexScreen.png");
 		bg.ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize;
 		bg.SetAnchorsPreset(LayoutPreset.FullRect);
 		AddChild(bg);
@@ -496,7 +496,7 @@ public partial class Codex : Control
 			case "The Valkyrie Wing": return "res://Ships/ValkyrieWingSprite.png";
 			case "The Aegis Bastion": return "res://Ships/AegisBastionSprite.png";
 			case "The Aether Skimmer": return "res://Ships/AetherSkimmerSprite.png";
-			default: return "res://icon.svg"; 
+			default: return "res://Assets/UI/icon.svg";
 		}
 	}
 
@@ -524,7 +524,7 @@ public partial class Codex : Control
 			case "Ignis Repurposed Terraformer": return "res://EnemyShips/IgnisRepurposedTerraformerSprite.png";
 			case "Reformatter Dreadnought": return "res://EnemyShips/ReformatterDreadnoughtSprite.png";
 			case "Scrap-Stick Subversion Drone": return "res://EnemyShips/ScrapStickSubversionDroneSprite.png";
-			default: return "res://icon.svg"; 
+			default: return "res://Assets/UI/icon.svg";
 		}
 	}
 

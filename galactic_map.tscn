@@ -1,11 +1,11 @@
 [gd_scene format=3 uid="uid://n82c07e5po4n"]
 
 [ext_resource type="Script" uid="uid://cvswq0fg77o43" path="res://GalacticMap.cs" id="1_e1oxo"]
-[ext_resource type="Texture2D" uid="uid://dbq6qkjwatdci" path="res://EidraluneMap_BG.png" id="2_0oxw2"]
-[ext_resource type="Texture2D" uid="uid://bvewwcbbx0h2h" path="res://region_mask.png" id="2_pd335"]
-[ext_resource type="AudioStream" uid="uid://diharanfm23q3" path="res://Custodian_s_Legacy.mp3" id="3_tkp1o"]
+[ext_resource type="Texture2D" uid="uid://dbq6qkjwatdci" path="res://Assets/Backgrounds/EidraluneMap_BG.png" id="2_0oxw2"]
+[ext_resource type="Texture2D" uid="uid://bvewwcbbx0h2h" path="res://Assets/Backgrounds/region_mask.png" id="2_pd335"]
+[ext_resource type="AudioStream" uid="uid://diharanfm23q3" path="res://Sounds/Custodian_s_Legacy.mp3" id="3_tkp1o"]
 [ext_resource type="Script" uid="uid://b3cxpaw43vqb7" path="res://SystemWindow.cs" id="4_w7lh3"]
-[ext_resource type="FontFile" uid="uid://cs2qy7wansjjb" path="res://Orbitron-VariableFont_wght.ttf" id="5_hafba"]
+[ext_resource type="FontFile" uid="uid://cs2qy7wansjjb" path="res://Assets/UI/Orbitron-VariableFont_wght.ttf" id="5_hafba"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_dxx2x"]
 bg_color = Color(0, 0, 0, 1)
