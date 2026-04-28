@@ -81,6 +81,7 @@ public partial class BattleMap : Node2D
 	private ExplorationActionService _explorationActionService;
 	private ExplorationTurnService _explorationTurnService;
 	private DistressSignalService _distressSignalService;
+	private JumpService _jumpService;
 
 	public override void _Ready()
 	{
@@ -89,6 +90,7 @@ public partial class BattleMap : Node2D
 		if (_globalData != null) _shipContextService = new ShipContextService(_globalData);
 		if (_globalData != null) _explorationActionService = new ExplorationActionService(_globalData);
 		if (_globalData != null) _distressSignalService = new DistressSignalService(_globalData);
+		if (_globalData != null) _jumpService = new JumpService(_globalData);
 		_explorationTurnService = new ExplorationTurnService();
 		if (_globalData != null && _globalData.CurrentTurn > 0) CurrentTurn = _globalData.CurrentTurn;
 		
@@ -1046,33 +1048,11 @@ public partial class BattleMap : Node2D
 
 	private void UpdateJumpButton()
 	{
-		bool isNearStargate = false;
-		if (!Combat.InCombat)
-		{
-			UI.JumpButton.Text = "ENTER STARGATE";
-			foreach (Vector2I hex in SelectedHexes)
-			{
-				if (HexContents.ContainsKey(hex) && HexContents[hex].Type == GameConstants.EntityTypes.PlayerFleet)
-				{
-					foreach(Vector2I dir in HexMath.Directions)
-					{
-						Vector2I neighbor = hex + dir;
-						if (HexContents.ContainsKey(neighbor) && HexContents[neighbor].Type == GameConstants.EntityTypes.StarGate)
-						{
-							isNearStargate = true;
-							break;
-						}
-					}
-				}
-				if (isNearStargate) break;
-			}
-		}
-		else
-		{
-			UI.JumpButton.Text = "EMERGENCY JUMP";
-			isNearStargate = CanFleetEscape();
-		}
-		UI.JumpButton.Visible = isNearStargate;
+		if (_jumpService == null) return;
+
+		JumpButtonState state = _jumpService.BuildJumpButtonState(Combat.InCombat, SelectedHexes, HexContents);
+		UI.JumpButton.Text = state.ButtonText;
+		UI.JumpButton.Visible = state.IsVisible;
 	}
 
 	private void UpdateAttackButton()
@@ -1097,25 +1077,6 @@ public partial class BattleMap : Node2D
 			Combat.IsTargeting = false;
 			UI.AttackButton.Text = "ATTACK";
 		}
-	}
-
-	private bool CanFleetEscape()
-	{
-		List<Vector2I> playerHexes = new List<Vector2I>();
-		List<Vector2I> gateHexes = new List<Vector2I>();
-		foreach (var kvp in HexContents)
-		{
-			if (kvp.Value.Type == GameConstants.EntityTypes.PlayerFleet) playerHexes.Add(kvp.Key);
-			if (kvp.Value.Type == GameConstants.EntityTypes.StarGate) gateHexes.Add(kvp.Key);
-		}
-		if (playerHexes.Count == 0 || gateHexes.Count == 0) return false;
-		foreach (Vector2I gate in gateHexes)
-		{
-			bool allNear = true;
-			foreach (Vector2I ship in playerHexes) if (HexMath.HexDistance(gate, ship) > 1) { allNear = false; break; }
-			if (allNear) return true;
-		}
-		return false;
 	}
 
 	internal void ToggleShipMenu(bool expand, MapEntity ship = null)
@@ -1394,7 +1355,7 @@ public partial class BattleMap : Node2D
 
 	private void OnJumpPressed()
 	{
-		if (IsJumping || IsFleetMoving) return; 
+		if (IsJumping || IsFleetMoving || _jumpService == null) return;
 		IsJumping = true;
 
 		if (UI != null)
@@ -1405,50 +1366,23 @@ public partial class BattleMap : Node2D
 		}
 		ToggleShipMenu(false);
 
-		Vector2I gateHex = new Vector2I(0,0);
-		bool gateFound = false;
-		bool isEmergencyJump = Combat.InCombat; 
-		
-		if (Combat.InCombat)
+		JumpPlan jumpPlan = _jumpService.BuildJumpPlan(Combat.InCombat, SelectedHexes, HexContents);
+		if (!jumpPlan.Allowed)
 		{
-			List<Vector2I> playerHexes = new List<Vector2I>();
-			List<Vector2I> gateHexes = new List<Vector2I>();
-			foreach(var kvp in HexContents) {
-				if (kvp.Value.Type == GameConstants.EntityTypes.PlayerFleet) playerHexes.Add(kvp.Key);
-				if (kvp.Value.Type == GameConstants.EntityTypes.StarGate) gateHexes.Add(kvp.Key);
-			}
-			foreach (Vector2I gate in gateHexes) {
-				bool allNear = true;
-				foreach (Vector2I ship in playerHexes) {
-					if (HexMath.HexDistance(gate, ship) > 1) { allNear = false; break; }
-				}
-				if (allNear) { gateHex = gate; gateFound = true; break; }
-			}
-		}
-		else
-		{
-			foreach(var kvp in HexContents) {
-				if (kvp.Value.Type == GameConstants.EntityTypes.StarGate) {
-					foreach (var p_hex in SelectedHexes) {
-						if (HexMath.HexDistance(kvp.Key, p_hex) <= 1) { gateHex = kvp.Key; gateFound = true; break; }
-					}
-				}
-				if (gateFound) break;
-			}
+			IsJumping = false;
+			return;
 		}
 
-		if (!gateFound) return;
+		_jumpService.PrepareForJump();
 
-		if (_globalData != null) _globalData.InCombat = false;
-
-		Vector2 gatePixelPos = HexMath.HexToPixel(gateHex, HexSize);
+		Vector2 gatePixelPos = HexMath.HexToPixel(jumpPlan.GateHex, HexSize);
 
 		Tween warpTween = CreateTween();
 		warpTween.SetParallel(true);
 
-		if (HexContents.ContainsKey(gateHex) && GodotObject.IsInstanceValid(HexContents[gateHex].VisualSprite))
+		if (HexContents.ContainsKey(jumpPlan.GateHex) && GodotObject.IsInstanceValid(HexContents[jumpPlan.GateHex].VisualSprite))
 		{
-			Sprite2D gateSprite = HexContents[gateHex].VisualSprite;
+			Sprite2D gateSprite = HexContents[jumpPlan.GateHex].VisualSprite;
 			
 			CpuParticles2D vortex = gateSprite.GetNodeOrNull<CpuParticles2D>("VortexParticles");
 			if (vortex != null)
@@ -1488,29 +1422,8 @@ public partial class BattleMap : Node2D
 		{
 			OnSaveGamePressed(); 
 
-			if (_globalData != null)
-			{
-				_globalData.JustJumped = true;
-				
-				if (isEmergencyJump)
-				{
-					Random rng = new Random();
-					if (_globalData.CurrentSectorStars != null && _globalData.CurrentSectorStars.Count > 1)
-					{
-						var availableStars = _globalData.CurrentSectorStars.Where(s => s.SystemName != _globalData.SavedSystem).ToList();
-						if (availableStars.Count > 0)
-						{
-							_globalData.SavedSystem = availableStars[rng.Next(availableStars.Count)].SystemName;
-						}
-					}
-					_globalData.SavedPlanet = ""; 
-					
-					if (_globalData.HasMethod("SaveGame")) _globalData.Call("SaveGame");
-				}
-			}
-			
 			SceneTransition transitioner = GetNodeOrNull<SceneTransition>("/root/SceneTransition");
-			string nextScene = isEmergencyJump ? "res://exploration_battle.tscn" : "res://galactic_map.tscn";
+			string nextScene = _jumpService.FinalizeJump(jumpPlan.IsEmergencyJump);
 			
 			if (transitioner != null) transitioner.ChangeScene(nextScene);
 			else GetTree().ChangeSceneToFile(nextScene);
