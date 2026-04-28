@@ -31,4 +31,14 @@ public static class GameConstants
 		public const string Shield = "SHLD_";
 		public const string Armor = "ARMR_";
 	}
+
+	public static class StandardEquipment
+	{
+		public const string WeaponId = "WPN_MARK1_LASER";
+		public const string ShieldId = "SHLD_STANDARD";
+		public const string ArmorId = "ARMR_STANDARD";
+		public const int MinSaleRaw = 50;
+		public const int MaxSaleRaw = 150;
+		public const int AncientTechSaleRaw = 150;
+	}
 }

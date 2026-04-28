@@ -1,5 +1,32 @@
 [
   {
+	"ItemID": "WPN_MARK1_LASER",
+	"Name": "Mark I Laser",
+	"Category": "Weapon",
+	"BonusStat": 0,
+	"CostTech": 0,
+	"CostRaw": 0,
+	"Description": "Standard-issue fleet weaponry"
+  },
+  {
+	"ItemID": "SHLD_STANDARD",
+	"Name": "Standard Shields",
+	"Category": "Shield",
+	"BonusStat": 0,
+	"CostTech": 0,
+	"CostRaw": 0,
+	"Description": "Standard-issue defensive shield array"
+  },
+  {
+	"ItemID": "ARMR_STANDARD",
+	"Name": "Standard Hull",
+	"Category": "Armor",
+	"BonusStat": 0,
+	"CostTech": 0,
+	"CostRaw": 0,
+	"Description": "Standard-issue reinforced hull plating"
+  },
+  {
 	"ItemID": "WPN_LASER_MK2",
 	"Name": "Mk II Pulse Laser",
 	"Category": "Weapon",

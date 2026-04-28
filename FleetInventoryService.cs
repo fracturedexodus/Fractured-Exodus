@@ -30,6 +30,7 @@ public class FleetInventoryService
 		}
 
 		return _globalData.MasterEquipmentDB.Values
+			.Where(item => item != null && !IsStandardIssueItem(item.ItemID))
 			.OrderBy(item => item.Category)
 			.ThenBy(item => item.Name);
 	}
@@ -152,6 +153,76 @@ public class FleetInventoryService
 			.ToList();
 	}
 
+	public List<InventoryStack> GetGroupedEquippableInventory()
+	{
+		return GetGroupedInventory()
+			.Where(stack => !IsStandardIssueItem(stack.ItemID))
+			.ToList();
+	}
+
+	public List<InventoryStack> GetGroupedSellableInventory()
+	{
+		return GetGroupedInventory()
+			.Where(stack => IsStandardIssueItem(stack.ItemID))
+			.ToList();
+	}
+
+	public int GetStandardIssueSaleValue(string outpostName)
+	{
+		string seed = $"{_globalData?.SavedSystem ?? string.Empty}:{outpostName ?? string.Empty}";
+		int hash = 17;
+		foreach (char c in seed)
+		{
+			hash = (hash * 31) + c;
+		}
+
+		int range = GameConstants.StandardEquipment.MaxSaleRaw - GameConstants.StandardEquipment.MinSaleRaw + 1;
+		int normalized = Mathf.Abs(hash % range);
+		return GameConstants.StandardEquipment.MinSaleRaw + normalized;
+	}
+
+	public int GetAncientTechUnitCount()
+	{
+		if (_globalData?.FleetResources == null)
+		{
+			return 0;
+		}
+
+		return Mathf.FloorToInt(_globalData.FleetResources[GameConstants.ResourceKeys.AncientTech].AsSingle());
+	}
+
+	public bool SellAncientTech()
+	{
+		if (_globalData?.FleetResources == null || GetAncientTechUnitCount() <= 0)
+		{
+			return false;
+		}
+
+		float tech = _globalData.FleetResources[GameConstants.ResourceKeys.AncientTech].AsSingle();
+		float raw = _globalData.FleetResources[GameConstants.ResourceKeys.RawMaterials].AsSingle();
+		_globalData.FleetResources[GameConstants.ResourceKeys.AncientTech] = Mathf.Max(0f, tech - 1f);
+		_globalData.FleetResources[GameConstants.ResourceKeys.RawMaterials] = raw + GameConstants.StandardEquipment.AncientTechSaleRaw;
+		return true;
+	}
+
+	public bool SellInventoryItem(string itemID, int rawValue)
+	{
+		if (_globalData?.UnequippedInventory == null || _globalData?.FleetResources == null)
+		{
+			return false;
+		}
+
+		if (string.IsNullOrEmpty(itemID) || !_globalData.UnequippedInventory.Contains(itemID))
+		{
+			return false;
+		}
+
+		_globalData.UnequippedInventory.Remove(itemID);
+		float raw = _globalData.FleetResources[GameConstants.ResourceKeys.RawMaterials].AsSingle();
+		_globalData.FleetResources[GameConstants.ResourceKeys.RawMaterials] = raw + rawValue;
+		return true;
+	}
+
 	public bool EquipItem(string shipName, string itemID)
 	{
 		if (_globalData?.UnequippedInventory == null || !_globalData.UnequippedInventory.Contains(itemID))
@@ -188,6 +259,11 @@ public class FleetInventoryService
 		}
 
 		_globalData.UnequippedInventory.Remove(itemID);
+		if (string.IsNullOrEmpty(oldItemID))
+		{
+			oldItemID = GetStandardIssueItemId(itemToEquip.Category);
+		}
+
 		if (!string.IsNullOrEmpty(oldItemID))
 		{
 			_globalData.UnequippedInventory.Add(oldItemID);
@@ -245,6 +321,33 @@ public class FleetInventoryService
 
 		EquipmentData item = globalData.MasterEquipmentDB[itemID];
 		return item.Category == category ? item.BonusStat : 0;
+	}
+
+	private static bool IsStandardIssueItem(string itemID)
+	{
+		return itemID == GameConstants.StandardEquipment.WeaponId
+			|| itemID == GameConstants.StandardEquipment.ShieldId
+			|| itemID == GameConstants.StandardEquipment.ArmorId;
+	}
+
+	private static string GetStandardIssueItemId(string category)
+	{
+		if (category == GameConstants.EquipmentCategories.Weapon)
+		{
+			return GameConstants.StandardEquipment.WeaponId;
+		}
+
+		if (category == GameConstants.EquipmentCategories.Shield)
+		{
+			return GameConstants.StandardEquipment.ShieldId;
+		}
+
+		if (category == GameConstants.EquipmentCategories.Armor)
+		{
+			return GameConstants.StandardEquipment.ArmorId;
+		}
+
+		return string.Empty;
 	}
 
 	private ShipLoadout GetLoadout(string shipName)

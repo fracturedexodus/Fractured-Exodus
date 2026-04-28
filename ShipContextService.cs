@@ -85,17 +85,22 @@ public class ShipContextService
 
 	public bool HasAdjacentOutpost(MapEntity ship, Dictionary<Vector2I, MapEntity> hexContents)
 	{
+		return GetAdjacentOutpost(ship, hexContents) != null;
+	}
+
+	public MapEntity GetAdjacentOutpost(MapEntity ship, Dictionary<Vector2I, MapEntity> hexContents)
+	{
 		Vector2I shipHex = GetShipHex(ship, hexContents);
 		foreach (Vector2I dir in HexMath.Directions)
 		{
 			Vector2I neighbor = shipHex + dir;
 			if (hexContents.ContainsKey(neighbor) && hexContents[neighbor].Type == GameConstants.EntityTypes.Outpost)
 			{
-				return true;
+				return hexContents[neighbor];
 			}
 		}
 
-		return false;
+		return null;
 	}
 
 	private PlanetData GetPlanetData(string planetName)

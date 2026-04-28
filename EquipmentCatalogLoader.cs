@@ -68,6 +68,45 @@ public static class EquipmentCatalogLoader
 		return new Dictionary<string, EquipmentData>
 		{
 			{
+				GameConstants.StandardEquipment.WeaponId,
+				new EquipmentData
+				{
+					ItemID = GameConstants.StandardEquipment.WeaponId,
+					Name = FleetInventoryService.DefaultWeaponName,
+					Category = GameConstants.EquipmentCategories.Weapon,
+					BonusStat = 0,
+					CostTech = 0,
+					CostRaw = 0,
+					Description = "Standard-issue fleet weaponry"
+				}
+			},
+			{
+				GameConstants.StandardEquipment.ShieldId,
+				new EquipmentData
+				{
+					ItemID = GameConstants.StandardEquipment.ShieldId,
+					Name = FleetInventoryService.DefaultShieldName,
+					Category = GameConstants.EquipmentCategories.Shield,
+					BonusStat = 0,
+					CostTech = 0,
+					CostRaw = 0,
+					Description = "Standard-issue defensive shield array"
+				}
+			},
+			{
+				GameConstants.StandardEquipment.ArmorId,
+				new EquipmentData
+				{
+					ItemID = GameConstants.StandardEquipment.ArmorId,
+					Name = FleetInventoryService.DefaultHullName,
+					Category = GameConstants.EquipmentCategories.Armor,
+					BonusStat = 0,
+					CostTech = 0,
+					CostRaw = 0,
+					Description = "Standard-issue reinforced hull plating"
+				}
+			},
+			{
 				"WPN_LASER_MK2",
 				new EquipmentData
 				{

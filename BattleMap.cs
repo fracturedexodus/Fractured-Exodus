@@ -392,8 +392,15 @@ public partial class BattleMap : Node2D
 	private void OpenShop()
 	{
 		if (_inventoryService == null) return;
+		string outpostName = GetCurrentTradeOutpostName();
+		int standardSaleValue = _inventoryService.GetStandardIssueSaleValue(outpostName);
 
 		foreach (Node child in _shopItemList.GetChildren()) child.QueueFree();
+
+		Label buyTitle = new Label();
+		buyTitle.Text = "AVAILABLE UPGRADES";
+		buyTitle.AddThemeColorOverride("font_color", new Color(0f, 1f, 0.8f));
+		_shopItemList.AddChild(buyTitle);
 
 		foreach (EquipmentData item in _inventoryService.GetShopItems())
 		{
@@ -423,6 +430,67 @@ public partial class BattleMap : Node2D
 			_shopItemList.AddChild(row);
 		}
 
+		HSeparator separator = new HSeparator();
+		_shopItemList.AddChild(separator);
+
+		Label sellTitle = new Label();
+		sellTitle.Text = $"SALVAGE BUYBACK: {outpostName.ToUpper()}";
+		sellTitle.AddThemeColorOverride("font_color", new Color(1f, 0.7f, 0.2f));
+		_shopItemList.AddChild(sellTitle);
+
+		bool hasSellables = false;
+		int ancientTechCount = _inventoryService.GetAncientTechUnitCount();
+		if (ancientTechCount > 0)
+		{
+			HBoxContainer ancientTechRow = new HBoxContainer();
+
+			RichTextLabel info = new RichTextLabel();
+			info.BbcodeEnabled = true;
+			info.Text = $"[b][color=yellow]{GameConstants.ResourceKeys.AncientTech}[/color][/b] (x{ancientTechCount})\nExchange Rate: [color=cyan]{GameConstants.StandardEquipment.AncientTechSaleRaw} {GameConstants.ResourceKeys.RawMaterials} each[/color]";
+			info.CustomMinimumSize = new Vector2(380, 70);
+			info.FitContent = true;
+			ancientTechRow.AddChild(info);
+
+			Button sellBtn = new Button();
+			sellBtn.Text = "SELL 1";
+			sellBtn.CustomMinimumSize = new Vector2(90, 40);
+			sellBtn.SizeFlagsVertical = Control.SizeFlags.ShrinkCenter;
+			sellBtn.Pressed += SellAncientTech;
+			ancientTechRow.AddChild(sellBtn);
+
+			_shopItemList.AddChild(ancientTechRow);
+			hasSellables = true;
+		}
+
+		foreach (InventoryStack stack in _inventoryService.GetGroupedSellableInventory())
+		{
+			HBoxContainer row = new HBoxContainer();
+
+			RichTextLabel info = new RichTextLabel();
+			info.BbcodeEnabled = true;
+			info.Text = $"[b][color=yellow]{stack.Item.Name}[/color][/b] (x{stack.Count})\n{stack.Item.Description}\n[color=cyan]Sell Value: {standardSaleValue} {GameConstants.ResourceKeys.RawMaterials}[/color]";
+			info.CustomMinimumSize = new Vector2(380, 75);
+			info.FitContent = true;
+			row.AddChild(info);
+
+			Button sellBtn = new Button();
+			sellBtn.Text = "SELL 1";
+			sellBtn.CustomMinimumSize = new Vector2(90, 40);
+			sellBtn.SizeFlagsVertical = Control.SizeFlags.ShrinkCenter;
+			sellBtn.Pressed += () => SellInventoryItem(stack.ItemID, stack.Item.Name, standardSaleValue);
+			row.AddChild(sellBtn);
+
+			_shopItemList.AddChild(row);
+			hasSellables = true;
+		}
+
+		if (!hasSellables)
+		{
+			Label emptySellLabel = new Label();
+			emptySellLabel.Text = "No standard gear or Ancient Tech available to sell.";
+			_shopItemList.AddChild(emptySellLabel);
+		}
+
 		_shopMenuWrapper.Visible = true;
 	}
 
@@ -449,6 +517,34 @@ public partial class BattleMap : Node2D
 
 			OpenShop(); 
 		}
+	}
+
+	private void SellAncientTech()
+	{
+		if (_inventoryService == null || !_inventoryService.SellAncientTech()) return;
+
+		UpdateResourceUI();
+		OnSaveGamePressed();
+
+		if (UI != null) UI.CombatLogPanel.Visible = true;
+		LogCombatMessage($"\n[color=green]--- EXCHANGE COMPLETED ---[/color]");
+		LogCombatMessage($"Sold 1 [color=yellow]{GameConstants.ResourceKeys.AncientTech}[/color] for [color=cyan]{GameConstants.StandardEquipment.AncientTechSaleRaw} {GameConstants.ResourceKeys.RawMaterials}[/color].");
+
+		OpenShop();
+	}
+
+	private void SellInventoryItem(string itemID, string itemName, int rawValue)
+	{
+		if (_inventoryService == null || !_inventoryService.SellInventoryItem(itemID, rawValue)) return;
+
+		UpdateResourceUI();
+		OnSaveGamePressed();
+
+		if (UI != null) UI.CombatLogPanel.Visible = true;
+		LogCombatMessage($"\n[color=green]--- EXCHANGE COMPLETED ---[/color]");
+		LogCombatMessage($"Sold [color=yellow]{itemName}[/color] for [color=cyan]{rawValue} {GameConstants.ResourceKeys.RawMaterials}[/color].");
+
+		OpenShop();
 	}
 
 	// ==========================================
@@ -523,7 +619,7 @@ public partial class BattleMap : Node2D
 		currentLoadoutText.Text = $"[color=cyan]--- {shipName.ToUpper()}'s CURRENT LOADOUT ---[/color]\nWeapon: {wpn}\nShield: {shld}\nArmor: {armr}\n\n[color=yellow]--- CARGO HOLD (AVAILABLE INVENTORY) ---[/color]";
 		_equipItemList.AddChild(currentLoadoutText);
 
-		List<InventoryStack> inventoryStacks = _inventoryService.GetGroupedInventory();
+		List<InventoryStack> inventoryStacks = _inventoryService.GetGroupedEquippableInventory();
 		if (inventoryStacks.Count == 0)
 		{
 			Label emptyLabel = new Label { Text = "No unequipped items available in cargo." };
@@ -553,6 +649,12 @@ public partial class BattleMap : Node2D
 		}
 		
 		_equipMenuWrapper.Visible = true;
+	}
+
+	private string GetCurrentTradeOutpostName()
+	{
+		MapEntity outpost = CurrentlyViewedShip == null ? null : _shipContextService?.GetAdjacentOutpost(CurrentlyViewedShip, HexContents);
+		return string.IsNullOrEmpty(outpost?.Name) ? "Nearest Outpost" : outpost.Name;
 	}
 
 	private void EquipItem(string shipName, string itemID)
