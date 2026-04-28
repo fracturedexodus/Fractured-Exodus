@@ -125,22 +125,12 @@ public partial class GlobalData : Node
 	private readonly SaveGameService _saveGameService = new SaveGameService();
 
 	// --- MASTER EQUIPMENT DATABASE ---
-	// This acts as the universal catalog of all items in the game
-	public Dictionary<string, EquipmentData> MasterEquipmentDB { get; set; } = new Dictionary<string, EquipmentData>
-	{
-		// WEAPONS
-		{ "WPN_LASER_MK2", new EquipmentData { ItemID = "WPN_LASER_MK2", Name = "Mk II Pulse Laser", Category = GameConstants.EquipmentCategories.Weapon, BonusStat = 10, CostTech = 1, CostRaw = 100, Description = "+10 Max Attack Damage" } },
-		{ "WPN_RAILGUN", new EquipmentData { ItemID = "WPN_RAILGUN", Name = "Magnetic Railgun", Category = GameConstants.EquipmentCategories.Weapon, BonusStat = 25, CostTech = 3, CostRaw = 300, Description = "+25 Max Attack Damage" } },
-		// SHIELDS
-		{ "SHLD_DEFLECTOR", new EquipmentData { ItemID = "SHLD_DEFLECTOR", Name = "Ion Deflector", Category = GameConstants.EquipmentCategories.Shield, BonusStat = 50, CostTech = 1, CostRaw = 150, Description = "+50 Max Shields" } },
-		{ "SHLD_AEGIS", new EquipmentData { ItemID = "SHLD_AEGIS", Name = "Aegis Generator", Category = GameConstants.EquipmentCategories.Shield, BonusStat = 120, CostTech = 3, CostRaw = 400, Description = "+120 Max Shields" } },
-		// ARMOR
-		{ "ARMR_TITANIUM", new EquipmentData { ItemID = "ARMR_TITANIUM", Name = "Titanium Plating", Category = GameConstants.EquipmentCategories.Armor, BonusStat = 100, CostTech = 1, CostRaw = 200, Description = "+100 Max Hull HP" } },
-		{ "ARMR_NEUTRONIUM", new EquipmentData { ItemID = "ARMR_NEUTRONIUM", Name = "Neutronium Hull", Category = GameConstants.EquipmentCategories.Armor, BonusStat = 300, CostTech = 4, CostRaw = 500, Description = "+300 Max Hull HP" } }
-	};
+	// Loaded from res://Data/equipment_catalog.json at startup.
+	public Dictionary<string, EquipmentData> MasterEquipmentDB { get; set; } = new Dictionary<string, EquipmentData>();
 
 	public override void _Ready()
 	{
+		MasterEquipmentDB = EquipmentCatalogLoader.LoadCatalog();
 		GD.Print("GlobalData Singleton Initialized successfully.");
 	}
 

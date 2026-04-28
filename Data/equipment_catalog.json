@@ -1,0 +1,56 @@
+[
+  {
+	"ItemID": "WPN_LASER_MK2",
+	"Name": "Mk II Pulse Laser",
+	"Category": "Weapon",
+	"BonusStat": 10,
+	"CostTech": 1,
+	"CostRaw": 100,
+	"Description": "+10 Max Attack Damage"
+  },
+  {
+	"ItemID": "WPN_RAILGUN",
+	"Name": "Magnetic Railgun",
+	"Category": "Weapon",
+	"BonusStat": 25,
+	"CostTech": 3,
+	"CostRaw": 300,
+	"Description": "+25 Max Attack Damage"
+  },
+  {
+	"ItemID": "SHLD_DEFLECTOR",
+	"Name": "Ion Deflector",
+	"Category": "Shield",
+	"BonusStat": 50,
+	"CostTech": 1,
+	"CostRaw": 150,
+	"Description": "+50 Max Shields"
+  },
+  {
+	"ItemID": "SHLD_AEGIS",
+	"Name": "Aegis Generator",
+	"Category": "Shield",
+	"BonusStat": 120,
+	"CostTech": 3,
+	"CostRaw": 400,
+	"Description": "+120 Max Shields"
+  },
+  {
+	"ItemID": "ARMR_TITANIUM",
+	"Name": "Titanium Plating",
+	"Category": "Armor",
+	"BonusStat": 100,
+	"CostTech": 1,
+	"CostRaw": 200,
+	"Description": "+100 Max Hull HP"
+  },
+  {
+	"ItemID": "ARMR_NEUTRONIUM",
+	"Name": "Neutronium Hull",
+	"Category": "Armor",
+	"BonusStat": 300,
+	"CostTech": 4,
+	"CostRaw": 400,
+	"Description": "+300 Max Hull HP"
+  }
+]
