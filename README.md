@@ -1,91 +1,59 @@
-# Gemini Assistant - Godot Editor Plugin
+# Fractured Exodus
 
-**Version:** 0.1 
-**Author:** Austin Peck
-**Godot Version:** 4.2+
-**License:** MIT
+`Fractured Exodus` is a Godot 4 C# tactical space game focused on fleet exploration, system travel, ship upgrades, outpost trading, and turn-based combat.
 
-## Description
+## Overview
 
-Integrates Google's Gemini AI models directly into the Godot editor interface. This plugin provides a dock panel allowing you to send prompts, attach context from your project (scripts, scene nodes, project files), and receive AI-generated responses, assisting with coding, debugging, content generation, and more.
+The player commands a small fleet moving between star systems through ancient stargates. Moment-to-moment play mixes:
 
-Disclaimer: Gemini 2.5 was heavily leveraged in the creation of this tool, AI generated code is present inside of the scripts.
+- exploration across a hex map
+- scanning and salvaging planets
+- buying, equipping, and selling ship gear at outposts
+- fleet management and repairs
+- tactical combat against hostile fleets
 
-## Features
+The codebase is currently being cleaned up from a prototype-style root layout into a more structured Godot project while preserving existing gameplay behavior.
 
-*   **Editor Dock:** Dedicated panel for interacting with the Gemini API.
-*   **Prompt Input:** Send text prompts directly to the selected Gemini model.
-*   **Context Attachments:**
-	*   **Manual:** Attach the currently selected text in the script editor.
-	*   **Manual:** Attach the entire content of the currently open script.
-	*   **Manual (Scene Tree):** Attach the structure or properties of selected nodes via the Scene Tree context menu.
-	*   **Automatic (Optional):** Automatically include the current scene tree structure.
-	*   **Automatic (Optional):** Automatically include the project file structure (use with caution - large context!).
-	*   **Automatic Details (Optional):** Include node properties within automatic tree context (increases context size).
-*   **Response Display:** View formatted AI responses, including basic Markdown (bold, italics, code blocks).
-*   **Configuration:** Set your API Key and choose the Gemini model via Editor Settings.
-*   **Convenience:** Copy responses, clear outputs/attachments.
+## Tech
 
-## Installation
+- Godot `4.6`
+- C#
+- .NET `8.0`
 
-1.  **Asset Library:**
-	*   Open the Godot Editor.
-	*   Navigate to the `AssetLib` tab.
-	*   Search for "Gemini Assistant".
-	*   Click `Download`, then `Install`.
-	*   Enable the plugin in `Project -> Project Settings -> Plugins`.
-2.  **Manual:**
-	*   Download the plugin repository (e.g., from GitHub Releases).
-	*   Extract the downloaded archive.
-	*   Copy the `addons/gemini_godot` folder into your Godot project's `addons/` directory.
-	*   Enable the plugin in `Project -> Project Settings -> Plugins`.
+Project entry and engine settings live in [project.godot](/C:/Users/rembe/.codex/worktrees/c449/fractured-exodus/project.godot:1).
 
-## Setup: API Key (Required!)
+## Main Game Files
 
-1.  **Get a Gemini API Key:** You need an API key from Google AI Studio. Visit [https://aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey) (or Google Cloud Console for Vertex AI) to create one. Note that API usage may incur costs based on Google's pricing.
-2.  **Configure in Godot:**
-	*   Open your Godot project.
-	*   Go to `Editor -> Editor Settings`.
-	*   In the left panel, navigate to `Plugins -> Gemini Assistant`.
-	*   Paste your API key into the `Api Key` field. **The plugin will not work without a valid key.**
+- [main_menu.tscn](/C:/Users/rembe/.codex/worktrees/c449/fractured-exodus/main_menu.tscn:1): main menu scene
+- [galactic_map.tscn](/C:/Users/rembe/.codex/worktrees/c449/fractured-exodus/galactic_map.tscn:1): sector / star map scene
+- [exploration_battle.tscn](/C:/Users/rembe/.codex/worktrees/c449/fractured-exodus/exploration_battle.tscn:1): exploration and combat scene
+- [BattleMap.cs](/C:/Users/rembe/.codex/worktrees/c449/fractured-exodus/BattleMap.cs:1): primary gameplay scene controller
+- [GlobalData.cs](/C:/Users/rembe/.codex/worktrees/c449/fractured-exodus/GlobalData.cs:1): campaign state singleton
 
-## Usage
+## Project Layout
 
-1.  **Open the Dock:** Once the plugin is enabled, the "Gemini Assistant" dock should appear (by default, often on the bottom left panel). If not visible, go to `Editor -> Editor Docks -> Gemini Assistant`.
-2.  **Enter Prompt:** Type your query or request into the "Prompt Input" text area.
-3.  **(Optional) Add Context:**
-	*   **Selection:** Select text in the Script Editor, then click "Attach Selection".
-	*   **Script:** Open a script, then click "Attach Script".
-	*   **Scene Node:** Right-click a node in the Scene Tree dock and choose "Gemini: Attach Node Structure" or "Gemini: Attach Node Properties".
-	*   **Automatic:** Configure automatic context inclusion in `Editor -> Editor Settings -> Plugins -> Gemini Assistant`. Enabled settings will show as non-removable attachments.
-4.  **Send:** Click the "Send" button.
-5.  **View Response:** The AI's response will appear in the "Response Output" area.
-6.  **Manage:**
-	*   Use "Copy Output" to copy the response text.
-	*   Use "Clear" to remove the response and all *manual* attachments.
-	*   Click the 'X' button on manual attachments to remove them individually.
-	*   Click the 'i' button (or delete icon acting as info) on automatic attachments for an explanation.
-	*   Use "Open Settings" to quickly jump to the plugin's configuration in Editor Settings.
+- [Scripts/Core](/C:/Users/rembe/.codex/worktrees/c449/fractured-exodus/Scripts/Core): shared constants and lightweight data helpers
+- [Scripts/Managers](/C:/Users/rembe/.codex/worktrees/c449/fractured-exodus/Scripts/Managers): combat and map-side managers
+- [Scripts/Services](/C:/Users/rembe/.codex/worktrees/c449/fractured-exodus/Scripts/Services): gameplay services such as inventory, jumps, save/load, exploration actions, and distress events
+- [Data](/C:/Users/rembe/.codex/worktrees/c449/fractured-exodus/Data): data-driven content such as the equipment catalog
+- [Assets](/C:/Users/rembe/.codex/worktrees/c449/fractured-exodus/Assets): organized UI, background, outpost, and source-art assets
+- [Ships](/C:/Users/rembe/.codex/worktrees/c449/fractured-exodus/Ships): player ship art and related resources
+- [EnemyShips](/C:/Users/rembe/.codex/worktrees/c449/fractured-exodus/EnemyShips): enemy ship art
+- [Planets](/C:/Users/rembe/.codex/worktrees/c449/fractured-exodus/Planets): planet textures
+- [Sounds](/C:/Users/rembe/.codex/worktrees/c449/fractured-exodus/Sounds): music and sound effects
 
-## Configuration Settings
+## Running The Project
 
-Found under `Editor -> Editor Settings -> Plugins -> Gemini Assistant`:
+1. Open the folder in Godot 4.6 or newer.
+2. Let Godot reimport assets if prompted.
+3. Run the main scene configured in `project.godot`.
 
-*   **Api Key:** (Required) Your Google Gemini API Key.
-*   **Api Model:** Select the Gemini model to use (e.g., `gemini-1.5-flash-latest`). Different models have varying capabilities and costs. Note: Only models that supper text input and output have been tested. https://ai.google.dev/gemini-api/docs/models
-*   **Include Scene Tree On Select:** Automatically attach the current scene structure.
-*   **Include Project Tree On Select:** Automatically attach the project file structure (WARNING: Can be very large!).
-*   **Project Tree Max Depth:** Limits how deep the project tree scan goes.
-*   **Include Tree Node Details:** Include node properties in automatic scene/project context (increases size).
+## Current Notes
 
-## Troubleshooting
-
-*   **Error: "API Key not configured..."**: Make sure you've added your Gemini API Key in Editor Settings (see Setup).
-*   **Error: Request Failed / Network Error**: Check your internet connection. Ensure your API key is valid and has the necessary permissions/billing enabled on the Google Cloud side. Check the Godot console (Output panel) for more detailed error messages from the `APIHandler`.
-*   **Context Menu Missing:** Ensure the plugin is enabled. Ensure you are right-clicking in the correct context (script editor code area, scene tree item).
-*   **Slow Response:** Large context attachments (especially automatic project tree) can significantly increase processing time and API costs.
-
+- Save/load has been split into a dedicated save service plus DTO-based save schema.
+- Equipment definitions are loaded from [equipment_catalog.json](/C:/Users/rembe/.codex/worktrees/c449/fractured-exodus/Data/equipment_catalog.json:1).
+- Several gameplay systems have been extracted from `BattleMap` into focused services, but `BattleMap.cs` is still the largest remaining gameplay hotspot.
 
 ## License
 
-This plugin is released under the MIT License. See the LICENSE file for details.
+See [LICENSE](/C:/Users/rembe/.codex/worktrees/c449/fractured-exodus/LICENSE:1).

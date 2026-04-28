@@ -8,7 +8,7 @@ public static class MapSpawner
 	public static void SetupSpaceBackground(Node parent, Vector2 screenSize)
 	{
 		TextureRect spaceBackgroundRect = new TextureRect();
-		Texture2D bgTex = GD.Load<Texture2D>("res://space_bg.png"); 
+		Texture2D bgTex = GD.Load<Texture2D>("res://Assets/Backgrounds/space_bg.png");
 		if (bgTex != null)
 		{
 			spaceBackgroundRect.Texture = bgTex;
@@ -80,7 +80,7 @@ public static class MapSpawner
 		if (globalData != null && !string.IsNullOrEmpty(globalData.SavedSystem))
 			starData.Name = globalData.SavedSystem.ToUpper() + " PRIME";
 			
-		SpawnEntityAtHex(new Vector2I(0, 0), "res://YellowSUN.png", starData, 1.5f, hexSize, hexGrid, hexContents, entityLayer); 
+		SpawnEntityAtHex(new Vector2I(0, 0), "res://Assets/Backgrounds/YellowSUN.png", starData, 1.5f, hexSize, hexGrid, hexContents, entityLayer);
 		
 		if (GodotObject.IsInstanceValid(starData.VisualSprite))
 		{
@@ -159,7 +159,7 @@ public static class MapSpawner
 		foreach (Vector2I gateHex in currentSystem.StargateHexes)
 		{
 			MapEntity gateEntity = new MapEntity { Name = "Ancient StarGate", Type = GameConstants.EntityTypes.StarGate, Details = "Trans-dimensional warp gate connecting local star systems." };
-			SpawnEntityAtHex(gateHex, "res://StarGate.png", gateEntity, 0.4f, hexSize, hexGrid, hexContents, entityLayer);
+			SpawnEntityAtHex(gateHex, "res://Assets/Backgrounds/StarGate.png", gateEntity, 0.4f, hexSize, hexGrid, hexContents, entityLayer);
 		}
 
 		// --- PERSISTENT ASTEROIDS ---

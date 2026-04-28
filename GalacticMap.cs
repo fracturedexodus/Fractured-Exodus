@@ -520,9 +520,9 @@ public partial class GalacticMap : Control
 			{
 				int numOutposts = rng.RandiRange(1, 3);
 				string[] outpostSprites = {
-					"res://BlackMarketAsteroidExchangeSprite.png",
-					"res://ScrappersFurnaceHubSprite.png", // Using .png based on your earlier fix
-					"res://VerdantPactBiosphereOutpostSprite.png"
+					"res://Assets/Outposts/BlackMarketAsteroidExchangeSprite.png",
+					"res://Assets/Outposts/ScrappersFurnaceHubSprite.png", // Using .png based on your earlier fix
+					"res://Assets/Outposts/VerdantPactBiosphereOutpostSprite.png"
 				};
 				
 				for (int o = 0; o < numOutposts; o++)
@@ -584,7 +584,7 @@ public partial class GalacticMap : Control
 		_drawnStars.Add(newStar);
 
 		Sprite2D starSprite = new Sprite2D();
-		Texture2D tex = GD.Load<Texture2D>("res://star.png"); 
+		Texture2D tex = GD.Load<Texture2D>("res://Assets/Backgrounds/star.png");
 		if (tex != null) starSprite.Texture = tex;
 		starSprite.Scale = new Vector2(data.StarScale, data.StarScale);
 		starSprite.Modulate = data.StarColor;

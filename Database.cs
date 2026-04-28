@@ -34,7 +34,7 @@ public static class Database
 			case "Ignis Repurposed Terraformer": return "res://EnemyShips/IgnisRepurposedTerraformerSprite.png";
 			case "Reformatter Dreadnought": return "res://EnemyShips/ReformatterDreadnoughtSprite.png";
 			case "Scrap-Stick Subversion Drone": return "res://EnemyShips/ScrapStickSubversionDroneSprite.png";
-			default: return "res://icon.svg"; 
+			default: return "res://Assets/UI/icon.svg";
 		}
 	}
 
