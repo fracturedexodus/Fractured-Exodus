@@ -79,6 +79,7 @@ public partial class BattleMap : Node2D
 	private ShipContextService _shipContextService;
 	private ExplorationActionService _explorationActionService;
 	private ExplorationTurnService _explorationTurnService;
+	private DistressSignalService _distressSignalService;
 
 	public override void _Ready()
 	{
@@ -86,6 +87,7 @@ public partial class BattleMap : Node2D
 		if (_globalData != null) _inventoryService = new FleetInventoryService(_globalData);
 		if (_globalData != null) _shipContextService = new ShipContextService(_globalData);
 		if (_globalData != null) _explorationActionService = new ExplorationActionService(_globalData);
+		if (_globalData != null) _distressSignalService = new DistressSignalService(_globalData);
 		_explorationTurnService = new ExplorationTurnService();
 		if (_globalData != null && _globalData.CurrentTurn > 0) CurrentTurn = _globalData.CurrentTurn;
 		
@@ -642,30 +644,25 @@ public partial class BattleMap : Node2D
 
 	private void OnDistressSignalPressed()
 	{
+		if (_distressSignalService == null) return;
 		_strandedMenuWrapper.Visible = false;
 		_isWaitingForDistressSignal = true; 
 		
 		LogCombatMessage("\n[color=yellow]--- BROADCASTING WIDE-BAND DISTRESS SIGNAL ---[/color]");
 		LogCombatMessage("Awaiting response...");
-
-		Random rng = new Random();
 		
 		GetTree().CreateTimer(1.5f).Timeout += () => 
 		{
-			if (rng.Next(0, 100) < 50) 
+			DistressSignalResult result = _distressSignalService.ResolveDistressSignal();
+			if (result.RescueArrived)
 			{
-				int fuelSalvaged = rng.Next(25, 76); 
-				if (_globalData != null)
-				{
-					_globalData.FleetResources["Raw Materials"] = _globalData.FleetResources["Raw Materials"].AsSingle() + fuelSalvaged;
-					UpdateResourceUI();
-				}
+				UpdateResourceUI();
 				
 				LogCombatMessage($"[color=green]SIGNAL RECEIVED![/color] A passing smuggler vessel dropped emergency supplies.");
-				LogCombatMessage($"[color=cyan]+{fuelSalvaged} Raw Materials Acquired.[/color]");
+				LogCombatMessage($"[color=cyan]+{result.FuelSalvaged} Raw Materials Acquired.[/color]");
 				_isWaitingForDistressSignal = false;
 			}
-			else
+			else if (result.TriggerAmbush)
 			{
 				LogCombatMessage($"[color=red]WARNING: SLIPSPACE SIGNATURES DETECTED![/color]");
 				LogCombatMessage($"[color=red]Hostile forces intercepted the signal. Prepare for combat![/color]");
@@ -679,48 +676,24 @@ public partial class BattleMap : Node2D
 
 	private void SpawnAmbushFleet()
 	{
-		Random rng = new Random();
-		int enemyShipCount = rng.Next(1, 6); 
-		
-		Vector2I ambushBaseLocation = new Vector2I(0,0);
-		foreach (var kvp in HexContents)
+		if (_distressSignalService == null) return;
+		List<AmbushSpawnSpec> spawnSpecs = _distressSignalService.PlanAmbushFleet(HexContents, HexGrid.Keys);
+		foreach (AmbushSpawnSpec spec in spawnSpecs)
 		{
-			if (kvp.Value.Type == "Player Fleet")
-			{
-				ambushBaseLocation = kvp.Key; 
-				break;
-			}
-		}
+			int shipBaseActionPoints = Database.GetShipBaseActions(spec.EnemyName);
+			(int hp, int shields) = Database.GetShipCombatStats(spec.EnemyName);
+			(int range, int dmg) = Database.GetShipWeaponStats(spec.EnemyName);
 
-		int enemyDirIndex = 0;
-		for (int i = 0; i < enemyShipCount; i++)
-		{
-			string enemyName = Database.EnemyShipTypes[rng.Next(Database.EnemyShipTypes.Length)];
-			while (enemyDirIndex < 36) 
-			{
-				int ring = (enemyDirIndex / 6) + 1;
-				Vector2I spawnPos = ambushBaseLocation + HexMath.Directions[enemyDirIndex % 6] * ring;
-				enemyDirIndex++;
-				
-				if (HexGrid.ContainsKey(spawnPos) && !HexContents.ContainsKey(spawnPos))
-				{
-					int shipBaseActionPoints = Database.GetShipBaseActions(enemyName); 
-					(int hp, int shields) = Database.GetShipCombatStats(enemyName);
-					(int range, int dmg) = Database.GetShipWeaponStats(enemyName);
+			MapEntity shipData = new MapEntity {
+				Name = spec.EnemyName, Type = "Enemy Fleet", Details = "Status: Hostile Ambush",
+				MaxActions = shipBaseActionPoints, CurrentActions = shipBaseActionPoints,
+				AttackRange = range, AttackDamage = dmg,
+				MaxHP = hp, CurrentHP = hp, MaxShields = shields, CurrentShields = shields,
+				InitiativeBonus = Database.GetShipInitiativeBonus(spec.EnemyName),
+				BaseRotationOffset = Database.GetShipRotationOffset(spec.EnemyName)
+			};
 
-					MapEntity shipData = new MapEntity { 
-						Name = enemyName, Type = "Enemy Fleet", Details = "Status: Hostile Ambush",
-						MaxActions = shipBaseActionPoints, CurrentActions = shipBaseActionPoints,
-						AttackRange = range, AttackDamage = dmg,
-						MaxHP = hp, CurrentHP = hp, MaxShields = shields, CurrentShields = shields,
-						InitiativeBonus = Database.GetShipInitiativeBonus(enemyName),
-						BaseRotationOffset = Database.GetShipRotationOffset(enemyName)
-					};
-					
-					MapSpawner.SpawnEntityAtHex(spawnPos, Database.GetShipTexturePath(enemyName), shipData, 0.2f, HexSize, HexGrid, HexContents, EntityLayer); 
-					break; 
-				}
-			}
+			MapSpawner.SpawnEntityAtHex(spec.SpawnPos, Database.GetShipTexturePath(spec.EnemyName), shipData, 0.2f, HexSize, HexGrid, HexContents, EntityLayer);
 		}
 
 		GetTree().CreateTimer(0.5f).Timeout += () => 
