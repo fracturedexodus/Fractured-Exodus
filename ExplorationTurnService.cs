@@ -13,7 +13,7 @@ public class ExplorationTurnService
 	{
 		foreach (var kvp in hexContents)
 		{
-			if (kvp.Value.Type == "Player Fleet" || kvp.Value.Type == "Enemy Fleet")
+			if (kvp.Value.Type == GameConstants.EntityTypes.PlayerFleet || kvp.Value.Type == GameConstants.EntityTypes.EnemyFleet)
 			{
 				kvp.Value.CurrentActions = kvp.Value.MaxActions;
 			}
@@ -36,11 +36,11 @@ public class ExplorationTurnService
 		foreach (var kvp in hexContents)
 		{
 			occupiedTypes[kvp.Key] = kvp.Value.Type;
-			if (kvp.Value.Type == "Player Fleet")
+			if (kvp.Value.Type == GameConstants.EntityTypes.PlayerFleet)
 			{
 				playerPositions.Add(kvp.Key);
 			}
-			else if (kvp.Value.Type == "Enemy Fleet")
+			else if (kvp.Value.Type == GameConstants.EntityTypes.EnemyFleet)
 			{
 				enemies.Add(kvp);
 			}
@@ -116,7 +116,7 @@ public class ExplorationTurnService
 					ToHex = bestNeighbor
 				});
 				occupiedTypes.Remove(currentPos);
-				occupiedTypes[bestNeighbor] = "Enemy Fleet";
+				occupiedTypes[bestNeighbor] = GameConstants.EntityTypes.EnemyFleet;
 			}
 		}
 

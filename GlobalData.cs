@@ -108,9 +108,9 @@ public partial class GlobalData : Node
 
 	public Godot.Collections.Dictionary<string, Variant> FleetResources { get; set; } = new Godot.Collections.Dictionary<string, Variant>
 	{
-		{ "Raw Materials", 350.0f },
-		{ "Energy Cores", 5.0f },
-		{ "Ancient Tech", 0.0f }
+		{ GameConstants.ResourceKeys.RawMaterials, 350.0f },
+		{ GameConstants.ResourceKeys.EnergyCores, 5.0f },
+		{ GameConstants.ResourceKeys.AncientTech, 0.0f }
 	};
 	
 	// --- NEW: INVENTORY MEMORY ---
@@ -130,14 +130,14 @@ public partial class GlobalData : Node
 	public Dictionary<string, EquipmentData> MasterEquipmentDB { get; set; } = new Dictionary<string, EquipmentData>
 	{
 		// WEAPONS
-		{ "WPN_LASER_MK2", new EquipmentData { ItemID = "WPN_LASER_MK2", Name = "Mk II Pulse Laser", Category = "Weapon", BonusStat = 10, CostTech = 1, CostRaw = 100, Description = "+10 Max Attack Damage" } },
-		{ "WPN_RAILGUN", new EquipmentData { ItemID = "WPN_RAILGUN", Name = "Magnetic Railgun", Category = "Weapon", BonusStat = 25, CostTech = 3, CostRaw = 300, Description = "+25 Max Attack Damage" } },
+		{ "WPN_LASER_MK2", new EquipmentData { ItemID = "WPN_LASER_MK2", Name = "Mk II Pulse Laser", Category = GameConstants.EquipmentCategories.Weapon, BonusStat = 10, CostTech = 1, CostRaw = 100, Description = "+10 Max Attack Damage" } },
+		{ "WPN_RAILGUN", new EquipmentData { ItemID = "WPN_RAILGUN", Name = "Magnetic Railgun", Category = GameConstants.EquipmentCategories.Weapon, BonusStat = 25, CostTech = 3, CostRaw = 300, Description = "+25 Max Attack Damage" } },
 		// SHIELDS
-		{ "SHLD_DEFLECTOR", new EquipmentData { ItemID = "SHLD_DEFLECTOR", Name = "Ion Deflector", Category = "Shield", BonusStat = 50, CostTech = 1, CostRaw = 150, Description = "+50 Max Shields" } },
-		{ "SHLD_AEGIS", new EquipmentData { ItemID = "SHLD_AEGIS", Name = "Aegis Generator", Category = "Shield", BonusStat = 120, CostTech = 3, CostRaw = 400, Description = "+120 Max Shields" } },
+		{ "SHLD_DEFLECTOR", new EquipmentData { ItemID = "SHLD_DEFLECTOR", Name = "Ion Deflector", Category = GameConstants.EquipmentCategories.Shield, BonusStat = 50, CostTech = 1, CostRaw = 150, Description = "+50 Max Shields" } },
+		{ "SHLD_AEGIS", new EquipmentData { ItemID = "SHLD_AEGIS", Name = "Aegis Generator", Category = GameConstants.EquipmentCategories.Shield, BonusStat = 120, CostTech = 3, CostRaw = 400, Description = "+120 Max Shields" } },
 		// ARMOR
-		{ "ARMR_TITANIUM", new EquipmentData { ItemID = "ARMR_TITANIUM", Name = "Titanium Plating", Category = "Armor", BonusStat = 100, CostTech = 1, CostRaw = 200, Description = "+100 Max Hull HP" } },
-		{ "ARMR_NEUTRONIUM", new EquipmentData { ItemID = "ARMR_NEUTRONIUM", Name = "Neutronium Hull", Category = "Armor", BonusStat = 300, CostTech = 4, CostRaw = 500, Description = "+300 Max Hull HP" } }
+		{ "ARMR_TITANIUM", new EquipmentData { ItemID = "ARMR_TITANIUM", Name = "Titanium Plating", Category = GameConstants.EquipmentCategories.Armor, BonusStat = 100, CostTech = 1, CostRaw = 200, Description = "+100 Max Hull HP" } },
+		{ "ARMR_NEUTRONIUM", new EquipmentData { ItemID = "ARMR_NEUTRONIUM", Name = "Neutronium Hull", Category = GameConstants.EquipmentCategories.Armor, BonusStat = 300, CostTech = 4, CostRaw = 500, Description = "+300 Max Hull HP" } }
 	};
 
 	public override void _Ready()
@@ -379,7 +379,11 @@ public partial class GlobalData : Node
 		CurrentTurn = 1; InCombat = false; CurrentQueueIndex = 0; JustJumped = false; 
 		SavedFleetState.Clear(); UnequippedInventory.Clear(); FleetLoadouts.Clear();
 		
-		FleetResources = new Godot.Collections.Dictionary<string, Variant> { { "Raw Materials", 350.0f }, { "Energy Cores", 5.0f }, { "Ancient Tech", 0.0f } };
+		FleetResources = new Godot.Collections.Dictionary<string, Variant> {
+			{ GameConstants.ResourceKeys.RawMaterials, 350.0f },
+			{ GameConstants.ResourceKeys.EnergyCores, 5.0f },
+			{ GameConstants.ResourceKeys.AncientTech, 0.0f }
+		};
 
 		if (FileAccess.FileExists(_savePath)) DirAccess.RemoveAbsolute(_savePath);
 		GD.Print("GlobalData has been completely wiped for a new campaign.");

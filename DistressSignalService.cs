@@ -33,7 +33,7 @@ public class DistressSignalService
 			int fuelSalvaged = rng.RandiRange(25, 75);
 			if (_globalData != null)
 			{
-				_globalData.FleetResources["Raw Materials"] = _globalData.FleetResources["Raw Materials"].AsSingle() + fuelSalvaged;
+				_globalData.FleetResources[GameConstants.ResourceKeys.RawMaterials] = _globalData.FleetResources[GameConstants.ResourceKeys.RawMaterials].AsSingle() + fuelSalvaged;
 			}
 
 			return new DistressSignalResult
@@ -60,7 +60,7 @@ public class DistressSignalService
 
 		foreach (var kvp in hexContents)
 		{
-			if (kvp.Value.Type == "Player Fleet")
+			if (kvp.Value.Type == GameConstants.EntityTypes.PlayerFleet)
 			{
 				ambushBaseLocation = kvp.Key;
 				break;

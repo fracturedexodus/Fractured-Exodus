@@ -66,14 +66,14 @@ public class ExplorationActionService
 		const float energyCost = 0.5f;
 		if (_globalData != null)
 		{
-			float currentCores = _globalData.FleetResources["Energy Cores"].AsSingle();
+			float currentCores = _globalData.FleetResources[GameConstants.ResourceKeys.EnergyCores].AsSingle();
 			if (currentCores < energyCost)
 			{
 				result.FailureMessage = "*** SCAN FAILED: INSUFFICIENT ENERGY CORES (0.5 Req) ***";
 				return result;
 			}
 
-			_globalData.FleetResources["Energy Cores"] = currentCores - energyCost;
+			_globalData.FleetResources[GameConstants.ResourceKeys.EnergyCores] = currentCores - energyCost;
 		}
 
 		ship.CurrentActions -= 1;
@@ -115,14 +115,14 @@ public class ExplorationActionService
 		const float rawCost = 1.0f;
 		if (_globalData != null)
 		{
-			float currentRaw = _globalData.FleetResources["Raw Materials"].AsSingle();
+			float currentRaw = _globalData.FleetResources[GameConstants.ResourceKeys.RawMaterials].AsSingle();
 			if (currentRaw < rawCost)
 			{
 				result.FailureMessage = "*** SALVAGE FAILED: INSUFFICIENT RAW MATERIALS (1.0 Req) ***";
 				return result;
 			}
 
-			_globalData.FleetResources["Raw Materials"] = currentRaw - rawCost;
+			_globalData.FleetResources[GameConstants.ResourceKeys.RawMaterials] = currentRaw - rawCost;
 		}
 
 		float scale = planet.VisualSprite.Scale.X;
@@ -153,9 +153,9 @@ public class ExplorationActionService
 
 		if (_globalData != null)
 		{
-			_globalData.FleetResources["Raw Materials"] = _globalData.FleetResources["Raw Materials"].AsSingle() + result.RawYield;
-			_globalData.FleetResources["Energy Cores"] = _globalData.FleetResources["Energy Cores"].AsSingle() + result.EnergyYield;
-			_globalData.FleetResources["Ancient Tech"] = _globalData.FleetResources["Ancient Tech"].AsSingle() + result.TechYield;
+			_globalData.FleetResources[GameConstants.ResourceKeys.RawMaterials] = _globalData.FleetResources[GameConstants.ResourceKeys.RawMaterials].AsSingle() + result.RawYield;
+			_globalData.FleetResources[GameConstants.ResourceKeys.EnergyCores] = _globalData.FleetResources[GameConstants.ResourceKeys.EnergyCores].AsSingle() + result.EnergyYield;
+			_globalData.FleetResources[GameConstants.ResourceKeys.AncientTech] = _globalData.FleetResources[GameConstants.ResourceKeys.AncientTech].AsSingle() + result.TechYield;
 		}
 
 		return result;
@@ -164,7 +164,7 @@ public class ExplorationActionService
 	public ShipRepairResult PerformShipRepair(MapEntity ship)
 	{
 		ShipRepairResult result = new ShipRepairResult { Allowed = false };
-		if (ship == null || ship.IsDead || ship.Type != "Player Fleet" || ship.CurrentActions < 2)
+		if (ship == null || ship.IsDead || ship.Type != GameConstants.EntityTypes.PlayerFleet || ship.CurrentActions < 2)
 		{
 			return result;
 		}
@@ -203,7 +203,7 @@ public class ExplorationActionService
 		int totalMissing = 0;
 		foreach (var kvp in hexContents)
 		{
-			if (kvp.Value.Type == "Player Fleet")
+			if (kvp.Value.Type == GameConstants.EntityTypes.PlayerFleet)
 			{
 				totalMissing += (kvp.Value.MaxHP - kvp.Value.CurrentHP) + (kvp.Value.MaxShields - kvp.Value.CurrentShields);
 			}
@@ -223,7 +223,7 @@ public class ExplorationActionService
 
 			foreach (var kvp in hexContents)
 			{
-				if (kvp.Value.Type == "Player Fleet")
+				if (kvp.Value.Type == GameConstants.EntityTypes.PlayerFleet)
 				{
 					kvp.Value.CurrentHP = Mathf.Min(kvp.Value.CurrentHP + 15, kvp.Value.MaxHP);
 					kvp.Value.CurrentShields = Mathf.Min(kvp.Value.CurrentShields + 10, kvp.Value.MaxShields);
@@ -247,8 +247,8 @@ public class ExplorationActionService
 		List<Vector2I> enemies = new List<Vector2I>();
 		foreach (var kvp in hexContents)
 		{
-			if (kvp.Value.Type == "Player Fleet") players.Add(kvp.Key);
-			if (kvp.Value.Type == "Enemy Fleet") enemies.Add(kvp.Key);
+			if (kvp.Value.Type == GameConstants.EntityTypes.PlayerFleet) players.Add(kvp.Key);
+			if (kvp.Value.Type == GameConstants.EntityTypes.EnemyFleet) enemies.Add(kvp.Key);
 		}
 
 		foreach (Vector2I playerHex in players)

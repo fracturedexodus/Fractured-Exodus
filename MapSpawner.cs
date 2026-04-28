@@ -43,7 +43,7 @@ public static class MapSpawner
 		if (hexContents.ContainsKey(hex))
 		{
 			string type = hexContents[hex].Type;
-			if (type == "Planet" || type == "Base Planet (Player Start)" || type == "Celestial Body" || type == "Player Fleet" || type == "Enemy Fleet" || type == "StarGate")
+			if (type == GameConstants.EntityTypes.Planet || type == GameConstants.EntityTypes.BasePlanetPlayerStart || type == GameConstants.EntityTypes.CelestialBody || type == GameConstants.EntityTypes.PlayerFleet || type == GameConstants.EntityTypes.EnemyFleet || type == GameConstants.EntityTypes.StarGate)
 				return false; 
 		}
 		return true;
@@ -76,7 +76,7 @@ public static class MapSpawner
 		if (globalData != null && !string.IsNullOrEmpty(globalData.SavedSystem))
 			rng = new Random(GetStableHash(globalData.SavedSystem)); 
 
-		MapEntity starData = new MapEntity { Name = "Main Sequence Star", Type = "Celestial Body", Details = "Extreme Heat Signature" };
+		MapEntity starData = new MapEntity { Name = "Main Sequence Star", Type = GameConstants.EntityTypes.CelestialBody, Details = "Extreme Heat Signature" };
 		if (globalData != null && !string.IsNullOrEmpty(globalData.SavedSystem))
 			starData.Name = globalData.SavedSystem.ToUpper() + " PRIME";
 			
@@ -143,7 +143,7 @@ public static class MapSpawner
 			currentOrbitRing += 3; 
 			string pTypeStr = GetPlanetTypeString(pData.TypeIndex);
 			string pTex = GetTexturePathForType(pTypeStr);
-			MapEntity planetEntity = new MapEntity { Name = pData.Name, Type = "Planet", Details = $"Biome Class: {pTypeStr.ToUpper()}\nHab: {pData.Habitability}" };
+			MapEntity planetEntity = new MapEntity { Name = pData.Name, Type = GameConstants.EntityTypes.Planet, Details = $"Biome Class: {pTypeStr.ToUpper()}\nHab: {pData.Habitability}" };
 			SpawnEntityAtHex(spawnHex, pTex, planetEntity, pData.Scale, hexSize, hexGrid, hexContents, entityLayer);
 			
 			if (GodotObject.IsInstanceValid(planetEntity.VisualSprite))
@@ -158,7 +158,7 @@ public static class MapSpawner
 		// We no longer generate gates here! They are generated in GalacticMap and read from memory.
 		foreach (Vector2I gateHex in currentSystem.StargateHexes)
 		{
-			MapEntity gateEntity = new MapEntity { Name = "Ancient StarGate", Type = "StarGate", Details = "Trans-dimensional warp gate connecting local star systems." };
+			MapEntity gateEntity = new MapEntity { Name = "Ancient StarGate", Type = GameConstants.EntityTypes.StarGate, Details = "Trans-dimensional warp gate connecting local star systems." };
 			SpawnEntityAtHex(gateHex, "res://StarGate.png", gateEntity, 0.4f, hexSize, hexGrid, hexContents, entityLayer);
 		}
 
@@ -285,7 +285,7 @@ public static class MapSpawner
 				int maxActs = shipDict.ContainsKey("MaxActions") ? (int)shipDict["MaxActions"] : (int)shipDict["MaxMovement"];
 
 				MapEntity shipData = new MapEntity { 
-					Name = shipName, Type = "Player Fleet", Details = "Status: Online",
+					Name = shipName, Type = GameConstants.EntityTypes.PlayerFleet, Details = "Status: Online",
 					MaxActions = maxActs, CurrentActions = actions,
 					AttackRange = range, AttackDamage = dmg,
 					MaxHP = (int)shipDict["MaxHP"], CurrentHP = (int)shipDict["CurrentHP"],
@@ -315,7 +315,7 @@ public static class MapSpawner
 						(int range, int dmg) = Database.GetShipWeaponStats(shipName);
 
 						MapEntity shipData = new MapEntity { 
-							Name = shipName, Type = "Player Fleet", Details = "Status: Online",
+							Name = shipName, Type = GameConstants.EntityTypes.PlayerFleet, Details = "Status: Online",
 							MaxActions = shipBaseActionPoints, CurrentActions = shipBaseActionPoints,
 							AttackRange = range, AttackDamage = dmg,
 							MaxHP = hp, CurrentHP = hp, MaxShields = shields, CurrentShields = shields,
@@ -345,7 +345,7 @@ public static class MapSpawner
 				int maxActs = shipDict.ContainsKey("MaxActions") ? (int)shipDict["MaxActions"] : (int)shipDict["MaxMovement"];
 
 				MapEntity shipData = new MapEntity { 
-					Name = shipName, Type = "Enemy Fleet", Details = "Status: Hostile Target",
+					Name = shipName, Type = GameConstants.EntityTypes.EnemyFleet, Details = "Status: Hostile Target",
 					MaxActions = maxActs, CurrentActions = actions,
 					AttackRange = range, AttackDamage = dmg,
 					MaxHP = (int)shipDict["MaxHP"], CurrentHP = (int)shipDict["CurrentHP"],
@@ -384,7 +384,7 @@ public static class MapSpawner
 							(int range, int dmg) = Database.GetShipWeaponStats(enemyName);
 
 							MapEntity shipData = new MapEntity { 
-								Name = enemyName, Type = "Enemy Fleet", Details = "Status: Hostile Target",
+								Name = enemyName, Type = GameConstants.EntityTypes.EnemyFleet, Details = "Status: Hostile Target",
 								MaxActions = shipBaseActionPoints, CurrentActions = shipBaseActionPoints,
 								AttackRange = range, AttackDamage = dmg,
 								MaxHP = hp, CurrentHP = hp, MaxShields = shields, CurrentShields = shields,

@@ -48,7 +48,7 @@ public class FogOfWarManager
 
 		foreach (var kvp in _map.HexContents)
 		{
-			if (kvp.Value.Type == "Player Fleet" && GodotObject.IsInstanceValid(kvp.Value.VisualSprite)) 
+			if (kvp.Value.Type == GameConstants.EntityTypes.PlayerFleet && GodotObject.IsInstanceValid(kvp.Value.VisualSprite))
 			{
 				Vector2I visualHex = HexMath.PixelToHex(kvp.Value.VisualSprite.Position, _map.HexSize);
 				playerPositions.Add(visualHex);
@@ -110,9 +110,9 @@ public class FogOfWarManager
 	{
 		foreach (var kvp in _map.HexContents)
 		{
-			if (kvp.Value.Type != "Player Fleet" && GodotObject.IsInstanceValid(kvp.Value.VisualSprite))
+			if (kvp.Value.Type != GameConstants.EntityTypes.PlayerFleet && GodotObject.IsInstanceValid(kvp.Value.VisualSprite))
 			{
-				bool shouldBeVisible = kvp.Value.Type == "Enemy Fleet" ? _currentlyVisible.Contains(kvp.Key) : _exploredHexes.Contains(kvp.Key);
+				bool shouldBeVisible = kvp.Value.Type == GameConstants.EntityTypes.EnemyFleet ? _currentlyVisible.Contains(kvp.Key) : _exploredHexes.Contains(kvp.Key);
 				if (kvp.Value.VisualSprite.Visible != shouldBeVisible) kvp.Value.VisualSprite.Visible = shouldBeVisible;
 			}
 		}

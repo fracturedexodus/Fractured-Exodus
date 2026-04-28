@@ -219,10 +219,10 @@ public partial class GalacticMap : Control
 				float cRaw = 0f;
 				float cEne = 0f;
 
-				if (_globalData.FleetResources != null && _globalData.FleetResources.ContainsKey("Raw Materials"))
+				if (_globalData.FleetResources != null && _globalData.FleetResources.ContainsKey(GameConstants.ResourceKeys.RawMaterials))
 				{
-					 cRaw = _globalData.FleetResources["Raw Materials"].AsSingle();
-					 cEne = _globalData.FleetResources["Energy Cores"].AsSingle();
+					 cRaw = _globalData.FleetResources[GameConstants.ResourceKeys.RawMaterials].AsSingle();
+					 cEne = _globalData.FleetResources[GameConstants.ResourceKeys.EnergyCores].AsSingle();
 					 if (cRaw < rawCost || cEne < energyCost) canAfford = false;
 				}
 				
@@ -230,7 +230,7 @@ public partial class GalacticMap : Control
 
 				if (_isHoveringStar && IsInstanceValid(_jumpInfoPanel))
 				{
-					_jumpInfoText.Text = $"[color=yellow][b]=== FTL TRAJECTORY ===[/b][/color]\n\nDistance: {Mathf.Round(dist)}ly\n\n[b]JUMP COST:[/b]\nRaw Materials: {rawCost}\nEnergy Cores: {energyCost}\n\n" + 
+					_jumpInfoText.Text = $"[color=yellow][b]=== FTL TRAJECTORY ===[/b][/color]\n\nDistance: {Mathf.Round(dist)}ly\n\n[b]JUMP COST:[/b]\n{GameConstants.ResourceKeys.RawMaterials}: {rawCost}\n{GameConstants.ResourceKeys.EnergyCores}: {energyCost}\n\n" +
 										 (canAfford ? "[color=green]RESOURCES OPTIMAL[/color]" : $"[color=red]INSUFFICIENT RESOURCES[/color]\nAvailable: {cRaw:0.#} Raw, {cEne:0.#} Energy");
 					
 					Vector2 jumpPos = mousePos + new Vector2(20, -20);
@@ -697,10 +697,10 @@ public partial class GalacticMap : Control
 			float currentRaw = 0f;
 			float currentEnergy = 0f;
 			
-			if (_globalData.FleetResources != null && _globalData.FleetResources.ContainsKey("Raw Materials"))
+			if (_globalData.FleetResources != null && _globalData.FleetResources.ContainsKey(GameConstants.ResourceKeys.RawMaterials))
 			{
-				currentRaw = _globalData.FleetResources["Raw Materials"].AsSingle();
-				currentEnergy = _globalData.FleetResources["Energy Cores"].AsSingle();
+				currentRaw = _globalData.FleetResources[GameConstants.ResourceKeys.RawMaterials].AsSingle();
+				currentEnergy = _globalData.FleetResources[GameConstants.ResourceKeys.EnergyCores].AsSingle();
 			}
 
 			if (currentRaw < rawCost || currentEnergy < energyCost)
@@ -708,10 +708,10 @@ public partial class GalacticMap : Control
 				return; 
 			}
 
-			if (_globalData.FleetResources != null && _globalData.FleetResources.ContainsKey("Raw Materials"))
+			if (_globalData.FleetResources != null && _globalData.FleetResources.ContainsKey(GameConstants.ResourceKeys.RawMaterials))
 			{
-				_globalData.FleetResources["Raw Materials"] = currentRaw - rawCost;
-				_globalData.FleetResources["Energy Cores"] = currentEnergy - energyCost;
+				_globalData.FleetResources[GameConstants.ResourceKeys.RawMaterials] = currentRaw - rawCost;
+				_globalData.FleetResources[GameConstants.ResourceKeys.EnergyCores] = currentEnergy - energyCost;
 			}
 
 			_globalData.SavedSystem = data.SystemName; 

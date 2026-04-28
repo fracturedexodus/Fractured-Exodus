@@ -37,7 +37,7 @@ public class ShipContextService
 			return null;
 		}
 
-		bool isPlayer = ship.Type == "Player Fleet";
+		bool isPlayer = ship.Type == GameConstants.EntityTypes.PlayerFleet;
 		PlanetData adjacentPlanetData = GetAdjacentPlanetData(ship, hexContents);
 		bool hasAdjacentOutpost = HasAdjacentOutpost(ship, hexContents);
 
@@ -50,7 +50,7 @@ public class ShipContextService
 			IsPlayerShip = isPlayer,
 			CanRepair = ship.CurrentActions >= 2,
 			ShowLongRange = isPlayer && !inCombat && ship.Name == "The Aether Skimmer",
-			DisableLongRange = _globalData == null || _globalData.FleetResources["Energy Cores"].AsSingle() < 5f,
+			DisableLongRange = _globalData == null || _globalData.FleetResources[GameConstants.ResourceKeys.EnergyCores].AsSingle() < 5f,
 			ShowEquip = isPlayer && !inCombat,
 			ShowTrade = isPlayer && !inCombat && hasAdjacentOutpost,
 			ShowScan = isPlayer && !inCombat && adjacentPlanetData != null && (ship.Name == "The Aether Skimmer" || ship.Name == "The Relic Harvester"),
@@ -68,7 +68,7 @@ public class ShipContextService
 		foreach (Vector2I dir in HexMath.Directions)
 		{
 			Vector2I neighbor = shipHex + dir;
-			if (hexContents.ContainsKey(neighbor) && hexContents[neighbor].Type == "Planet")
+			if (hexContents.ContainsKey(neighbor) && hexContents[neighbor].Type == GameConstants.EntityTypes.Planet)
 			{
 				return hexContents[neighbor];
 			}
@@ -89,7 +89,7 @@ public class ShipContextService
 		foreach (Vector2I dir in HexMath.Directions)
 		{
 			Vector2I neighbor = shipHex + dir;
-			if (hexContents.ContainsKey(neighbor) && hexContents[neighbor].Type == "Outpost")
+			if (hexContents.ContainsKey(neighbor) && hexContents[neighbor].Type == GameConstants.EntityTypes.Outpost)
 			{
 				return true;
 			}

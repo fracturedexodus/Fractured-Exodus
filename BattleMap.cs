@@ -216,7 +216,7 @@ public partial class BattleMap : Node2D
 				{
 					MapEntity outpostEntity = new MapEntity {
 						Name = outpost.Name,
-						Type = "Outpost",
+						Type = GameConstants.EntityTypes.Outpost,
 						Details = "Trading Hub",
 						MaxHP = 1500, CurrentHP = 1500,
 						MaxShields = 500, CurrentShields = 500
@@ -230,7 +230,7 @@ public partial class BattleMap : Node2D
 
 		foreach (var kvp in HexContents)
 		{
-			if (kvp.Value.Type == "StarGate" && GodotObject.IsInstanceValid(kvp.Value.VisualSprite))
+			if (kvp.Value.Type == GameConstants.EntityTypes.StarGate && GodotObject.IsInstanceValid(kvp.Value.VisualSprite))
 			{
 				CpuParticles2D vortex = new CpuParticles2D();
 				vortex.Name = "VortexParticles";
@@ -286,13 +286,13 @@ public partial class BattleMap : Node2D
 		if (HexContents.ContainsKey(hex))
 		{
 			string type = HexContents[hex].Type;
-			if (type == "Planet" || 
-				type == "Base Planet (Player Start)" || 
-				type == "Celestial Body" || 
-				type == "Player Fleet" || 
-				type == "Enemy Fleet" || 
-				type == "StarGate" || 
-				type == "Outpost") 
+			if (type == GameConstants.EntityTypes.Planet ||
+				type == GameConstants.EntityTypes.BasePlanetPlayerStart ||
+				type == GameConstants.EntityTypes.CelestialBody ||
+				type == GameConstants.EntityTypes.PlayerFleet ||
+				type == GameConstants.EntityTypes.EnemyFleet ||
+				type == GameConstants.EntityTypes.StarGate ||
+				type == GameConstants.EntityTypes.Outpost)
 			{
 				return false; 
 			}
@@ -304,11 +304,11 @@ public partial class BattleMap : Node2D
 	{
 		if (UI == null || UI.InventoryDisplay == null || _globalData == null) return;
 		
-		float raw = _globalData.FleetResources["Raw Materials"].AsSingle();
-		float energy = _globalData.FleetResources["Energy Cores"].AsSingle();
-		float tech = _globalData.FleetResources["Ancient Tech"].AsSingle();
+		float raw = _globalData.FleetResources[GameConstants.ResourceKeys.RawMaterials].AsSingle();
+		float energy = _globalData.FleetResources[GameConstants.ResourceKeys.EnergyCores].AsSingle();
+		float tech = _globalData.FleetResources[GameConstants.ResourceKeys.AncientTech].AsSingle();
 
-		UI.InventoryDisplay.Text = $"Raw Materials: {raw:0.##}\nEnergy Cores: {energy:0.##}\nAncient Tech: {tech:0.##}";
+		UI.InventoryDisplay.Text = $"{GameConstants.ResourceKeys.RawMaterials}: {raw:0.##}\n{GameConstants.ResourceKeys.EnergyCores}: {energy:0.##}\n{GameConstants.ResourceKeys.AncientTech}: {tech:0.##}";
 	}
 
 	private void ConnectUIButtons()
@@ -685,7 +685,7 @@ public partial class BattleMap : Node2D
 			(int range, int dmg) = Database.GetShipWeaponStats(spec.EnemyName);
 
 			MapEntity shipData = new MapEntity {
-				Name = spec.EnemyName, Type = "Enemy Fleet", Details = "Status: Hostile Ambush",
+				Name = spec.EnemyName, Type = GameConstants.EntityTypes.EnemyFleet, Details = "Status: Hostile Ambush",
 				MaxActions = shipBaseActionPoints, CurrentActions = shipBaseActionPoints,
 				AttackRange = range, AttackDamage = dmg,
 				MaxHP = hp, CurrentHP = hp, MaxShields = shields, CurrentShields = shields,
@@ -708,7 +708,7 @@ public partial class BattleMap : Node2D
 	{
 		foreach (var kvp in HexContents)
 		{
-			if (kvp.Value.Type == "Player Fleet")
+			if (kvp.Value.Type == GameConstants.EntityTypes.PlayerFleet)
 			{
 				MapCamera.Position = HexMath.HexToPixel(kvp.Key, HexSize);
 				break; 
@@ -795,7 +795,7 @@ public partial class BattleMap : Node2D
 
 				foreach (Vector2I sHex in SelectedHexes)
 				{
-					if (HexContents.ContainsKey(sHex) && HexContents[sHex].Type == "Player Fleet")
+					if (HexContents.ContainsKey(sHex) && HexContents[sHex].Type == GameConstants.EntityTypes.PlayerFleet)
 					{
 						totalFuelNeeded += HexMath.HexDistance(sHex, targetHex) * 0.25f;
 						containsPlayerFleet = true;
@@ -807,7 +807,7 @@ public partial class BattleMap : Node2D
 
 				if (!Combat.InCombat)
 				{
-					float currentFuel = _globalData != null ? _globalData.FleetResources["Raw Materials"].AsSingle() : 0f;
+					float currentFuel = _globalData != null ? _globalData.FleetResources[GameConstants.ResourceKeys.RawMaterials].AsSingle() : 0f;
 
 					if (currentFuel < 0.25f)
 					{
@@ -818,7 +818,7 @@ public partial class BattleMap : Node2D
 					if (currentFuel < totalFuelNeeded)
 					{
 						if (UI != null) UI.CombatLogPanel.Visible = true;
-						LogCombatMessage($"\n[color=red]*** MOVEMENT ABORTED: INSUFFICIENT FUEL ({totalFuelNeeded} Raw Materials Req) ***[/color]");
+						LogCombatMessage($"\n[color=red]*** MOVEMENT ABORTED: INSUFFICIENT FUEL ({totalFuelNeeded} {GameConstants.ResourceKeys.RawMaterials} Req) ***[/color]");
 						return; 
 					}
 				}
@@ -828,7 +828,7 @@ public partial class BattleMap : Node2D
 				if (SelectedHexes.Count == 1)
 				{
 					Vector2I shipHex = SelectedHexes[0];
-					if (HexContents.ContainsKey(shipHex) && HexContents[shipHex].Type == "Player Fleet")
+					if (HexContents.ContainsKey(shipHex) && HexContents[shipHex].Type == GameConstants.EntityTypes.PlayerFleet)
 					{
 						MapEntity ship = HexContents[shipHex];
 						
@@ -873,13 +873,13 @@ public partial class BattleMap : Node2D
 	{
 		IsTargetingLongRange = false;
 		
-		if (_globalData == null || _globalData.FleetResources["Energy Cores"].AsSingle() < 5f) 
+		if (_globalData == null || _globalData.FleetResources[GameConstants.ResourceKeys.EnergyCores].AsSingle() < 5f)
 		{
 			LogCombatMessage("\n[color=red]*** SCAN FAILED: INSUFFICIENT ENERGY CORES (5.0 Req) ***[/color]");
 			return;
 		}
 
-		_globalData.FleetResources["Energy Cores"] = _globalData.FleetResources["Energy Cores"].AsSingle() - 5f;
+		_globalData.FleetResources[GameConstants.ResourceKeys.EnergyCores] = _globalData.FleetResources[GameConstants.ResourceKeys.EnergyCores].AsSingle() - 5f;
 		UpdateResourceUI();
 
 		SystemData sys = _globalData.ExploredSystems[_globalData.SavedSystem];
@@ -899,7 +899,7 @@ public partial class BattleMap : Node2D
 		
 		UI.CombatLogPanel.Visible = true;
 		LogCombatMessage("\n[color=#00ffff]*** DEEP SPACE TELEMETRY UPDATED ***[/color]");
-		LogCombatMessage("[color=yellow]-5.0 Energy Cores[/color]");
+		LogCombatMessage($"[color=yellow]-5.0 {GameConstants.ResourceKeys.EnergyCores}[/color]");
 
 		if (SfxPlayer != null)
 		{
@@ -941,7 +941,7 @@ public partial class BattleMap : Node2D
 	{
 		if (IsJumping || UI == null) return;
 
-		if (_globalData != null && _globalData.FleetResources["Raw Materials"].AsSingle() < 0.25f)
+		if (_globalData != null && _globalData.FleetResources[GameConstants.ResourceKeys.RawMaterials].AsSingle() < 0.25f)
 		{
 			if (!Combat.InCombat && !IsFleetMoving && _strandedMenuWrapper != null && !_strandedMenuWrapper.Visible && !_distressSignalAmbush && !_isWaitingForDistressSignal)
 			{
@@ -971,8 +971,8 @@ public partial class BattleMap : Node2D
 				if (HexContents.ContainsKey(_currentHoveredHex))
 				{
 					MapEntity hoveredEntity = HexContents[_currentHoveredHex];
-					bool isEnemy = hoveredEntity.Type == "Enemy Fleet";
-					bool isPlayer = hoveredEntity.Type == "Player Fleet";
+					bool isEnemy = hoveredEntity.Type == GameConstants.EntityTypes.EnemyFleet;
+					bool isPlayer = hoveredEntity.Type == GameConstants.EntityTypes.PlayerFleet;
 
 					if ((isEnemy || isPlayer) && GodotObject.IsInstanceValid(hoveredEntity.VisualSprite) && hoveredEntity.VisualSprite.Visible)
 					{
@@ -1042,12 +1042,12 @@ public partial class BattleMap : Node2D
 			UI.JumpButton.Text = "ENTER STARGATE";
 			foreach (Vector2I hex in SelectedHexes)
 			{
-				if (HexContents.ContainsKey(hex) && HexContents[hex].Type == "Player Fleet")
+				if (HexContents.ContainsKey(hex) && HexContents[hex].Type == GameConstants.EntityTypes.PlayerFleet)
 				{
 					foreach(Vector2I dir in HexMath.Directions)
 					{
 						Vector2I neighbor = hex + dir;
-						if (HexContents.ContainsKey(neighbor) && HexContents[neighbor].Type == "StarGate")
+						if (HexContents.ContainsKey(neighbor) && HexContents[neighbor].Type == GameConstants.EntityTypes.StarGate)
 						{
 							isNearStargate = true;
 							break;
@@ -1070,7 +1070,7 @@ public partial class BattleMap : Node2D
 		if (SelectedHexes.Count == 1 && HexContents.ContainsKey(SelectedHexes[0]))
 		{
 			MapEntity singleShip = HexContents[SelectedHexes[0]];
-			if (singleShip.Type == "Player Fleet" && singleShip.CurrentActions > 0 && (!Combat.InCombat || singleShip == Combat.ActiveShip))
+			if (singleShip.Type == GameConstants.EntityTypes.PlayerFleet && singleShip.CurrentActions > 0 && (!Combat.InCombat || singleShip == Combat.ActiveShip))
 			{
 				UI.AttackButton.Visible = true;
 			}
@@ -1095,8 +1095,8 @@ public partial class BattleMap : Node2D
 		List<Vector2I> gateHexes = new List<Vector2I>();
 		foreach (var kvp in HexContents)
 		{
-			if (kvp.Value.Type == "Player Fleet") playerHexes.Add(kvp.Key);
-			if (kvp.Value.Type == "StarGate") gateHexes.Add(kvp.Key);
+			if (kvp.Value.Type == GameConstants.EntityTypes.PlayerFleet) playerHexes.Add(kvp.Key);
+			if (kvp.Value.Type == GameConstants.EntityTypes.StarGate) gateHexes.Add(kvp.Key);
 		}
 		if (playerHexes.Count == 0 || gateHexes.Count == 0) return false;
 		foreach (Vector2I gate in gateHexes)
@@ -1308,9 +1308,9 @@ public partial class BattleMap : Node2D
 				LogCombatMessage($"- {kvp.Key}: {kvp.Value.AsSingle():0.##}");
 			}
 			
-			int weaponCount = _globalData.UnequippedInventory.Count(id => id.StartsWith("WPN_"));
-			int shieldCount = _globalData.UnequippedInventory.Count(id => id.StartsWith("SHLD_"));
-			int armorCount = _globalData.UnequippedInventory.Count(id => id.StartsWith("ARMR_"));
+			int weaponCount = _globalData.UnequippedInventory.Count(id => id.StartsWith(GameConstants.ItemPrefixes.Weapon));
+			int shieldCount = _globalData.UnequippedInventory.Count(id => id.StartsWith(GameConstants.ItemPrefixes.Shield));
+			int armorCount = _globalData.UnequippedInventory.Count(id => id.StartsWith(GameConstants.ItemPrefixes.Armor));
 			
 			LogCombatMessage($"\n[color=cyan]--- UNEQUIPPED UPGRADES ---[/color]");
 			LogCombatMessage($"- Weapons: {weaponCount}");
@@ -1369,7 +1369,7 @@ public partial class BattleMap : Node2D
 			UpdateHighlights();
 			Fog.UpdateVisibility();
 		}
-		else if (Combat.ActiveShip != null && Combat.ActiveShip.Type == "Player Fleet") Combat.EndActiveTurn();
+		else if (Combat.ActiveShip != null && Combat.ActiveShip.Type == GameConstants.EntityTypes.PlayerFleet) Combat.EndActiveTurn();
 	}
 
 	private void AdvanceExplorationTurn()
@@ -1404,8 +1404,8 @@ public partial class BattleMap : Node2D
 			List<Vector2I> playerHexes = new List<Vector2I>();
 			List<Vector2I> gateHexes = new List<Vector2I>();
 			foreach(var kvp in HexContents) {
-				if (kvp.Value.Type == "Player Fleet") playerHexes.Add(kvp.Key);
-				if (kvp.Value.Type == "StarGate") gateHexes.Add(kvp.Key);
+				if (kvp.Value.Type == GameConstants.EntityTypes.PlayerFleet) playerHexes.Add(kvp.Key);
+				if (kvp.Value.Type == GameConstants.EntityTypes.StarGate) gateHexes.Add(kvp.Key);
 			}
 			foreach (Vector2I gate in gateHexes) {
 				bool allNear = true;
@@ -1418,7 +1418,7 @@ public partial class BattleMap : Node2D
 		else
 		{
 			foreach(var kvp in HexContents) {
-				if (kvp.Value.Type == "StarGate") {
+				if (kvp.Value.Type == GameConstants.EntityTypes.StarGate) {
 					foreach (var p_hex in SelectedHexes) {
 						if (HexMath.HexDistance(kvp.Key, p_hex) <= 1) { gateHex = kvp.Key; gateFound = true; break; }
 					}
@@ -1455,7 +1455,7 @@ public partial class BattleMap : Node2D
 
 		foreach(var kvp in HexContents)
 		{
-			if (kvp.Value.Type == "Player Fleet")
+			if (kvp.Value.Type == GameConstants.EntityTypes.PlayerFleet)
 			{
 				Sprite2D shipSprite = kvp.Value.VisualSprite;
 				if (GodotObject.IsInstanceValid(shipSprite))
@@ -1528,7 +1528,7 @@ public partial class BattleMap : Node2D
 			
 			foreach (var kvp in HexContents)
 			{
-				if (kvp.Value.Type == "Player Fleet" || kvp.Value.Type == "Enemy Fleet")
+				if (kvp.Value.Type == GameConstants.EntityTypes.PlayerFleet || kvp.Value.Type == GameConstants.EntityTypes.EnemyFleet)
 				{
 					var shipDict = new Godot.Collections.Dictionary<string, Variant>();
 					shipDict["Name"] = kvp.Value.Name;
@@ -1539,8 +1539,8 @@ public partial class BattleMap : Node2D
 					shipDict["CurrentActions"] = kvp.Value.CurrentActions;
 					shipDict["CurrentInitiativeRoll"] = kvp.Value.CurrentInitiativeRoll; 
 					
-					if (kvp.Value.Type == "Player Fleet") playerState.Add(shipDict);
-					if (kvp.Value.Type == "Enemy Fleet") enemyState.Add(shipDict);
+					if (kvp.Value.Type == GameConstants.EntityTypes.PlayerFleet) playerState.Add(shipDict);
+					if (kvp.Value.Type == GameConstants.EntityTypes.EnemyFleet) enemyState.Add(shipDict);
 				}
 			}
 			
@@ -1588,12 +1588,12 @@ public partial class BattleMap : Node2D
 			if (sfx != null) { SfxPlayer.Stream = sfx; SfxPlayer.Play(); }
 		}
 
-		if (ship.Type == "Player Fleet" && _globalData != null && !Combat.InCombat)
+		if (ship.Type == GameConstants.EntityTypes.PlayerFleet && _globalData != null && !Combat.InCombat)
 		{
 			int distance = HexMath.HexDistance(fromHex, toHex);
 			float fuelCost = distance * 0.25f;
-			float currentFuel = _globalData.FleetResources["Raw Materials"].AsSingle();
-			_globalData.FleetResources["Raw Materials"] = Mathf.Max(0f, currentFuel - fuelCost);
+			float currentFuel = _globalData.FleetResources[GameConstants.ResourceKeys.RawMaterials].AsSingle();
+			_globalData.FleetResources[GameConstants.ResourceKeys.RawMaterials] = Mathf.Max(0f, currentFuel - fuelCost);
 			UpdateResourceUI(); 
 		}
 
@@ -1711,7 +1711,7 @@ public partial class BattleMap : Node2D
 
 	internal void CheckGameOver()
 	{
-		if (!HexContents.Values.Any(s => s.Type == "Player Fleet")) UI.GameOverPanel.Visible = true;
+		if (!HexContents.Values.Any(s => s.Type == GameConstants.EntityTypes.PlayerFleet)) UI.GameOverPanel.Visible = true;
 	}
 
 	private void OnAttackPressed()
@@ -1764,14 +1764,14 @@ public partial class BattleMap : Node2D
 			techYield = rng.Next(0, 100) < 25 ? 1f : 0f; 
 		}
 
-		_globalData.FleetResources["Raw Materials"] = _globalData.FleetResources["Raw Materials"].AsSingle() + rawYield;
-		_globalData.FleetResources["Energy Cores"] = _globalData.FleetResources["Energy Cores"].AsSingle() + energyYield;
-		_globalData.FleetResources["Ancient Tech"] = _globalData.FleetResources["Ancient Tech"].AsSingle() + techYield;
+		_globalData.FleetResources[GameConstants.ResourceKeys.RawMaterials] = _globalData.FleetResources[GameConstants.ResourceKeys.RawMaterials].AsSingle() + rawYield;
+		_globalData.FleetResources[GameConstants.ResourceKeys.EnergyCores] = _globalData.FleetResources[GameConstants.ResourceKeys.EnergyCores].AsSingle() + energyYield;
+		_globalData.FleetResources[GameConstants.ResourceKeys.AncientTech] = _globalData.FleetResources[GameConstants.ResourceKeys.AncientTech].AsSingle() + techYield;
 
 		UpdateResourceUI();
 
 		UI.CombatLogPanel.Visible = true;
 		LogCombatMessage($"\n[color=#00ff00]*** {enemyName.ToUpper()} DESTROYED ***[/color]");
-		LogCombatMessage($"[color=cyan]Combat Salvage:[/color] {rawYield} Raw Materials, {energyYield} Energy Cores{(techYield > 0 ? ", 1 Ancient Tech" : "")}");
+		LogCombatMessage($"[color=cyan]Combat Salvage:[/color] {rawYield} {GameConstants.ResourceKeys.RawMaterials}, {energyYield} {GameConstants.ResourceKeys.EnergyCores}{(techYield > 0 ? $", 1 {GameConstants.ResourceKeys.AncientTech}" : "")}");
 	}
 }

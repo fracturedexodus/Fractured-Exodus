@@ -11,7 +11,7 @@ public static class BattleVFX
 		laser.AddPoint(endPos);
 		laser.Width = 4.0f;
 		
-		if (attackerType == "Player Fleet") laser.DefaultColor = new Color(0.2f, 1f, 0.2f, 1f); 
+		if (attackerType == GameConstants.EntityTypes.PlayerFleet) laser.DefaultColor = new Color(0.2f, 1f, 0.2f, 1f);
 		else laser.DefaultColor = new Color(1f, 0.2f, 0.2f, 1f); 
 		
 		parentLayer.AddChild(laser);

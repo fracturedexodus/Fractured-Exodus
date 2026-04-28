@@ -30,8 +30,8 @@ public class CombatManager
 
 		foreach (var kvp in _map.HexContents)
 		{
-			if (kvp.Value.Type == "Player Fleet") players.Add(kvp.Key);
-			if (kvp.Value.Type == "Enemy Fleet") enemies.Add(kvp.Key);
+			if (kvp.Value.Type == GameConstants.EntityTypes.PlayerFleet) players.Add(kvp.Key);
+			if (kvp.Value.Type == GameConstants.EntityTypes.EnemyFleet) enemies.Add(kvp.Key);
 		}
 
 		if (enemies.Count == 0 || players.Count == 0) return;
@@ -67,7 +67,7 @@ public class CombatManager
 		List<Vector2I> playerHexes = new List<Vector2I>();
 		foreach (var kvp in _map.HexContents)
 		{
-			if (kvp.Value.Type == "Player Fleet") playerHexes.Add(kvp.Key);
+			if (kvp.Value.Type == GameConstants.EntityTypes.PlayerFleet) playerHexes.Add(kvp.Key);
 		}
 
 		int engagementRange = _map.ScanningRange * 2; 
@@ -77,11 +77,11 @@ public class CombatManager
 		{
 			bool joinsCombat = false;
 
-			if (kvp.Value.Type == "Player Fleet")
+			if (kvp.Value.Type == GameConstants.EntityTypes.PlayerFleet)
 			{
 				joinsCombat = true; 
 			}
-			else if (kvp.Value.Type == "Enemy Fleet")
+			else if (kvp.Value.Type == GameConstants.EntityTypes.EnemyFleet)
 			{
 				foreach (Vector2I pHex in playerHexes)
 				{
@@ -136,7 +136,7 @@ public class CombatManager
 		List<Vector2I> playerHexes = new List<Vector2I>();
 		foreach (var kvp in _map.HexContents)
 		{
-			if (kvp.Value.Type == "Player Fleet") playerHexes.Add(kvp.Key);
+			if (kvp.Value.Type == GameConstants.EntityTypes.PlayerFleet) playerHexes.Add(kvp.Key);
 		}
 
 		int engagementRange = _map.ScanningRange * 2; 
@@ -145,11 +145,11 @@ public class CombatManager
 		{
 			bool joinsCombat = false;
 
-			if (kvp.Value.Type == "Player Fleet")
+			if (kvp.Value.Type == GameConstants.EntityTypes.PlayerFleet)
 			{
 				joinsCombat = true; 
 			}
-			else if (kvp.Value.Type == "Enemy Fleet")
+			else if (kvp.Value.Type == GameConstants.EntityTypes.EnemyFleet)
 			{
 				foreach (Vector2I pHex in playerHexes)
 				{
@@ -185,7 +185,7 @@ public class CombatManager
 			Tween camTween = _map.CreateTween();
 			camTween.TweenProperty(_map.MapCamera, "position", ActiveShip.VisualSprite.Position, 0.5f).SetTrans(Tween.TransitionType.Sine);
 
-			if (ActiveShip.Type == "Enemy Fleet") _map.GetTree().CreateTimer(1.0f).Timeout += () => ExecuteSingleEnemyAI(ActiveShip);
+			if (ActiveShip.Type == GameConstants.EntityTypes.EnemyFleet) _map.GetTree().CreateTimer(1.0f).Timeout += () => ExecuteSingleEnemyAI(ActiveShip);
 			else
 			{
 				foreach (var kvp in _map.HexContents)
@@ -243,7 +243,7 @@ public class CombatManager
 			icon.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
 
 			if (i == _currentQueueIndex) icon.Modulate = new Color(0.8f, 1f, 0.8f); 
-			else if (ship.Type == "Enemy Fleet") icon.Modulate = new Color(1f, 0.5f, 0.5f); 
+			else if (ship.Type == GameConstants.EntityTypes.EnemyFleet) icon.Modulate = new Color(1f, 0.5f, 0.5f);
 			else icon.Modulate = new Color(1f, 1f, 1f, 0.6f); 
 			
 			squarePanel.AddChild(icon);
@@ -277,7 +277,7 @@ public class CombatManager
 		Tween camTween = _map.CreateTween();
 		camTween.TweenProperty(_map.MapCamera, "position", ActiveShip.VisualSprite.Position, 0.5f).SetTrans(Tween.TransitionType.Sine);
 
-		if (ActiveShip.Type == "Enemy Fleet")
+		if (ActiveShip.Type == GameConstants.EntityTypes.EnemyFleet)
 		{
 			_map.GetTree().CreateTimer(1.0f).Timeout += () => ExecuteSingleEnemyAI(ActiveShip);
 		}
@@ -312,8 +312,8 @@ public class CombatManager
 		bool enemyAlive = false;
 		foreach (var ship in _initiativeQueue)
 		{
-			if (ship.Type == "Player Fleet") playerAlive = true;
-			if (ship.Type == "Enemy Fleet") enemyAlive = true;
+			if (ship.Type == GameConstants.EntityTypes.PlayerFleet) playerAlive = true;
+			if (ship.Type == GameConstants.EntityTypes.EnemyFleet) enemyAlive = true;
 		}
 		return playerAlive && enemyAlive;
 	}
@@ -334,7 +334,7 @@ public class CombatManager
 		bool playerAlive = false;
 		foreach (var ship in _map.HexContents.Values)
 		{
-			if (ship.Type == "Player Fleet") playerAlive = true;
+			if (ship.Type == GameConstants.EntityTypes.PlayerFleet) playerAlive = true;
 		}
 
 		if (!playerAlive)
@@ -420,7 +420,7 @@ public class CombatManager
 
 		Random rng = new Random();
 		int damageRolled = rng.Next(0, attacker.AttackDamage + 1);
-		string attackerColor = attacker.Type == "Player Fleet" ? "#44ff44" : "#ff4444"; 
+		string attackerColor = attacker.Type == GameConstants.EntityTypes.PlayerFleet ? "#44ff44" : "#ff4444";
 
 		if (damageRolled == 0)
 		{
@@ -473,7 +473,7 @@ public class CombatManager
 			_map.LogCombatMessage($"[color=red]*** {defender.Name.ToUpper()} DESTROYED ***[/color]\n");
 			
 			// --- NEW: Give Player Salvage if it was an Enemy Fleet! ---
-			if (defender.Type == "Enemy Fleet")
+			if (defender.Type == GameConstants.EntityTypes.EnemyFleet)
 			{
 				_map.AwardEnemyKillSalvage(defender.Name);
 			}
@@ -502,7 +502,7 @@ public class CombatManager
 		if (!found || enemyShip.CurrentActions <= 0) { EndActiveTurn(); return; }
 
 		List<Vector2I> playerPositions = new List<Vector2I>();
-		foreach (var kvp in _map.HexContents) if (kvp.Value.Type == "Player Fleet") playerPositions.Add(kvp.Key);
+		foreach (var kvp in _map.HexContents) if (kvp.Value.Type == GameConstants.EntityTypes.PlayerFleet) playerPositions.Add(kvp.Key);
 		
 		if (playerPositions.Count == 0) { EndActiveTurn(); return; }
 
@@ -532,7 +532,7 @@ public class CombatManager
 				{
 					string type = _map.HexContents[neighbor].Type;
 					// --- THE FIX: AI CAN NO LONGER PATHFIND OVER OUTPOSTS! ---
-					if (type == "Planet" || type == "Base Planet (Player Start)" || type == "Celestial Body" || type == "Player Fleet" || type == "Enemy Fleet" || type == "StarGate" || type == "Outpost") isBlocked = true; 
+					if (type == GameConstants.EntityTypes.Planet || type == GameConstants.EntityTypes.BasePlanetPlayerStart || type == GameConstants.EntityTypes.CelestialBody || type == GameConstants.EntityTypes.PlayerFleet || type == GameConstants.EntityTypes.EnemyFleet || type == GameConstants.EntityTypes.StarGate || type == GameConstants.EntityTypes.Outpost) isBlocked = true;
 				}
 
 				if (!isBlocked)
@@ -587,7 +587,7 @@ public class CombatManager
 	{
 		if (enemyShip.IsDead || !InCombat) return;
 
-		if (!_map.HexContents.ContainsKey(targetPlayer) || _map.HexContents[targetPlayer].Type != "Player Fleet")
+		if (!_map.HexContents.ContainsKey(targetPlayer) || _map.HexContents[targetPlayer].Type != GameConstants.EntityTypes.PlayerFleet)
 		{
 			if (enemyShip.CurrentActions > 0) 
 			{

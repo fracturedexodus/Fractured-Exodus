@@ -81,7 +81,7 @@ public partial class TacticalCamera : Camera2D
 		{
 			if (keyEvent.Keycode == Key.Space)
 			{
-				if (_map.Combat.InCombat && _map.Combat.ActiveShip != null && _map.Combat.ActiveShip.Type == "Player Fleet")
+				if (_map.Combat.InCombat && _map.Combat.ActiveShip != null && _map.Combat.ActiveShip.Type == GameConstants.EntityTypes.PlayerFleet)
 				{
 					_map.OnEndTurnPressed();
 				}
@@ -92,10 +92,10 @@ public partial class TacticalCamera : Camera2D
 			}
 			else if (keyEvent.Keycode == Key.Q)
 			{
-				if (_map.Combat.InCombat && _map.Combat.ActiveShip != null && _map.Combat.ActiveShip.Type == "Player Fleet" && _map.Combat.ActiveShip.CurrentActions > 0)
+				if (_map.Combat.InCombat && _map.Combat.ActiveShip != null && _map.Combat.ActiveShip.Type == GameConstants.EntityTypes.PlayerFleet && _map.Combat.ActiveShip.CurrentActions > 0)
 				{
 					Vector2I hoveredHex = HexMath.PixelToHex(GetGlobalMousePosition(), _map.HexSize);
-					if (_map.HexContents.ContainsKey(hoveredHex) && _map.HexContents[hoveredHex].Type == "Enemy Fleet")
+					if (_map.HexContents.ContainsKey(hoveredHex) && _map.HexContents[hoveredHex].Type == GameConstants.EntityTypes.EnemyFleet)
 					{
 						Vector2I activeHex = Vector2I.Zero;
 						foreach(var kvp in _map.HexContents) if (kvp.Value == _map.Combat.ActiveShip) activeHex = kvp.Key;
@@ -160,7 +160,7 @@ public partial class TacticalCamera : Camera2D
 
 						if (_map.Combat.IsTargeting && _map.SelectedHexes.Count == 1)
 						{
-							if (_map.HexContents.ContainsKey(clickedHex) && _map.HexContents[clickedHex].Type == "Enemy Fleet")
+							if (_map.HexContents.ContainsKey(clickedHex) && _map.HexContents[clickedHex].Type == GameConstants.EntityTypes.EnemyFleet)
 							{
 								int dist = HexMath.HexDistance(_map.SelectedHexes[0], clickedHex);
 								MapEntity attacker = _map.HexContents[_map.SelectedHexes[0]];
@@ -182,9 +182,9 @@ public partial class TacticalCamera : Camera2D
 							return; 
 						}
 
-						if (_map.HexContents.ContainsKey(clickedHex) && (_map.HexContents[clickedHex].Type == "Player Fleet" || _map.HexContents[clickedHex].Type == "Enemy Fleet"))
+						if (_map.HexContents.ContainsKey(clickedHex) && (_map.HexContents[clickedHex].Type == GameConstants.EntityTypes.PlayerFleet || _map.HexContents[clickedHex].Type == GameConstants.EntityTypes.EnemyFleet))
 						{
-							if (_map.HexContents[clickedHex].Type == "Player Fleet")
+							if (_map.HexContents[clickedHex].Type == GameConstants.EntityTypes.PlayerFleet)
 							{
 								if (!_map.Combat.InCombat || _map.HexContents[clickedHex] == _map.Combat.ActiveShip) _map.SelectedHexes.Add(clickedHex);
 							}
@@ -198,7 +198,7 @@ public partial class TacticalCamera : Camera2D
 						{
 							foreach (var kvp in _map.HexContents)
 							{
-								if (kvp.Value.Type == "Player Fleet" && selectionRect.HasPoint(HexMath.HexToPixel(kvp.Key, _map.HexSize)))
+								if (kvp.Value.Type == GameConstants.EntityTypes.PlayerFleet && selectionRect.HasPoint(HexMath.HexToPixel(kvp.Key, _map.HexSize)))
 									_map.SelectedHexes.Add(kvp.Key);
 							}
 						}
@@ -216,11 +216,11 @@ public partial class TacticalCamera : Camera2D
 
 				if (_map.Combat.InCombat)
 				{
-					if (_map.Combat.ActiveShip != null && _map.Combat.ActiveShip.Type == "Player Fleet" && _map.SelectedHexes.Count > 0)
+					if (_map.Combat.ActiveShip != null && _map.Combat.ActiveShip.Type == GameConstants.EntityTypes.PlayerFleet && _map.SelectedHexes.Count > 0)
 					{
 						Vector2I activeHex = _map.SelectedHexes[0];
 						
-						if (_map.HexContents.ContainsKey(clickedHex) && _map.HexContents[clickedHex].Type == "Enemy Fleet")
+						if (_map.HexContents.ContainsKey(clickedHex) && _map.HexContents[clickedHex].Type == GameConstants.EntityTypes.EnemyFleet)
 						{
 							if (_map.Combat.ActiveShip.CurrentActions > 0 && HexMath.HexDistance(activeHex, clickedHex) <= _map.Combat.ActiveShip.AttackRange)
 							{
@@ -264,14 +264,14 @@ public partial class TacticalCamera : Camera2D
 			if (_map.HexContents.ContainsKey(hoveredHex))
 			{
 				MapEntity entity = _map.HexContents[hoveredHex];
-				if (entity.Type == "Enemy Fleet" && !entity.VisualSprite.Visible)
+				if (entity.Type == GameConstants.EntityTypes.EnemyFleet && !entity.VisualSprite.Visible)
 				{
 					_map.UI.InfoPanel.Visible = false;
 					return;
 				}
 
 				string dynamicStats = "";
-				if (entity.Type == "Player Fleet" || entity.Type == "Enemy Fleet")
+				if (entity.Type == GameConstants.EntityTypes.PlayerFleet || entity.Type == GameConstants.EntityTypes.EnemyFleet)
 				{
 					string initText = _map.Combat.InCombat ? $" | INIT: {entity.CurrentInitiativeRoll}" : "";
 					dynamicStats = $"HP: {entity.CurrentHP}/{entity.MaxHP} | SHIELD: {entity.CurrentShields}/{entity.MaxShields}\n" +

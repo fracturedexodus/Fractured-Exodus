@@ -43,7 +43,7 @@ public class HazardManager
 
 		foreach (var kvp in _map.HexContents)
 		{
-			if (kvp.Value.Type == "Player Fleet" || kvp.Value.Type == "Enemy Fleet")
+			if (kvp.Value.Type == GameConstants.EntityTypes.PlayerFleet || kvp.Value.Type == GameConstants.EntityTypes.EnemyFleet)
 			{
 				if (liveAsteroidHexes.Contains(kvp.Key))
 				{
@@ -106,7 +106,7 @@ public class HazardManager
 
 		foreach (var kvp in _map.HexContents)
 		{
-			if (kvp.Value.Type == "Player Fleet" || kvp.Value.Type == "Enemy Fleet")
+			if (kvp.Value.Type == GameConstants.EntityTypes.PlayerFleet || kvp.Value.Type == GameConstants.EntityTypes.EnemyFleet)
 			{
 				if (_map.RadiationHexes.Contains(kvp.Key))
 				{

@@ -48,8 +48,8 @@ public class FleetInventoryService
 			return false;
 		}
 
-		float tech = _globalData.FleetResources["Ancient Tech"].AsSingle();
-		float raw = _globalData.FleetResources["Raw Materials"].AsSingle();
+		float tech = _globalData.FleetResources[GameConstants.ResourceKeys.AncientTech].AsSingle();
+		float raw = _globalData.FleetResources[GameConstants.ResourceKeys.RawMaterials].AsSingle();
 		return tech >= item.CostTech && raw >= item.CostRaw;
 	}
 
@@ -61,11 +61,11 @@ public class FleetInventoryService
 		}
 
 		EquipmentData item = _globalData.MasterEquipmentDB[itemID];
-		float tech = _globalData.FleetResources["Ancient Tech"].AsSingle();
-		float raw = _globalData.FleetResources["Raw Materials"].AsSingle();
+		float tech = _globalData.FleetResources[GameConstants.ResourceKeys.AncientTech].AsSingle();
+		float raw = _globalData.FleetResources[GameConstants.ResourceKeys.RawMaterials].AsSingle();
 
-		_globalData.FleetResources["Ancient Tech"] = tech - item.CostTech;
-		_globalData.FleetResources["Raw Materials"] = raw - item.CostRaw;
+		_globalData.FleetResources[GameConstants.ResourceKeys.AncientTech] = tech - item.CostTech;
+		_globalData.FleetResources[GameConstants.ResourceKeys.RawMaterials] = raw - item.CostRaw;
 		_globalData.UnequippedInventory.Add(itemID);
 		return true;
 	}
@@ -127,17 +127,17 @@ public class FleetInventoryService
 		}
 
 		string oldItemID = "";
-		if (itemToEquip.Category == "Weapon")
+		if (itemToEquip.Category == GameConstants.EquipmentCategories.Weapon)
 		{
 			oldItemID = loadout.WeaponID;
 			loadout.WeaponID = itemID;
 		}
-		else if (itemToEquip.Category == "Shield")
+		else if (itemToEquip.Category == GameConstants.EquipmentCategories.Shield)
 		{
 			oldItemID = loadout.ShieldID;
 			loadout.ShieldID = itemID;
 		}
-		else if (itemToEquip.Category == "Armor")
+		else if (itemToEquip.Category == GameConstants.EquipmentCategories.Armor)
 		{
 			oldItemID = loadout.ArmorID;
 			loadout.ArmorID = itemID;
@@ -163,7 +163,7 @@ public class FleetInventoryService
 
 	public static void ApplyLoadoutStats(GlobalData globalData, MapEntity ship)
 	{
-		if (globalData == null || ship == null || ship.Type != "Player Fleet")
+		if (globalData == null || ship == null || ship.Type != GameConstants.EntityTypes.PlayerFleet)
 		{
 			return;
 		}
@@ -177,9 +177,9 @@ public class FleetInventoryService
 			loadout = globalData.FleetLoadouts[ship.Name];
 		}
 
-		int hpBonus = GetLoadoutBonus(globalData, loadout?.ArmorID, "Armor");
-		int shieldBonus = GetLoadoutBonus(globalData, loadout?.ShieldID, "Shield");
-		int weaponBonus = GetLoadoutBonus(globalData, loadout?.WeaponID, "Weapon");
+		int hpBonus = GetLoadoutBonus(globalData, loadout?.ArmorID, GameConstants.EquipmentCategories.Armor);
+		int shieldBonus = GetLoadoutBonus(globalData, loadout?.ShieldID, GameConstants.EquipmentCategories.Shield);
+		int weaponBonus = GetLoadoutBonus(globalData, loadout?.WeaponID, GameConstants.EquipmentCategories.Weapon);
 
 		int newMaxHp = baseHp + hpBonus;
 		int newMaxShields = baseShields + shieldBonus;
