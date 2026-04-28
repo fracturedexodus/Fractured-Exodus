@@ -79,6 +79,22 @@ public partial class TacticalCamera : Camera2D
 
 		if (@event is InputEventKey keyEvent && keyEvent.Pressed && !keyEvent.Echo)
 		{
+			if (!_map.Combat.InCombat)
+			{
+				if (keyEvent.Keycode == Key.F)
+				{
+					_map.ActivateFleetTravelMode();
+					return;
+				}
+
+				int shipHotkey = GetShipHotkeyNumber(keyEvent.Keycode);
+				if (shipHotkey > 0)
+				{
+					_map.TrySelectPlayerShipByHotkey(shipHotkey);
+					return;
+				}
+			}
+
 			if (keyEvent.Keycode == Key.Space)
 			{
 				if (_map.Combat.InCombat && _map.Combat.ActiveShip != null && _map.Combat.ActiveShip.Type == GameConstants.EntityTypes.PlayerFleet)
@@ -143,8 +159,7 @@ public partial class TacticalCamera : Camera2D
 					_selectionBox.QueueRedraw();
 
 					Rect2 selectionRect = new Rect2(_dragStartPos, GetGlobalMousePosition() - _dragStartPos).Abs();
-					
-					if (!_map.Combat.IsTargeting) _map.SelectedHexes.Clear();
+					bool preserveFleetSelection = !_map.Combat.InCombat && _map.IsFleetTravelMode;
 
 					if (selectionRect.Area < 100)
 					{
@@ -152,9 +167,15 @@ public partial class TacticalCamera : Camera2D
 
 						if (!_map.HexGrid.ContainsKey(clickedHex))
 						{
-							_map.SelectedHexes.Clear();
-							_map.UpdateHighlights();
-							_map.ToggleShipMenu(false);
+							if (preserveFleetSelection)
+							{
+								_map.ToggleShipMenu(false);
+								_map.UpdateHighlights();
+							}
+							else
+							{
+								_map.ClearSelectionState();
+							}
 							return;
 						}
 
@@ -184,23 +205,44 @@ public partial class TacticalCamera : Camera2D
 
 						if (_map.HexContents.ContainsKey(clickedHex) && (_map.HexContents[clickedHex].Type == GameConstants.EntityTypes.PlayerFleet || _map.HexContents[clickedHex].Type == GameConstants.EntityTypes.EnemyFleet))
 						{
-							if (_map.HexContents[clickedHex].Type == GameConstants.EntityTypes.PlayerFleet)
+							MapEntity clickedShip = _map.HexContents[clickedHex];
+							if (clickedShip.Type == GameConstants.EntityTypes.PlayerFleet)
 							{
-								if (!_map.Combat.InCombat || _map.HexContents[clickedHex] == _map.Combat.ActiveShip) _map.SelectedHexes.Add(clickedHex);
+								_map.SelectSinglePlayerShip(clickedHex, clickedShip.VisualSprite.Visible);
+								return;
 							}
-							if (_map.HexContents[clickedHex].VisualSprite.Visible) _map.ToggleShipMenu(true, _map.HexContents[clickedHex]);
+
+							if (!preserveFleetSelection)
+							{
+								_map.SelectedHexes.Clear();
+							}
+
+							if (clickedShip.VisualSprite.Visible) _map.ToggleShipMenu(true, clickedShip);
 						}
-						else _map.ToggleShipMenu(false); 
+						else if (preserveFleetSelection)
+						{
+							_map.ToggleShipMenu(false);
+						}
+						else
+						{
+							_map.ClearSelectionState();
+							return;
+						}
 					}
 					else 
 					{
 						if (!_map.Combat.InCombat) 
 						{
+							List<Vector2I> selectedPlayerShips = new List<Vector2I>();
 							foreach (var kvp in _map.HexContents)
 							{
 								if (kvp.Value.Type == GameConstants.EntityTypes.PlayerFleet && selectionRect.HasPoint(HexMath.HexToPixel(kvp.Key, _map.HexSize)))
-									_map.SelectedHexes.Add(kvp.Key);
+								{
+									selectedPlayerShips.Add(kvp.Key);
+								}
 							}
+							_map.SetManualPlayerSelection(selectedPlayerShips);
+							return;
 						}
 						_map.ToggleShipMenu(false); 
 					}
@@ -284,5 +326,18 @@ public partial class TacticalCamera : Camera2D
 			}
 			else _map.UI.InfoPanel.Visible = false; 
 		}
+	}
+
+	private static int GetShipHotkeyNumber(Key keycode)
+	{
+		return keycode switch
+		{
+			Key.Key1 or Key.Kp1 => 1,
+			Key.Key2 or Key.Kp2 => 2,
+			Key.Key3 or Key.Kp3 => 3,
+			Key.Key4 or Key.Kp4 => 4,
+			Key.Key5 or Key.Kp5 => 5,
+			_ => 0
+		};
 	}
 }

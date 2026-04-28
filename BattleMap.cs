@@ -61,6 +61,8 @@ public partial class BattleMap : Node2D
 
 	internal bool IsJumping = false; 
 	internal MapEntity CurrentlyViewedShip = null;
+	internal bool IsFleetTravelMode { get; private set; } = false;
+	private readonly Dictionary<string, int> _playerShipHotkeys = new Dictionary<string, int>();
 
 	// --- STRANDED FLEET PROTOCOL UI ---
 	private CenterContainer _strandedMenuWrapper;
@@ -921,6 +923,122 @@ public partial class BattleMap : Node2D
 		IsTargetingLongRange = !IsTargetingLongRange;
 		if (UI != null) UI.CombatLogPanel.Visible = true;
 		if (IsTargetingLongRange) LogCombatMessage("\n[color=yellow]Awaiting Deep Scan Coordinates... (Left-Click to Scan, Right-Click to Cancel)[/color]");
+	}
+
+	private void RefreshPlayerShipHotkeys()
+	{
+		HashSet<string> currentPlayerShipNames = HexContents.Values
+			.Where(entity => entity.Type == GameConstants.EntityTypes.PlayerFleet && !string.IsNullOrEmpty(entity.Name))
+			.Select(entity => entity.Name)
+			.ToHashSet();
+
+		List<string> staleShipNames = _playerShipHotkeys.Keys.Where(name => !currentPlayerShipNames.Contains(name)).ToList();
+		foreach (string staleShipName in staleShipNames)
+		{
+			_playerShipHotkeys.Remove(staleShipName);
+		}
+
+		HashSet<int> usedSlots = _playerShipHotkeys.Values.ToHashSet();
+		foreach (string shipName in currentPlayerShipNames.Where(name => !_playerShipHotkeys.ContainsKey(name)).OrderBy(name => name))
+		{
+			for (int slot = 1; slot <= 5; slot++)
+			{
+				if (usedSlots.Contains(slot)) continue;
+				_playerShipHotkeys[shipName] = slot;
+				usedSlots.Add(slot);
+				break;
+			}
+		}
+	}
+
+	private List<Vector2I> GetOrderedPlayerShipHexes()
+	{
+		RefreshPlayerShipHotkeys();
+
+		return HexContents
+			.Where(kvp => kvp.Value.Type == GameConstants.EntityTypes.PlayerFleet)
+			.OrderBy(kvp => _playerShipHotkeys.TryGetValue(kvp.Value.Name, out int slot) ? slot : int.MaxValue)
+			.ThenBy(kvp => kvp.Value.Name)
+			.ThenBy(kvp => kvp.Key.X)
+			.ThenBy(kvp => kvp.Key.Y)
+			.Select(kvp => kvp.Key)
+			.ToList();
+	}
+
+	internal void ActivateFleetTravelMode()
+	{
+		if (Combat.InCombat || IsFleetMoving) return;
+
+		List<Vector2I> playerShipHexes = GetOrderedPlayerShipHexes();
+		if (playerShipHexes.Count == 0) return;
+
+		IsFleetTravelMode = true;
+		SelectedHexes = playerShipHexes;
+		ToggleShipMenu(false);
+		UpdateHighlights();
+	}
+
+	internal bool TrySelectPlayerShipByHotkey(int slotNumber)
+	{
+		if (Combat.InCombat || IsFleetMoving || slotNumber < 1 || slotNumber > 5) return false;
+
+		RefreshPlayerShipHotkeys();
+		KeyValuePair<Vector2I, MapEntity> matchingShip = HexContents
+			.Where(kvp => kvp.Value.Type == GameConstants.EntityTypes.PlayerFleet)
+			.FirstOrDefault(kvp => _playerShipHotkeys.TryGetValue(kvp.Value.Name, out int slot) && slot == slotNumber);
+
+		if (matchingShip.Value == null) return false;
+
+		SelectSinglePlayerShip(matchingShip.Key, true);
+		return true;
+	}
+
+	internal void SelectSinglePlayerShip(Vector2I shipHex, bool openMenu)
+	{
+		if (!HexContents.ContainsKey(shipHex)) return;
+
+		MapEntity ship = HexContents[shipHex];
+		if (ship.Type != GameConstants.EntityTypes.PlayerFleet) return;
+		if (Combat.InCombat && ship != Combat.ActiveShip) return;
+
+		IsFleetTravelMode = false;
+		SelectedHexes.Clear();
+		SelectedHexes.Add(shipHex);
+
+		if (openMenu && ship.VisualSprite.Visible)
+		{
+			ToggleShipMenu(true, ship);
+		}
+		else
+		{
+			ToggleShipMenu(false);
+		}
+
+		UpdateHighlights();
+	}
+
+	internal void SetManualPlayerSelection(List<Vector2I> selectedShipHexes)
+	{
+		IsFleetTravelMode = false;
+		SelectedHexes = selectedShipHexes
+			.Where(hex => HexContents.ContainsKey(hex) && HexContents[hex].Type == GameConstants.EntityTypes.PlayerFleet)
+			.Distinct()
+			.ToList();
+
+		ToggleShipMenu(false);
+		UpdateHighlights();
+	}
+
+	internal void ClearSelectionState(bool deactivateFleetMode = true)
+	{
+		if (deactivateFleetMode)
+		{
+			IsFleetTravelMode = false;
+		}
+
+		SelectedHexes.Clear();
+		ToggleShipMenu(false);
+		UpdateHighlights();
 	}
 
 	internal void ProcessRoamingEnemies()
