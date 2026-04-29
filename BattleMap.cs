@@ -1212,23 +1212,24 @@ public partial class BattleMap : Node2D
 
 	private void OnInventoryPressed()
 	{
+		if (_inventoryService == null || UI == null) return;
+
 		UI.CombatLogPanel.Visible = true;
-		LogCombatMessage("\n[color=yellow]--- FLEET INVENTORY ---[/color]");
-		if (_globalData != null)
+		InventoryReport report = _inventoryService.BuildInventoryReport();
+		if (report == null || report.Lines.Count == 0) return;
+
+		bool isFirstLine = true;
+		foreach (string line in report.Lines)
 		{
-			foreach(var kvp in _globalData.FleetResources)
+			if (isFirstLine)
 			{
-				LogCombatMessage($"- {kvp.Key}: {kvp.Value.AsSingle():0.##}");
+				LogCombatMessage($"\n{line}");
+				isFirstLine = false;
 			}
-			
-			int weaponCount = _globalData.UnequippedInventory.Count(id => id.StartsWith(GameConstants.ItemPrefixes.Weapon));
-			int shieldCount = _globalData.UnequippedInventory.Count(id => id.StartsWith(GameConstants.ItemPrefixes.Shield));
-			int armorCount = _globalData.UnequippedInventory.Count(id => id.StartsWith(GameConstants.ItemPrefixes.Armor));
-			
-			LogCombatMessage($"\n[color=cyan]--- UNEQUIPPED UPGRADES ---[/color]");
-			LogCombatMessage($"- Weapons: {weaponCount}");
-			LogCombatMessage($"- Shields: {shieldCount}");
-			LogCombatMessage($"- Armor: {armorCount}");
+			else
+			{
+				LogCombatMessage(line);
+			}
 		}
 	}
 

@@ -9,6 +9,11 @@ public class InventoryStack
 	public int Count { get; set; }
 }
 
+public class InventoryReport
+{
+	public List<string> Lines { get; set; } = new List<string>();
+}
+
 public class FleetInventoryService
 {
 	public const string DefaultWeaponName = "Mark I Laser";
@@ -165,6 +170,37 @@ public class FleetInventoryService
 		return GetGroupedInventory()
 			.Where(stack => IsStandardIssueItem(stack.ItemID))
 			.ToList();
+	}
+
+	public InventoryReport BuildInventoryReport()
+	{
+		InventoryReport report = new InventoryReport();
+		if (_globalData == null)
+		{
+			return report;
+		}
+
+		report.Lines.Add("[color=yellow]--- FLEET INVENTORY ---[/color]");
+
+		if (_globalData.FleetResources != null)
+		{
+			foreach (KeyValuePair<string, Variant> kvp in _globalData.FleetResources)
+			{
+				report.Lines.Add($"- {kvp.Key}: {kvp.Value.AsSingle():0.##}");
+			}
+		}
+
+		int weaponCount = _globalData.UnequippedInventory?.Count(id => id.StartsWith(GameConstants.ItemPrefixes.Weapon)) ?? 0;
+		int shieldCount = _globalData.UnequippedInventory?.Count(id => id.StartsWith(GameConstants.ItemPrefixes.Shield)) ?? 0;
+		int armorCount = _globalData.UnequippedInventory?.Count(id => id.StartsWith(GameConstants.ItemPrefixes.Armor)) ?? 0;
+
+		report.Lines.Add(string.Empty);
+		report.Lines.Add("[color=cyan]--- UNEQUIPPED UPGRADES ---[/color]");
+		report.Lines.Add($"- Weapons: {weaponCount}");
+		report.Lines.Add($"- Shields: {shieldCount}");
+		report.Lines.Add($"- Armor: {armorCount}");
+
+		return report;
 	}
 
 	public int GetStandardIssueSaleValue(string outpostName)
