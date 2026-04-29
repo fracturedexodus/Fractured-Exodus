@@ -732,10 +732,12 @@ public partial class BattleMap : Node2D
 				if (targetEvent.ButtonIndex == MouseButton.Left)
 				{
 					ExecuteLongRangeScan(HexMath.PixelToHex(GetGlobalMousePosition(), HexSize));
+					GetViewport().SetInputAsHandled();
 				}
 				else if (targetEvent.ButtonIndex == MouseButton.Right)
 				{
 					ApplyLongRangeTargetingResult(_longRangeScanService?.CancelTargeting(), true);
+					GetViewport().SetInputAsHandled();
 				}
 			}
 			return; 
