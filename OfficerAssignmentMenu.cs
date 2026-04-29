@@ -13,6 +13,7 @@ public partial class OfficerAssignmentMenu : Control
 
 	private Label _shipLabel;
 	private Label _statusLabel;
+	private TextureRect _shipPreview;
 	private TextureRect _portraitPreview;
 	private Label _detailsLabel;
 	private Button _presetModeButton;
@@ -95,14 +96,58 @@ public partial class OfficerAssignmentMenu : Control
 		_shipLabel.AddThemeFontSizeOverride("font_size", 30);
 		left.AddChild(_shipLabel);
 
-		_portraitPreview = new TextureRect
+		HBoxContainer previewRow = new HBoxContainer
 		{
-			CustomMinimumSize = new Vector2(720, 420),
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+		};
+		previewRow.AddThemeConstantOverride("separation", 18);
+		left.AddChild(previewRow);
+
+		VBoxContainer shipPreviewColumn = new VBoxContainer
+		{
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+		};
+		shipPreviewColumn.AddThemeConstantOverride("separation", 8);
+		previewRow.AddChild(shipPreviewColumn);
+
+		Label shipPreviewLabel = new Label
+		{
+			Text = "SHIP",
+			HorizontalAlignment = HorizontalAlignment.Center
+		};
+		shipPreviewColumn.AddChild(shipPreviewLabel);
+
+		_shipPreview = new TextureRect
+		{
+			CustomMinimumSize = new Vector2(350, 420),
 			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
 			ExpandMode = TextureRect.ExpandModeEnum.FitWidthProportional,
 			StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered
 		};
-		left.AddChild(_portraitPreview);
+		shipPreviewColumn.AddChild(_shipPreview);
+
+		VBoxContainer officerPreviewColumn = new VBoxContainer
+		{
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+		};
+		officerPreviewColumn.AddThemeConstantOverride("separation", 8);
+		previewRow.AddChild(officerPreviewColumn);
+
+		Label officerPreviewLabel = new Label
+		{
+			Text = "OFFICER",
+			HorizontalAlignment = HorizontalAlignment.Center
+		};
+		officerPreviewColumn.AddChild(officerPreviewLabel);
+
+		_portraitPreview = new TextureRect
+		{
+			CustomMinimumSize = new Vector2(350, 420),
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+			ExpandMode = TextureRect.ExpandModeEnum.FitWidthProportional,
+			StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered
+		};
+		officerPreviewColumn.AddChild(_portraitPreview);
 
 		_detailsLabel = new Label
 		{
@@ -286,7 +331,9 @@ public partial class OfficerAssignmentMenu : Control
 
 	private OfficerState BuildDefaultCustomOfficer(string shipName, OfficerTemplate template)
 	{
-		string portraitPath = _portraitOptions.Count > 0 ? _portraitOptions[0] : template?.PortraitPath ?? string.Empty;
+		string portraitPath = !string.IsNullOrEmpty(template?.PortraitPath)
+			? template.PortraitPath
+			: (_portraitOptions.Count > 0 ? _portraitOptions[0] : string.Empty);
 		return _officerService.CreateCustomOfficer(new CustomOfficerRequest
 		{
 			ShipName = shipName,
@@ -302,6 +349,21 @@ public partial class OfficerAssignmentMenu : Control
 
 	private void ApplyOfficerPreview(OfficerState officer, OfficerTemplate template)
 	{
+		string shipPreviewPath = Database.GetShipBlueprintPath(officer.ShipName);
+		if (string.IsNullOrEmpty(shipPreviewPath))
+		{
+			shipPreviewPath = Database.GetShipTexturePath(officer.ShipName);
+		}
+
+		if (!string.IsNullOrEmpty(shipPreviewPath))
+		{
+			_shipPreview.Texture = GD.Load<Texture2D>(shipPreviewPath);
+		}
+		else
+		{
+			_shipPreview.Texture = null;
+		}
+
 		if (!string.IsNullOrEmpty(officer.PortraitPath))
 		{
 			_portraitPreview.Texture = GD.Load<Texture2D>(officer.PortraitPath);
