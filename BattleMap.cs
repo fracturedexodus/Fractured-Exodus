@@ -1033,6 +1033,11 @@ public partial class BattleMap : Node2D
 		_hoverPresentationService.ApplyState(_radarHighlight, _hoverHighlight, _hoverTooltip, state);
 	}
 
+	private void UpdateEnvironmentAnimation(float delta)
+	{
+		_battleMapAnimationService?.AnimateEnvironment(EnvironmentLayer, delta, !Combat.InCombat);
+	}
+
 	private void UpdateHoverInfoPanel()
 	{
 		if (UI?.InfoPanel == null || UI.InfoLabel == null)
@@ -1085,11 +1090,6 @@ public partial class BattleMap : Node2D
 	private void UpdateShipFacing(Vector2 mousePosition)
 	{
 		_battleMapAnimationService?.UpdateSelectedShipFacing(SelectedHexes, HexContents, mousePosition);
-	}
-
-	private void UpdateEnvironmentAnimation(float delta)
-	{
-		_battleMapAnimationService?.AnimateEnvironment(EnvironmentLayer, delta);
 	}
 
 	private void UpdateJumpButton()

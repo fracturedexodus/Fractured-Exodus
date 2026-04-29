@@ -7,6 +7,7 @@ public class HazardManager
 	private BattleMap _map;
 	private float _asteroidTimer = 0f;
 	private float _radiationTimer = 0f;
+	private const float CombatAsteroidStepAngle = -0.18f;
 
 	public HazardManager(BattleMap map)
 	{
@@ -15,11 +16,14 @@ public class HazardManager
 
 	public void ProcessHazards(double delta)
 	{
-		_asteroidTimer += (float)delta;
-		if (_asteroidTimer >= 1.0f)
+		if (!_map.Combat.InCombat)
 		{
-			_asteroidTimer -= 1.0f;
-			ApplyAsteroidDamage();
+			_asteroidTimer += (float)delta;
+			if (_asteroidTimer >= 1.0f)
+			{
+				_asteroidTimer -= 1.0f;
+				ApplyAsteroidDamage();
+			}
 		}
 
 		_radiationTimer += (float)delta;
@@ -30,12 +34,42 @@ public class HazardManager
 		}
 	}
 
+	public void AdvanceAsteroidsForCombatTurn()
+	{
+		if (_map == null || _map.EnvironmentLayer == null || _map.Combat == null || !_map.Combat.InCombat)
+		{
+			return;
+		}
+
+		List<(Polygon2D Rock, Vector2I CurrentHex, Vector2I NextHex)> movements = new List<(Polygon2D, Vector2I, Vector2I)>();
+		HashSet<Vector2I> updatedHexes = new HashSet<Vector2I>();
+
+		foreach (Polygon2D rock in GetAsteroidRocks())
+		{
+			Vector2I currentHex = GetAsteroidHex(rock);
+			Vector2I nextHex = GetNextAsteroidHex(currentHex, rock.GlobalPosition);
+			movements.Add((rock, currentHex, nextHex));
+			updatedHexes.Add(nextHex);
+		}
+
+		foreach ((Polygon2D rock, Vector2I _, Vector2I nextHex) movement in movements)
+		{
+			Vector2 targetGlobal = HexMath.HexToPixel(movement.nextHex, _map.HexSize);
+			movement.rock.Position = _map.EnvironmentLayer.ToLocal(targetGlobal);
+			movement.rock.SetMeta("asteroid_hex_q", movement.nextHex.X);
+			movement.rock.SetMeta("asteroid_hex_r", movement.nextHex.Y);
+		}
+
+		_map.AsteroidHexes = updatedHexes;
+		ApplyAsteroidDamage();
+	}
+
 	private void ApplyAsteroidDamage()
 	{
 		HashSet<Vector2I> liveAsteroidHexes = new HashSet<Vector2I>();
-		foreach (Node child in _map.EnvironmentLayer.GetChildren())
+		foreach (Polygon2D rock in GetAsteroidRocks())
 		{
-			if (child is Polygon2D rock) liveAsteroidHexes.Add(HexMath.PixelToHex(rock.GlobalPosition, _map.HexSize));
+			liveAsteroidHexes.Add(HexMath.PixelToHex(rock.GlobalPosition, _map.HexSize));
 		}
 
 		bool uiNeedsUpdate = false;
@@ -97,6 +131,53 @@ public class HazardManager
 		{
 			_map.ToggleShipMenu(true, _map.CurrentlyViewedShip);
 		}
+	}
+
+	private IEnumerable<Polygon2D> GetAsteroidRocks()
+	{
+		foreach (Node child in _map.EnvironmentLayer.GetChildren())
+		{
+			if (child is Polygon2D rock && rock.HasMeta("is_asteroid") && rock.GetMeta("is_asteroid").AsBool())
+			{
+				yield return rock;
+			}
+		}
+	}
+
+	private Vector2I GetAsteroidHex(Polygon2D rock)
+	{
+		if (rock != null && rock.HasMeta("asteroid_hex_q") && rock.HasMeta("asteroid_hex_r"))
+		{
+			return new Vector2I((int)rock.GetMeta("asteroid_hex_q"), (int)rock.GetMeta("asteroid_hex_r"));
+		}
+
+		return HexMath.PixelToHex(rock.GlobalPosition, _map.HexSize);
+	}
+
+	private Vector2I GetNextAsteroidHex(Vector2I currentHex, Vector2 currentGlobalPosition)
+	{
+		Vector2 desiredGlobal = currentGlobalPosition.Rotated(CombatAsteroidStepAngle);
+		Vector2I bestHex = currentHex;
+		float bestDistance = float.MaxValue;
+
+		foreach (Vector2I direction in HexMath.Directions)
+		{
+			Vector2I candidate = currentHex + direction;
+			if (!_map.HexGrid.ContainsKey(candidate))
+			{
+				continue;
+			}
+
+			Vector2 candidateGlobal = HexMath.HexToPixel(candidate, _map.HexSize);
+			float candidateDistance = candidateGlobal.DistanceTo(desiredGlobal);
+			if (candidateDistance < bestDistance)
+			{
+				bestDistance = candidateDistance;
+				bestHex = candidate;
+			}
+		}
+
+		return bestHex;
 	}
 
 	private void ApplyRadiationDamage()

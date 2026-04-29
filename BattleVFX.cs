@@ -242,6 +242,9 @@ public static class BattleVFX
 		rock.Position = pixelPos;
 		rock.Rotation = (float)rng.NextDouble() * Mathf.Pi;
 		
+		rock.SetMeta("is_asteroid", true);
+		rock.SetMeta("asteroid_hex_q", hexCoord.X);
+		rock.SetMeta("asteroid_hex_r", hexCoord.Y);
 		rock.SetMeta("spin_speed", (float)(rng.NextDouble() * 1.5 - 0.75));
 		
 		environmentLayer.AddChild(rock);

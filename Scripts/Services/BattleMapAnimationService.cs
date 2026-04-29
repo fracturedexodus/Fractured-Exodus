@@ -17,11 +17,15 @@ public class BattleMapAnimationService
 		}
 	}
 
-	public void AnimateEnvironment(Node2D environmentLayer, float delta)
+	public void AnimateEnvironment(Node2D environmentLayer, float delta, bool allowAsteroidDrift)
 	{
 		if (environmentLayer == null) return;
 
-		environmentLayer.Rotation -= 0.05f * delta;
+		if (allowAsteroidDrift)
+		{
+			environmentLayer.Rotation -= 0.05f * delta;
+		}
+
 		foreach (Node child in environmentLayer.GetChildren())
 		{
 			if (child is not Polygon2D rock) continue;

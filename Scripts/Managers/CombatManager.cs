@@ -14,6 +14,7 @@ public class CombatManager
 
 	private List<MapEntity> _initiativeQueue = new List<MapEntity>();
 	private int _currentQueueIndex = 0;
+	private bool _skipNextCombatAsteroidAdvance = false;
 
 	public CombatManager(BattleMap map)
 	{
@@ -66,6 +67,7 @@ public class CombatManager
 	public void StartCombat()
 	{
 		InCombat = true;
+		_skipNextCombatAsteroidAdvance = true;
 		_map.PlayCombatMusic();
 		if (_map.UI != null)
 		{
@@ -135,6 +137,7 @@ public class CombatManager
 	public void RestoreCombatState(int savedQueueIndex)
 	{
 		InCombat = true;
+		_skipNextCombatAsteroidAdvance = true;
 		_map.PlayCombatMusic();
 		if (_map.UI != null)
 		{
@@ -285,6 +288,19 @@ public class CombatManager
 			_currentQueueIndex = 0;
 			_map.CurrentTurn++;
 			_map.LogCombatMessage($"\n[color=gray]--- ROUND {_map.CurrentTurn} ---[/color]");
+		}
+
+		if (_skipNextCombatAsteroidAdvance)
+		{
+			_skipNextCombatAsteroidAdvance = false;
+		}
+		else
+		{
+			_map.Hazards?.AdvanceAsteroidsForCombatTurn();
+			if (!InCombat || _initiativeQueue.Count == 0 || !AreBothSidesAlive())
+			{
+				return;
+			}
 		}
 
 		ActiveShip = _initiativeQueue[_currentQueueIndex];
