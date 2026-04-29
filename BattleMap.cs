@@ -89,6 +89,7 @@ public partial class BattleMap : Node2D
 	private StrandedMenuPresenterService _strandedMenuPresenterService;
 	private FleetCommandService _fleetCommandService;
 	private HighlightPresenterService _highlightPresenterService;
+	private LongRangeScanService _longRangeScanService;
 
 	public override void _Ready()
 	{
@@ -98,6 +99,7 @@ public partial class BattleMap : Node2D
 		if (_globalData != null) _explorationActionService = new ExplorationActionService(_globalData);
 		if (_globalData != null) _distressSignalService = new DistressSignalService(_globalData);
 		if (_globalData != null) _jumpService = new JumpService(_globalData);
+		if (_globalData != null) _longRangeScanService = new LongRangeScanService(_globalData);
 		_explorationTurnService = new ExplorationTurnService();
 		_shipMenuPresenterService = new ShipMenuPresenterService();
 		_terminalMenuPresenterService = new TerminalMenuPresenterService();
@@ -725,8 +727,7 @@ public partial class BattleMap : Node2D
 				}
 				else if (targetEvent.ButtonIndex == MouseButton.Right)
 				{
-					IsTargetingLongRange = false; // Cancel scan
-					LogCombatMessage("[color=yellow]Long Range Scan Cancelled.[/color]");
+					ApplyLongRangeTargetingResult(_longRangeScanService?.CancelTargeting(), true);
 				}
 			}
 			return; 
@@ -801,34 +802,25 @@ public partial class BattleMap : Node2D
 	private void ExecuteLongRangeScan(Vector2I targetHex)
 	{
 		IsTargetingLongRange = false;
-		
-		if (_globalData == null || _globalData.FleetResources[GameConstants.ResourceKeys.EnergyCores].AsSingle() < 5f)
+		if (_longRangeScanService == null) return;
+
+		LongRangeScanExecutionResult result = _longRangeScanService.ExecuteScan(targetHex);
+		if (!result.Allowed)
 		{
-			LogCombatMessage("\n[color=red]*** SCAN FAILED: INSUFFICIENT ENERGY CORES (5.0 Req) ***[/color]");
+			if (!string.IsNullOrEmpty(result.FailureMessage))
+			{
+				if (UI != null) UI.CombatLogPanel.Visible = true;
+				LogCombatMessage($"\n[color=red]{result.FailureMessage}[/color]");
+			}
 			return;
 		}
 
-		_globalData.FleetResources[GameConstants.ResourceKeys.EnergyCores] = _globalData.FleetResources[GameConstants.ResourceKeys.EnergyCores].AsSingle() - 5f;
 		UpdateResourceUI();
-
-		SystemData sys = _globalData.ExploredSystems[_globalData.SavedSystem];
-		
-		for (int q = -10; q <= 10; q++)
-		{
-			int r1 = Mathf.Max(-10, -q - 10);
-			int r2 = Mathf.Min(10, -q + 10);
-			for (int r = r1; r <= r2; r++)
-			{
-				Vector2I h = new Vector2I(targetHex.X + q, targetHex.Y + r);
-				if (!sys.RadarRevealedHexes.Contains(h)) sys.RadarRevealedHexes.Add(h);
-			}
-		}
-
 		Fog.UpdateVisibility(); 
 		
 		UI.CombatLogPanel.Visible = true;
 		LogCombatMessage("\n[color=#00ffff]*** DEEP SPACE TELEMETRY UPDATED ***[/color]");
-		LogCombatMessage($"[color=yellow]-5.0 {GameConstants.ResourceKeys.EnergyCores}[/color]");
+		LogCombatMessage($"[color=yellow]-{result.EnergyCost:0.#} {GameConstants.ResourceKeys.EnergyCores}[/color]");
 
 		if (SfxPlayer != null)
 		{
@@ -841,10 +833,19 @@ public partial class BattleMap : Node2D
 
 	private void OnLongRangePressed()
 	{
-		if (IsFleetMoving) return;
-		IsTargetingLongRange = !IsTargetingLongRange;
+		ApplyLongRangeTargetingResult(_longRangeScanService?.ToggleTargeting(IsFleetMoving, IsTargetingLongRange), false);
+	}
+
+	private void ApplyLongRangeTargetingResult(LongRangeScanTargetingResult result, bool useInlineMessage)
+	{
+		if (result == null) return;
+
+		IsTargetingLongRange = result.IsTargeting;
+		if (string.IsNullOrEmpty(result.Message)) return;
+
 		if (UI != null) UI.CombatLogPanel.Visible = true;
-		if (IsTargetingLongRange) LogCombatMessage("\n[color=yellow]Awaiting Deep Scan Coordinates... (Left-Click to Scan, Right-Click to Cancel)[/color]");
+		string prefix = useInlineMessage ? string.Empty : "\n";
+		LogCombatMessage($"{prefix}[color=yellow]{result.Message}[/color]");
 	}
 
 	private void RefreshPlayerShipHotkeys()
