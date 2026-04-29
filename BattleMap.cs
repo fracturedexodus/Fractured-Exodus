@@ -91,6 +91,7 @@ public partial class BattleMap : Node2D
 	private HighlightPresenterService _highlightPresenterService;
 	private LongRangeScanService _longRangeScanService;
 	private BattleMapSaveSnapshotService _battleMapSaveSnapshotService;
+	private BattleActionButtonPresenterService _battleActionButtonPresenterService;
 
 	public override void _Ready()
 	{
@@ -108,6 +109,7 @@ public partial class BattleMap : Node2D
 		_fleetCommandService = new FleetCommandService();
 		_highlightPresenterService = new HighlightPresenterService();
 		_battleMapSaveSnapshotService = new BattleMapSaveSnapshotService();
+		_battleActionButtonPresenterService = new BattleActionButtonPresenterService();
 		if (_globalData != null && _globalData.CurrentTurn > 0) CurrentTurn = _globalData.CurrentTurn;
 		
 		Texture2D cursorTex = GD.Load<Texture2D>("res://Assets/UI/Cursor.png");
@@ -1041,35 +1043,22 @@ public partial class BattleMap : Node2D
 
 	private void UpdateJumpButton()
 	{
-		if (_jumpService == null) return;
+		if (_jumpService == null || _battleActionButtonPresenterService == null) return;
 
 		JumpButtonState state = _jumpService.BuildJumpButtonState(Combat.InCombat, SelectedHexes, HexContents);
-		UI.JumpButton.Text = state.ButtonText;
-		UI.JumpButton.Visible = state.IsVisible;
+		_battleActionButtonPresenterService.ApplyJumpButtonState(UI, state);
 	}
 
 	private void UpdateAttackButton()
 	{
-		if (SelectedHexes.Count == 1 && HexContents.ContainsKey(SelectedHexes[0]))
-		{
-			MapEntity singleShip = HexContents[SelectedHexes[0]];
-			if (singleShip.Type == GameConstants.EntityTypes.PlayerFleet && singleShip.CurrentActions > 0 && (!Combat.InCombat || singleShip == Combat.ActiveShip))
-			{
-				UI.AttackButton.Visible = true;
-			}
-			else
-			{
-				UI.AttackButton.Visible = false;
-				Combat.IsTargeting = false;
-				UI.AttackButton.Text = "ATTACK";
-			}
-		}
-		else
-		{
-			UI.AttackButton.Visible = false;
-			Combat.IsTargeting = false;
-			UI.AttackButton.Text = "ATTACK";
-		}
+		if (_battleActionButtonPresenterService == null) return;
+
+		AttackButtonState state = _battleActionButtonPresenterService.BuildAttackButtonState(
+			SelectedHexes,
+			HexContents,
+			Combat.InCombat,
+			Combat.ActiveShip);
+		_battleActionButtonPresenterService.ApplyAttackButtonState(UI, Combat, state);
 	}
 
 	internal void ToggleShipMenu(bool expand, MapEntity ship = null)
