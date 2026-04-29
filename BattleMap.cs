@@ -88,6 +88,7 @@ public partial class BattleMap : Node2D
 	private TerminalMenuPresenterService _terminalMenuPresenterService;
 	private StrandedMenuPresenterService _strandedMenuPresenterService;
 	private FleetCommandService _fleetCommandService;
+	private HighlightPresenterService _highlightPresenterService;
 
 	public override void _Ready()
 	{
@@ -102,6 +103,7 @@ public partial class BattleMap : Node2D
 		_terminalMenuPresenterService = new TerminalMenuPresenterService();
 		_strandedMenuPresenterService = new StrandedMenuPresenterService();
 		_fleetCommandService = new FleetCommandService();
+		_highlightPresenterService = new HighlightPresenterService();
 		if (_globalData != null && _globalData.CurrentTurn > 0) CurrentTurn = _globalData.CurrentTurn;
 		
 		Texture2D cursorTex = GD.Load<Texture2D>("res://Assets/UI/Cursor.png");
@@ -1575,33 +1577,24 @@ public partial class BattleMap : Node2D
 
 	internal void UpdateHighlights()
 	{
-		foreach (Node child in _highlightLayer.GetChildren()) child.QueueFree();
+		if (_highlightPresenterService == null) return;
 
-		foreach (Vector2I hex in SelectedHexes) CreateHighlightPolygon(hex, new Color(1f, 0.8f, 0f, 0.6f)); 
+		Vector2I? activeSelectionHex = null;
+		IEnumerable<Vector2I> reachableHexes = Array.Empty<Vector2I>();
 
 		if (Combat.InCombat && SelectedHexes.Count == 1 && Combat.ActiveShip != null && HexContents.ContainsKey(SelectedHexes[0]) && HexContents[SelectedHexes[0]] == Combat.ActiveShip)
 		{
-			Dictionary<Vector2I, int> reachable = GetReachableHexes(SelectedHexes[0], Combat.ActiveShip.CurrentActions);
-			foreach (Vector2I hex in reachable.Keys)
-			{
-				if (hex == SelectedHexes[0]) continue; 
-				CreateHighlightPolygon(hex, new Color(0f, 1f, 0.3f, 0.4f)); 
-			}
+			activeSelectionHex = SelectedHexes[0];
+			reachableHexes = GetReachableHexes(SelectedHexes[0], Combat.ActiveShip.CurrentActions).Keys;
 		}
-	}
 
-	private void CreateHighlightPolygon(Vector2I hexCoord, Color color)
-	{
-		Polygon2D poly = new Polygon2D();
-		Vector2[] points = new Vector2[6];
-		for (int i = 0; i < 6; i++)
-		{
-			float angle_deg = 60 * i - 30;
-			float angle_rad = Mathf.DegToRad(angle_deg);
-			points[i] = new Vector2(HexSize * Mathf.Cos(angle_rad), HexSize * Mathf.Sin(angle_rad));
-		}
-		poly.Polygon = points; poly.Color = color; poly.Position = HexMath.HexToPixel(hexCoord, HexSize);
-		_highlightLayer.AddChild(poly);
+		_highlightPresenterService.RenderHighlights(
+			_highlightLayer,
+			SelectedHexes,
+			Combat.InCombat,
+			activeSelectionHex,
+			reachableHexes,
+			HexSize);
 	}
 
 	internal void LogCombatMessage(string message) { if (UI != null && UI.CombatLogText != null) UI.CombatLogText.Text += message + "\n"; }
