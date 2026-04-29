@@ -93,6 +93,9 @@ public partial class BattleMap : Node2D
 	private BattleMapSaveSnapshotService _battleMapSaveSnapshotService;
 	private BattleActionButtonPresenterService _battleActionButtonPresenterService;
 	private HoverPresentationService _hoverPresentationService;
+	private BattleMapAnimationService _battleMapAnimationService;
+	private AudioPlaybackService _audioPlaybackService;
+	private MovementExecutionService _movementExecutionService;
 
 	public override void _Ready()
 	{
@@ -112,6 +115,9 @@ public partial class BattleMap : Node2D
 		_battleMapSaveSnapshotService = new BattleMapSaveSnapshotService();
 		_battleActionButtonPresenterService = new BattleActionButtonPresenterService();
 		_hoverPresentationService = new HoverPresentationService();
+		_battleMapAnimationService = new BattleMapAnimationService();
+		_audioPlaybackService = new AudioPlaybackService();
+		_movementExecutionService = new MovementExecutionService();
 		if (_globalData != null && _globalData.CurrentTurn > 0) CurrentTurn = _globalData.CurrentTurn;
 		
 		Texture2D cursorTex = GD.Load<Texture2D>("res://Assets/UI/Cursor.png");
@@ -442,11 +448,10 @@ public partial class BattleMap : Node2D
 			LogCombatMessage($"\n[color=green]--- TRANSACTION APPROVED ---[/color]");
 			LogCombatMessage($"Purchased: [color=yellow]{item.Name}[/color] (-{item.CostTech} Tech, -{item.CostRaw} Raw)");
 			
-			if (SfxPlayer != null)
-			{
-				AudioStream buySfx = GD.Load<AudioStream>("res://Sounds/laser.mp3"); 
-				if (buySfx != null) { SfxPlayer.Stream = buySfx; SfxPlayer.PitchScale = 1.2f; SfxPlayer.Play(); }
-			}
+		if (SfxPlayer != null)
+		{
+			_audioPlaybackService?.TryPlay(SfxPlayer, "res://Sounds/laser.mp3", 1.2f);
+		}
 
 			OpenShop(); 
 		}
@@ -573,8 +578,7 @@ public partial class BattleMap : Node2D
 		
 		if (SfxPlayer != null)
 		{
-			AudioStream equipSfx = GD.Load<AudioStream>("res://Sounds/laser.mp3"); 
-			if (equipSfx != null) { SfxPlayer.Stream = equipSfx; SfxPlayer.PitchScale = 0.8f; SfxPlayer.Play(); }
+			_audioPlaybackService?.TryPlay(SfxPlayer, "res://Sounds/laser.mp3", 0.8f);
 		}
 
 		if (UI != null) UI.CombatLogPanel.Visible = true;
@@ -687,8 +691,8 @@ public partial class BattleMap : Node2D
 	{ 
 		_bgmPlayer = new AudioStreamPlayer();
 		AddChild(_bgmPlayer);
-		AudioStream bgmStream = GD.Load<AudioStream>("res://Sounds/battle_theme.mp3");
-		if (bgmStream != null) { _bgmPlayer.Stream = bgmStream; _bgmPlayer.VolumeDb = -15.0f; _bgmPlayer.Play(); }
+		_bgmPlayer.VolumeDb = -15.0f;
+		_audioPlaybackService?.TryPlay(_bgmPlayer, "res://Sounds/battle_theme.mp3");
 
 		SfxPlayer = new AudioStreamPlayer();
 		AddChild(SfxPlayer);
@@ -697,14 +701,12 @@ public partial class BattleMap : Node2D
 		LaserPlayer = new AudioStreamPlayer();
 		AddChild(LaserPlayer);
 		LaserPlayer.VolumeDb = -3.0f;
-		AudioStream laserStream = GD.Load<AudioStream>("res://Sounds/laser.mp3"); 
-		if (laserStream != null) LaserPlayer.Stream = laserStream;
+		if (_audioPlaybackService != null) LaserPlayer.Stream = _audioPlaybackService.GetStream("res://Sounds/laser.mp3");
 
 		ExplosionPlayer = new AudioStreamPlayer();
 		AddChild(ExplosionPlayer);
 		ExplosionPlayer.VolumeDb = 0.0f; 
-		AudioStream boomStream = GD.Load<AudioStream>("res://Sounds/explosion.wav"); 
-		if (boomStream != null) ExplosionPlayer.Stream = boomStream;
+		if (_audioPlaybackService != null) ExplosionPlayer.Stream = _audioPlaybackService.GetStream("res://Sounds/explosion.wav");
 	}
 
 	private void SetupCamera() 
@@ -830,8 +832,7 @@ public partial class BattleMap : Node2D
 
 		if (SfxPlayer != null)
 		{
-			AudioStream scanSfx = GD.Load<AudioStream>("res://Sounds/laser.mp3"); 
-			if (scanSfx != null) { SfxPlayer.Stream = scanSfx; SfxPlayer.PitchScale = 0.4f; SfxPlayer.Play(); }
+			_audioPlaybackService?.TryPlay(SfxPlayer, "res://Sounds/laser.mp3", 0.4f);
 		}
 		
 		ToggleShipMenu(false);
@@ -963,29 +964,8 @@ public partial class BattleMap : Node2D
 		Vector2 globalMousePos = GetGlobalMousePosition();
 		_currentHoveredHex = HexMath.PixelToHex(globalMousePos, HexSize);
 		UpdateHoverPresentation();
-
-		foreach (Vector2I hex in SelectedHexes)
-		{
-			if (HexContents.ContainsKey(hex))
-			{
-				MapEntity selectedShip = HexContents[hex];
-				if (GodotObject.IsInstanceValid(selectedShip.VisualSprite))
-				{
-					float targetAngle = selectedShip.VisualSprite.GlobalPosition.AngleToPoint(globalMousePos) + selectedShip.BaseRotationOffset;
-					selectedShip.VisualSprite.Rotation = Mathf.LerpAngle(selectedShip.VisualSprite.Rotation, targetAngle, 0.15f);
-				}
-			}
-		}
-
-		EnvironmentLayer.Rotation -= 0.05f * (float)delta; 
-		foreach (Node child in EnvironmentLayer.GetChildren())
-		{
-			if (child is Polygon2D rock)
-			{
-				float spin = rock.GetMeta("spin_speed").AsSingle();
-				rock.Rotation += spin * (float)delta;
-			}
-		}
+		UpdateShipFacing(globalMousePos);
+		UpdateEnvironmentAnimation((float)delta);
 		
 		Hazards.ProcessHazards(delta);
 		UpdateJumpButton();
@@ -1004,6 +984,16 @@ public partial class BattleMap : Node2D
 			HexGrid,
 			HexContents);
 		_hoverPresentationService.ApplyState(_radarHighlight, _hoverHighlight, _hoverTooltip, state);
+	}
+
+	private void UpdateShipFacing(Vector2 mousePosition)
+	{
+		_battleMapAnimationService?.UpdateSelectedShipFacing(SelectedHexes, HexContents, mousePosition);
+	}
+
+	private void UpdateEnvironmentAnimation(float delta)
+	{
+		_battleMapAnimationService?.AnimateEnvironment(EnvironmentLayer, delta);
 	}
 
 	private void UpdateJumpButton()
@@ -1207,8 +1197,7 @@ public partial class BattleMap : Node2D
 		
 		if (SfxPlayer != null)
 		{
-			AudioStream repairSound = GD.Load<AudioStream>("res://Sounds/laser.mp3"); 
-			if (repairSound != null) { SfxPlayer.Stream = repairSound; SfxPlayer.PitchScale = 1.5f; SfxPlayer.Play(); }
+			_audioPlaybackService?.TryPlay(SfxPlayer, "res://Sounds/laser.mp3", 1.5f);
 		}
 		
 		ToggleShipMenu(true, CurrentlyViewedShip);
@@ -1322,8 +1311,7 @@ public partial class BattleMap : Node2D
 
 		if (SfxPlayer != null)
 		{
-			AudioStream jumpSound = GD.Load<AudioStream>("res://Sounds/laser.mp3"); 
-			if (jumpSound != null) { SfxPlayer.Stream = jumpSound; SfxPlayer.PitchScale = 0.5f; SfxPlayer.Play(); }
+			_audioPlaybackService?.TryPlay(SfxPlayer, "res://Sounds/laser.mp3", 0.5f);
 		}
 
 		warpTween.Chain().TweenCallback(Callable.From(() => 
@@ -1375,35 +1363,39 @@ public partial class BattleMap : Node2D
 
 	internal void MoveShip(Vector2I fromHex, Vector2I toHex, int cost)
 	{
-		MapEntity ship = HexContents[fromHex];
-		HexContents.Remove(fromHex);
-		HexContents[toHex] = ship;
-		ship.CurrentActions -= cost;
-		if (SelectedHexes.Count == 1 && SelectedHexes[0] == fromHex) ToggleShipMenu(true, ship);
-		
-		string sfxPath = Database.GetShipMovementSoundPath(ship.Name);
-		if (!string.IsNullOrEmpty(sfxPath) && SfxPlayer != null && ship.VisualSprite.Visible)
+		if (_movementExecutionService == null) return;
+
+		MoveExecutionResult result = _movementExecutionService.ExecuteMove(
+			HexContents,
+			SelectedHexes,
+			fromHex,
+			toHex,
+			cost,
+			HexSize,
+			Combat.InCombat,
+			_globalData);
+		if (!result.Allowed || result.Ship == null) return;
+
+		MapEntity ship = result.Ship;
+		if (result.ReopenShipMenu)
 		{
-			AudioStream sfx = GD.Load<AudioStream>(sfxPath);
-			if (sfx != null) { SfxPlayer.Stream = sfx; SfxPlayer.Play(); }
+			ToggleShipMenu(true, ship);
 		}
 
-		if (ship.Type == GameConstants.EntityTypes.PlayerFleet && _globalData != null && !Combat.InCombat)
+		if (SfxPlayer != null && ship.VisualSprite.Visible)
 		{
-			int distance = HexMath.HexDistance(fromHex, toHex);
-			float fuelCost = distance * 0.25f;
-			float currentFuel = _globalData.FleetResources[GameConstants.ResourceKeys.RawMaterials].AsSingle();
-			_globalData.FleetResources[GameConstants.ResourceKeys.RawMaterials] = Mathf.Max(0f, currentFuel - fuelCost);
-			UpdateResourceUI(); 
+			_audioPlaybackService?.TryPlay(SfxPlayer, result.SoundPath);
+		}
+
+		if (result.RefreshResourceUi)
+		{
+			UpdateResourceUI();
 		}
 
 		ActiveMovementTweens++;
 
 		Tween tween = CreateTween();
-		Vector2 targetPixelPos = HexMath.HexToPixel(toHex, HexSize);
-		float distancePixels = ship.VisualSprite.Position.DistanceTo(targetPixelPos);
-		float duration = Mathf.Max(0.3f, distancePixels / 500f); 
-		tween.TweenProperty(ship.VisualSprite, "position", targetPixelPos, duration).SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.InOut);
+		tween.TweenProperty(ship.VisualSprite, "position", result.TargetPixelPosition, result.Duration).SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.InOut);
 		
 		tween.TweenCallback(Callable.From(() => 
 		{
