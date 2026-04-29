@@ -90,6 +90,7 @@ public partial class BattleMap : Node2D
 	private FleetCommandService _fleetCommandService;
 	private HighlightPresenterService _highlightPresenterService;
 	private LongRangeScanService _longRangeScanService;
+	private BattleMapSaveSnapshotService _battleMapSaveSnapshotService;
 
 	public override void _Ready()
 	{
@@ -106,6 +107,7 @@ public partial class BattleMap : Node2D
 		_strandedMenuPresenterService = new StrandedMenuPresenterService();
 		_fleetCommandService = new FleetCommandService();
 		_highlightPresenterService = new HighlightPresenterService();
+		_battleMapSaveSnapshotService = new BattleMapSaveSnapshotService();
 		if (_globalData != null && _globalData.CurrentTurn > 0) CurrentTurn = _globalData.CurrentTurn;
 		
 		Texture2D cursorTex = GD.Load<Texture2D>("res://Assets/UI/Cursor.png");
@@ -1383,60 +1385,29 @@ public partial class BattleMap : Node2D
 
 	private void OnSaveGamePressed()
 	{
-		if (_globalData != null)
+		if (_globalData == null || _battleMapSaveSnapshotService == null) return;
+
+		_battleMapSaveSnapshotService.CaptureSnapshot(
+			_globalData,
+			CurrentTurn,
+			Combat.InCombat,
+			Combat.GetCurrentQueueIndex(),
+			AsteroidHexes,
+			RadiationHexes,
+			Fog != null ? Fog.GetExploredHexes() : Enumerable.Empty<Vector2I>(),
+			HexContents);
+
+		_globalData.SaveGame();
+
+		if (UI != null)
 		{
-			_globalData.CurrentTurn = CurrentTurn;
-			_globalData.InCombat = Combat.InCombat;
-			_globalData.CurrentQueueIndex = Combat.GetCurrentQueueIndex();
-
-			if (!string.IsNullOrEmpty(_globalData.SavedSystem) && _globalData.ExploredSystems.ContainsKey(_globalData.SavedSystem))
+			UI.SaveGameButton.Text = "GAME SAVED!";
+			UI.SaveGameButton.AddThemeColorOverride("font_color", new Color(0.3f, 1f, 0.3f));
+			GetTree().CreateTimer(2.0f).Timeout += () =>
 			{
-				SystemData currentSystem = _globalData.ExploredSystems[_globalData.SavedSystem];
-				currentSystem.AsteroidHexes = AsteroidHexes.ToList();
-				currentSystem.RadiationHexes = RadiationHexes.ToList();
-				if (Fog != null) currentSystem.ExploredHexes = Fog.GetExploredHexes().ToList();
-			}
-			
-			var playerState = new Godot.Collections.Array();
-			var enemyState = new Godot.Collections.Array(); 
-			
-			foreach (var kvp in HexContents)
-			{
-				if (kvp.Value.Type == GameConstants.EntityTypes.PlayerFleet || kvp.Value.Type == GameConstants.EntityTypes.EnemyFleet)
-				{
-					var shipDict = new Godot.Collections.Dictionary<string, Variant>();
-					shipDict["Name"] = kvp.Value.Name;
-					shipDict["Q"] = kvp.Key.X; shipDict["R"] = kvp.Key.Y; 
-					shipDict["CurrentHP"] = kvp.Value.CurrentHP; shipDict["MaxHP"] = kvp.Value.MaxHP;
-					shipDict["CurrentShields"] = kvp.Value.CurrentShields; shipDict["MaxShields"] = kvp.Value.MaxShields;
-					shipDict["MaxActions"] = kvp.Value.MaxActions;
-					shipDict["CurrentActions"] = kvp.Value.CurrentActions;
-					shipDict["CurrentInitiativeRoll"] = kvp.Value.CurrentInitiativeRoll; 
-					
-					if (kvp.Value.Type == GameConstants.EntityTypes.PlayerFleet) playerState.Add(shipDict);
-					if (kvp.Value.Type == GameConstants.EntityTypes.EnemyFleet) enemyState.Add(shipDict);
-				}
-			}
-			
-			_globalData.SavedFleetState = playerState;
-			
-			if (!string.IsNullOrEmpty(_globalData.SavedSystem) && _globalData.ExploredSystems.ContainsKey(_globalData.SavedSystem))
-			{
-				_globalData.ExploredSystems[_globalData.SavedSystem].EnemyFleets = enemyState;
-			}
-
-			if (_globalData.HasMethod("SaveGame")) _globalData.Call("SaveGame");
-
-			if (UI != null)
-			{
-				UI.SaveGameButton.Text = "GAME SAVED!";
-				UI.SaveGameButton.AddThemeColorOverride("font_color", new Color(0.3f, 1f, 0.3f)); 
-				GetTree().CreateTimer(2.0f).Timeout += () => 
-				{
-					UI.SaveGameButton.Text = "SAVE GAME";
-					UI.SaveGameButton.RemoveThemeColorOverride("font_color");
-				};
-			}
+				UI.SaveGameButton.Text = "SAVE GAME";
+				UI.SaveGameButton.RemoveThemeColorOverride("font_color");
+			};
 		}
 	}
 
