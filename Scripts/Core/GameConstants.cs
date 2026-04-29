@@ -16,6 +16,7 @@ public static class GameConstants
 		public const string Weapon = "Weapon";
 		public const string Shield = "Shield";
 		public const string Armor = "Armor";
+		public const string Missile = "Missile";
 	}
 
 	public static class ResourceKeys
@@ -30,6 +31,7 @@ public static class GameConstants
 		public const string Weapon = "WPN_";
 		public const string Shield = "SHLD_";
 		public const string Armor = "ARMR_";
+		public const string Missile = "MSL_";
 	}
 
 	public static class StandardEquipment

@@ -79,5 +79,41 @@
 	"CostTech": 4,
 	"CostRaw": 400,
 	"Description": "+300 Max Hull HP"
+  },
+  {
+	"ItemID": "MSL_HEATSEEKER",
+	"Name": "Heatseeker Missile",
+	"Category": "Missile",
+	"BonusStat": 0,
+	"CostTech": 1,
+	"CostRaw": 150,
+	"Description": "Range 5 missile. Standard explosive impact.",
+	"MissileDamage": 35,
+	"MissileRange": 5,
+	"MissileAbility": "Standard"
+  },
+  {
+	"ItemID": "MSL_ION",
+	"Name": "Ion Disruptor Missile",
+	"Category": "Missile",
+	"BonusStat": 0,
+	"CostTech": 2,
+	"CostRaw": 220,
+	"Description": "Range 5 missile. Heavy anti-shield payload.",
+	"MissileDamage": 45,
+	"MissileRange": 5,
+	"MissileAbility": "ShieldBreaker"
+  },
+  {
+	"ItemID": "MSL_BREACHER",
+	"Name": "Breacher Missile",
+	"Category": "Missile",
+	"BonusStat": 0,
+	"CostTech": 3,
+	"CostRaw": 280,
+	"Description": "Range 4 missile. Armor-penetrating warhead.",
+	"MissileDamage": 30,
+	"MissileRange": 4,
+	"MissileAbility": "ShieldPiercing"
   }
 ]

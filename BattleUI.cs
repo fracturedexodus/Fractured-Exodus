@@ -14,6 +14,7 @@ public partial class BattleUI : CanvasLayer
 	
 	[ExportGroup("Combat Controls")]
 	[Export] public Button AttackButton;
+	[Export] public Button MissileButton;
 	[Export] public Button JumpButton;
 	[Export] public HBoxContainer InitiativeUI;
 	
@@ -40,6 +41,7 @@ public partial class BattleUI : CanvasLayer
 	[Export] public Label WeaponNameLabel;
 	[Export] public Label HullNameLabel;
 	[Export] public Label ShieldNameLabel;
+	[Export] public Label MissileNameLabel;
 	[Export] public Button BtnRepair;
 	[Export] public Button BtnScan;
 	[Export] public Button BtnSalvage;

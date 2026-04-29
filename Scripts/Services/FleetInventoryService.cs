@@ -9,6 +9,14 @@ public class InventoryStack
 	public int Count { get; set; }
 }
 
+public class SellableInventoryEntry
+{
+	public string ItemID { get; set; }
+	public EquipmentData Item { get; set; }
+	public int Count { get; set; }
+	public int RawValue { get; set; }
+}
+
 public class InventoryReport
 {
 	public List<string> Lines { get; set; } = new List<string>();
@@ -19,6 +27,7 @@ public class FleetInventoryService
 	public const string DefaultWeaponName = "Mark I Laser";
 	public const string DefaultHullName = "Standard Hull";
 	public const string DefaultShieldName = "Standard Shields";
+	public const string DefaultMissileName = "None";
 
 	private readonly GlobalData _globalData;
 
@@ -137,6 +146,29 @@ public class FleetInventoryService
 		return item?.Name ?? DefaultHullName;
 	}
 
+	public string GetActiveMissileName(string shipName)
+	{
+		ShipLoadout loadout = GetLoadout(shipName);
+		if (loadout == null || string.IsNullOrEmpty(loadout.MissileID))
+		{
+			return DefaultMissileName;
+		}
+
+		EquipmentData item = GetEquipment(loadout.MissileID);
+		return item?.Name ?? DefaultMissileName;
+	}
+
+	public EquipmentData GetActiveMissile(string shipName)
+	{
+		ShipLoadout loadout = GetLoadout(shipName);
+		if (loadout == null || string.IsNullOrEmpty(loadout.MissileID))
+		{
+			return null;
+		}
+
+		return GetEquipment(loadout.MissileID);
+	}
+
 	public List<InventoryStack> GetGroupedInventory()
 	{
 		if (_globalData?.UnequippedInventory == null)
@@ -168,7 +200,21 @@ public class FleetInventoryService
 	public List<InventoryStack> GetGroupedSellableInventory()
 	{
 		return GetGroupedInventory()
-			.Where(stack => IsStandardIssueItem(stack.ItemID))
+			.Where(stack => IsStandardIssueItem(stack.ItemID) || stack.Item?.Category == GameConstants.EquipmentCategories.Missile)
+			.ToList();
+	}
+
+	public List<SellableInventoryEntry> GetSellableInventoryEntries(string outpostName)
+	{
+		int standardSaleValue = GetStandardIssueSaleValue(outpostName);
+		return GetGroupedSellableInventory()
+			.Select(stack => new SellableInventoryEntry
+			{
+				ItemID = stack.ItemID,
+				Item = stack.Item,
+				Count = stack.Count,
+				RawValue = GetSellValue(stack.Item, standardSaleValue)
+			})
 			.ToList();
 	}
 
@@ -193,12 +239,14 @@ public class FleetInventoryService
 		int weaponCount = _globalData.UnequippedInventory?.Count(id => id.StartsWith(GameConstants.ItemPrefixes.Weapon)) ?? 0;
 		int shieldCount = _globalData.UnequippedInventory?.Count(id => id.StartsWith(GameConstants.ItemPrefixes.Shield)) ?? 0;
 		int armorCount = _globalData.UnequippedInventory?.Count(id => id.StartsWith(GameConstants.ItemPrefixes.Armor)) ?? 0;
+		int missileCount = _globalData.UnequippedInventory?.Count(id => id.StartsWith(GameConstants.ItemPrefixes.Missile)) ?? 0;
 
 		report.Lines.Add(string.Empty);
 		report.Lines.Add("[color=cyan]--- UNEQUIPPED UPGRADES ---[/color]");
 		report.Lines.Add($"- Weapons: {weaponCount}");
 		report.Lines.Add($"- Shields: {shieldCount}");
 		report.Lines.Add($"- Armor: {armorCount}");
+		report.Lines.Add($"- Missiles: {missileCount}");
 
 		return report;
 	}
@@ -259,6 +307,20 @@ public class FleetInventoryService
 		return true;
 	}
 
+	public bool HasMissileEnergy()
+	{
+		if (_globalData?.FleetResources == null) return false;
+		return _globalData.FleetResources[GameConstants.ResourceKeys.EnergyCores].AsSingle() >= 1f;
+	}
+
+	public bool SpendMissileEnergy()
+	{
+		if (!HasMissileEnergy()) return false;
+		_globalData.FleetResources[GameConstants.ResourceKeys.EnergyCores] =
+			_globalData.FleetResources[GameConstants.ResourceKeys.EnergyCores].AsSingle() - 1f;
+		return true;
+	}
+
 	public bool EquipItem(string shipName, string itemID)
 	{
 		if (_globalData?.UnequippedInventory == null || !_globalData.UnequippedInventory.Contains(itemID))
@@ -288,6 +350,11 @@ public class FleetInventoryService
 		{
 			oldItemID = loadout.ArmorID;
 			loadout.ArmorID = itemID;
+		}
+		else if (itemToEquip.Category == GameConstants.EquipmentCategories.Missile)
+		{
+			oldItemID = loadout.MissileID;
+			loadout.MissileID = itemID;
 		}
 		else
 		{
@@ -364,6 +431,14 @@ public class FleetInventoryService
 		return itemID == GameConstants.StandardEquipment.WeaponId
 			|| itemID == GameConstants.StandardEquipment.ShieldId
 			|| itemID == GameConstants.StandardEquipment.ArmorId;
+	}
+
+	private static int GetSellValue(EquipmentData item, int standardSaleValue)
+	{
+		if (item == null) return 0;
+		if (IsStandardIssueItem(item.ItemID)) return standardSaleValue;
+		if (item.Category == GameConstants.EquipmentCategories.Missile) return Mathf.Max(50, Mathf.RoundToInt(item.CostRaw));
+		return 0;
 	}
 
 	private static string GetStandardIssueItemId(string category)

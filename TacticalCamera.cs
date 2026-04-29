@@ -119,8 +119,7 @@ public partial class TacticalCamera : Camera2D
 						if (HexMath.HexDistance(activeHex, hoveredHex) <= _map.Combat.ActiveShip.AttackRange)
 						{
 							_map.Combat.PerformAttack(activeHex, hoveredHex);
-							_map.Combat.IsTargeting = false;
-							_map.UI.AttackButton.Text = "ATTACK";
+							_map.ResetCombatTargetingUi();
 							_map.Combat.CheckForCombatTrigger();
 						}
 						else
@@ -129,6 +128,10 @@ public partial class TacticalCamera : Camera2D
 						}
 					}
 				}
+			}
+			else if (keyEvent.Keycode == Key.E)
+			{
+				_map.OnMissilePressed();
 			}
 		}
 
@@ -179,27 +182,9 @@ public partial class TacticalCamera : Camera2D
 							return;
 						}
 
-						if (_map.Combat.IsTargeting && _map.SelectedHexes.Count == 1)
+						if ((_map.Combat.IsTargeting || _map.Combat.IsTargetingMissile) && _map.SelectedHexes.Count == 1)
 						{
-							if (_map.HexContents.ContainsKey(clickedHex) && _map.HexContents[clickedHex].Type == GameConstants.EntityTypes.EnemyFleet)
-							{
-								int dist = HexMath.HexDistance(_map.SelectedHexes[0], clickedHex);
-								MapEntity attacker = _map.HexContents[_map.SelectedHexes[0]];
-								
-								if (dist <= attacker.AttackRange)
-								{
-									_map.Combat.PerformAttack(_map.SelectedHexes[0], clickedHex);
-									_map.Combat.IsTargeting = false;
-									_map.UI.AttackButton.Text = "ATTACK";
-									_map.Combat.CheckForCombatTrigger(); 
-								}
-								else GD.Print("Target out of range!");
-							}
-							else
-							{
-								_map.Combat.IsTargeting = false;
-								_map.UI.AttackButton.Text = "ATTACK";
-							}
+							_map.TryHandleTargetedCombatClick(clickedHex);
 							return; 
 						}
 
@@ -258,6 +243,12 @@ public partial class TacticalCamera : Camera2D
 
 				if (_map.Combat.InCombat)
 				{
+					if (_map.Combat.IsTargeting || _map.Combat.IsTargetingMissile)
+					{
+						_map.TryHandleTargetedCombatClick(clickedHex);
+						return;
+					}
+
 					if (_map.Combat.ActiveShip != null && _map.Combat.ActiveShip.Type == GameConstants.EntityTypes.PlayerFleet && _map.SelectedHexes.Count > 0)
 					{
 						Vector2I activeHex = _map.SelectedHexes[0];
@@ -267,8 +258,7 @@ public partial class TacticalCamera : Camera2D
 							if (_map.Combat.ActiveShip.CurrentActions > 0 && HexMath.HexDistance(activeHex, clickedHex) <= _map.Combat.ActiveShip.AttackRange)
 							{
 								_map.Combat.PerformAttack(activeHex, clickedHex);
-								_map.Combat.IsTargeting = false;
-								_map.UI.AttackButton.Text = "ATTACK";
+								_map.ResetCombatTargetingUi();
 								_map.Combat.CheckForCombatTrigger();
 							}
 							else GD.Print("Target out of range or action spent!");

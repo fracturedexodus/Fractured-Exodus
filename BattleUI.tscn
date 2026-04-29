@@ -2,7 +2,7 @@
 
 [ext_resource type="Script" uid="uid://bdo32du5ph0u2" path="res://BattleUI.cs" id="1_2uhrq"]
 
-[node name="BattleUI" type="CanvasLayer" unique_id=654862988 node_paths=PackedStringArray("TurnLabel", "InventoryDisplay", "EndTurnButton", "SaveGameButton", "RepairFleetButton", "InventoryButton", "MainMenuButton", "AttackButton", "JumpButton", "InitiativeUI", "InfoPanel", "InfoLabel", "CombatLogPanel", "CombatLogText", "GameOverPanel", "GameOverLabel", "GameOverReturnButton", "ShipMenuPanel", "ShipMenuTitle", "ShipImageDisplay", "HpBar", "HpLabel", "ShieldBar", "ShieldLabel", "ShipMenuDetails", "WeaponNameLabel", "HullNameLabel", "ShieldNameLabel", "BtnRepair", "BtnScan", "BtnSalvage", "BtnLongRange", "CodexButton", "CloseMenuButton")]
+[node name="BattleUI" type="CanvasLayer" unique_id=654862988 node_paths=PackedStringArray("TurnLabel", "InventoryDisplay", "EndTurnButton", "SaveGameButton", "RepairFleetButton", "InventoryButton", "MainMenuButton", "AttackButton", "MissileButton", "JumpButton", "InitiativeUI", "InfoPanel", "InfoLabel", "CombatLogPanel", "CombatLogText", "GameOverPanel", "GameOverLabel", "GameOverReturnButton", "ShipMenuPanel", "ShipMenuTitle", "ShipImageDisplay", "HpBar", "HpLabel", "ShieldBar", "ShieldLabel", "ShipMenuDetails", "WeaponNameLabel", "HullNameLabel", "ShieldNameLabel", "MissileNameLabel", "BtnRepair", "BtnScan", "BtnSalvage", "BtnLongRange", "CodexButton", "CloseMenuButton")]
 script = ExtResource("1_2uhrq")
 TurnLabel = NodePath("UIRoot/TopContainer/TurnLabel")
 InventoryDisplay = NodePath("UIRoot/TopContainer/InventoryDisplay")
@@ -12,6 +12,7 @@ RepairFleetButton = NodePath("UIRoot/TopRightButtons/RepairFleetButton")
 InventoryButton = NodePath("UIRoot/TopRightButtons/InventoryButton")
 MainMenuButton = NodePath("UIRoot/TopRightButtons/MainMenuButton")
 AttackButton = NodePath("UIRoot/AttackButton")
+MissileButton = NodePath("UIRoot/MissileButton")
 JumpButton = NodePath("UIRoot/JumpButton")
 InitiativeUI = NodePath("UIRoot/TopContainer/InitiativeUI")
 InfoPanel = NodePath("UIRoot/InfoPanel")
@@ -32,6 +33,7 @@ ShipMenuDetails = NodePath("UIRoot/ShipMenuPanel/TerminalLayout/ShipMenuDetails"
 WeaponNameLabel = NodePath("UIRoot/ShipMenuPanel/TerminalLayout/HBoxContainer/WeaponNameLabel")
 HullNameLabel = NodePath("UIRoot/ShipMenuPanel/TerminalLayout/HBoxContainer/HullNameLabel")
 ShieldNameLabel = NodePath("UIRoot/ShipMenuPanel/TerminalLayout/HBoxContainer/ShieldNameLabel")
+MissileNameLabel = NodePath("UIRoot/ShipMenuPanel/TerminalLayout/HBoxContainer/MissileNameLabel")
 BtnRepair = NodePath("UIRoot/ShipMenuPanel/TerminalLayout/HBoxContainer/BtnRepair")
 BtnScan = NodePath("UIRoot/ShipMenuPanel/TerminalLayout/HBoxContainer2/BtnScan")
 BtnSalvage = NodePath("UIRoot/ShipMenuPanel/TerminalLayout/HBoxContainer2/BtnSalvage")
@@ -193,8 +195,24 @@ grow_horizontal = 2
 grow_vertical = 0
 text = "ATTACK"
 
+[node name="MissileButton" type="Button" parent="UIRoot" unique_id=744923438]
+custom_minimum_size = Vector2(160, 50)
+layout_mode = 1
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -77.0
+offset_top = -160.0
+offset_right = 83.0
+offset_bottom = -110.0
+grow_horizontal = 2
+grow_vertical = 0
+text = "MISSILE"
+
 [node name="ShipMenuPanel" type="PanelContainer" parent="UIRoot" unique_id=161516367]
-custom_minimum_size = Vector2(380, 560)
+custom_minimum_size = Vector2(380, 600)
 layout_mode = 1
 anchors_preset = 6
 anchor_left = 1.0
@@ -202,8 +220,8 @@ anchor_top = 0.5
 anchor_right = 1.0
 anchor_bottom = 0.5
 offset_left = -380.0
-offset_top = -280.0
-offset_bottom = 280.0
+offset_top = -300.0
+offset_bottom = 300.0
 grow_horizontal = 0
 grow_vertical = 2
 
@@ -262,6 +280,13 @@ layout_mode = 2
 size_flags_horizontal = 3
 custom_minimum_size = Vector2(0, 38)
 text = "SHIELD: Standard Shields"
+vertical_alignment = 1
+
+[node name="MissileNameLabel" type="Label" parent="UIRoot/ShipMenuPanel/TerminalLayout/HBoxContainer" unique_id=704960037]
+layout_mode = 2
+size_flags_horizontal = 3
+custom_minimum_size = Vector2(0, 38)
+text = "MISSILE: None"
 vertical_alignment = 1
 
 [node name="BtnRepair" type="Button" parent="UIRoot/ShipMenuPanel/TerminalLayout/HBoxContainer" unique_id=1274823740]

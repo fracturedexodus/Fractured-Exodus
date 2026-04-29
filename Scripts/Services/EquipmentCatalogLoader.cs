@@ -59,7 +59,10 @@ public static class EquipmentCatalogLoader
 			BonusStat = itemDict.ContainsKey("BonusStat") ? (int)itemDict["BonusStat"] : 0,
 			CostTech = itemDict.ContainsKey("CostTech") ? itemDict["CostTech"].AsSingle() : 0f,
 			CostRaw = itemDict.ContainsKey("CostRaw") ? itemDict["CostRaw"].AsSingle() : 0f,
-			Description = itemDict.ContainsKey("Description") ? (string)itemDict["Description"] : string.Empty
+			Description = itemDict.ContainsKey("Description") ? (string)itemDict["Description"] : string.Empty,
+			MissileDamage = itemDict.ContainsKey("MissileDamage") ? (int)itemDict["MissileDamage"] : 0,
+			MissileRange = itemDict.ContainsKey("MissileRange") ? (int)itemDict["MissileRange"] : 0,
+			MissileAbility = itemDict.ContainsKey("MissileAbility") ? (string)itemDict["MissileAbility"] : string.Empty
 		};
 	}
 
@@ -182,6 +185,54 @@ public static class EquipmentCatalogLoader
 					CostTech = 4,
 					CostRaw = 500,
 					Description = "+300 Max Hull HP"
+				}
+			},
+			{
+				"MSL_HEATSEEKER",
+				new EquipmentData
+				{
+					ItemID = "MSL_HEATSEEKER",
+					Name = "Heatseeker Missile",
+					Category = GameConstants.EquipmentCategories.Missile,
+					BonusStat = 0,
+					CostTech = 1,
+					CostRaw = 150,
+					Description = "Range 5 missile. Standard explosive impact.",
+					MissileDamage = 35,
+					MissileRange = 5,
+					MissileAbility = "Standard"
+				}
+			},
+			{
+				"MSL_ION",
+				new EquipmentData
+				{
+					ItemID = "MSL_ION",
+					Name = "Ion Disruptor Missile",
+					Category = GameConstants.EquipmentCategories.Missile,
+					BonusStat = 0,
+					CostTech = 2,
+					CostRaw = 220,
+					Description = "Range 5 missile. Heavy anti-shield payload.",
+					MissileDamage = 45,
+					MissileRange = 5,
+					MissileAbility = "ShieldBreaker"
+				}
+			},
+			{
+				"MSL_BREACHER",
+				new EquipmentData
+				{
+					ItemID = "MSL_BREACHER",
+					Name = "Breacher Missile",
+					Category = GameConstants.EquipmentCategories.Missile,
+					BonusStat = 0,
+					CostTech = 3,
+					CostRaw = 280,
+					Description = "Range 4 missile. Armor-penetrating warhead.",
+					MissileDamage = 30,
+					MissileRange = 4,
+					MissileAbility = "ShieldPiercing"
 				}
 			}
 		};

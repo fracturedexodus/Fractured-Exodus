@@ -11,8 +11,7 @@ public class TerminalMenuPresenterService
 		Action<string> onBuy,
 		int ancientTechCount,
 		Action onSellAncientTech,
-		IEnumerable<InventoryStack> sellableInventory,
-		int standardSaleValue,
+		IEnumerable<SellableInventoryEntry> sellableInventory,
 		string outpostName,
 		Action<string, string, int> onSellInventory)
 	{
@@ -66,15 +65,15 @@ public class TerminalMenuPresenterService
 			hasSellables = true;
 		}
 
-		foreach (InventoryStack stack in sellableInventory)
+		foreach (SellableInventoryEntry stack in sellableInventory)
 		{
 			HBoxContainer row = new HBoxContainer();
 			row.AddChild(BuildRichInfo(
-				$"[b][color=yellow]{stack.Item.Name}[/color][/b] (x{stack.Count})\n{stack.Item.Description}\n[color=cyan]Sell Value: {standardSaleValue} {GameConstants.ResourceKeys.RawMaterials}[/color]",
+				$"[b][color=yellow]{stack.Item.Name}[/color][/b] (x{stack.Count})\n{stack.Item.Description}\n[color=cyan]Sell Value: {stack.RawValue} {GameConstants.ResourceKeys.RawMaterials}[/color]",
 				new Vector2(380, 75)));
 
 			Button sellButton = BuildActionButton("SELL 1");
-			sellButton.Pressed += () => onSellInventory(stack.ItemID, stack.Item.Name, standardSaleValue);
+			sellButton.Pressed += () => onSellInventory(stack.ItemID, stack.Item.Name, stack.RawValue);
 			row.AddChild(sellButton);
 			container.AddChild(row);
 			hasSellables = true;
@@ -82,7 +81,7 @@ public class TerminalMenuPresenterService
 
 		if (!hasSellables)
 		{
-			container.AddChild(new Label { Text = "No standard gear or Ancient Tech available to sell." });
+			container.AddChild(new Label { Text = "No sellable inventory or Ancient Tech available to sell." });
 		}
 	}
 
@@ -92,6 +91,7 @@ public class TerminalMenuPresenterService
 		string weaponName,
 		string shieldName,
 		string armorName,
+		string missileName,
 		IEnumerable<InventoryStack> inventoryStacks,
 		Action<string> onEquip)
 	{
@@ -102,7 +102,7 @@ public class TerminalMenuPresenterService
 		RichTextLabel currentLoadoutText = new RichTextLabel();
 		currentLoadoutText.BbcodeEnabled = true;
 		currentLoadoutText.FitContent = true;
-		currentLoadoutText.Text = $"[color=cyan]--- {shipName.ToUpper()}'s CURRENT LOADOUT ---[/color]\nWeapon: {weaponName}\nShield: {shieldName}\nArmor: {armorName}\n\n[color=yellow]--- CARGO HOLD (AVAILABLE INVENTORY) ---[/color]";
+		currentLoadoutText.Text = $"[color=cyan]--- {shipName.ToUpper()}'s CURRENT LOADOUT ---[/color]\nWeapon: {weaponName}\nShield: {shieldName}\nArmor: {armorName}\nMissile: {missileName}\n\n[color=yellow]--- CARGO HOLD (AVAILABLE INVENTORY) ---[/color]";
 		container.AddChild(currentLoadoutText);
 
 		bool hasInventory = false;

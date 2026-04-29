@@ -8,6 +8,14 @@ public class AttackButtonState
 	public string ButtonText { get; set; } = "ATTACK";
 }
 
+public class MissileButtonState
+{
+	public bool IsVisible { get; set; }
+	public bool ResetTargeting { get; set; }
+	public bool IsDisabled { get; set; }
+	public string ButtonText { get; set; } = "MISSILE";
+}
+
 public class BattleActionButtonPresenterService
 {
 	public AttackButtonState BuildAttackButtonState(
@@ -40,6 +48,42 @@ public class BattleActionButtonPresenterService
 		};
 	}
 
+	public MissileButtonState BuildMissileButtonState(
+		List<Vector2I> selectedHexes,
+		Dictionary<Vector2I, MapEntity> hexContents,
+		bool inCombat,
+		MapEntity activeShip,
+		bool hasMissileEquipped,
+		bool isTargetingMissile,
+		bool hasMissileEnergy)
+	{
+		if (selectedHexes.Count == 1 && hexContents.ContainsKey(selectedHexes[0]))
+		{
+			MapEntity singleShip = hexContents[selectedHexes[0]];
+			if (inCombat &&
+				hasMissileEquipped &&
+				singleShip.Type == GameConstants.EntityTypes.PlayerFleet &&
+				singleShip.CurrentActions > 0 &&
+				singleShip == activeShip)
+			{
+				return new MissileButtonState
+				{
+					IsVisible = true,
+					ResetTargeting = false,
+					IsDisabled = !hasMissileEnergy,
+					ButtonText = isTargetingMissile ? "CANCEL MISSILE" : "MISSILE"
+				};
+			}
+		}
+
+		return new MissileButtonState
+		{
+			IsVisible = false,
+			ResetTargeting = true,
+			ButtonText = "MISSILE"
+		};
+	}
+
 	public void ApplyJumpButtonState(BattleUI ui, JumpButtonState state)
 	{
 		if (ui?.JumpButton == null || state == null) return;
@@ -57,6 +101,20 @@ public class BattleActionButtonPresenterService
 		if (state.ResetTargeting && combat != null)
 		{
 			combat.IsTargeting = false;
+		}
+	}
+
+	public void ApplyMissileButtonState(BattleUI ui, CombatManager combat, MissileButtonState state)
+	{
+		if (ui?.MissileButton == null || state == null) return;
+
+		ui.MissileButton.Visible = state.IsVisible;
+		ui.MissileButton.Disabled = state.IsDisabled;
+		ui.MissileButton.Text = state.ButtonText;
+
+		if (state.ResetTargeting && combat != null)
+		{
+			combat.IsTargetingMissile = false;
 		}
 	}
 }

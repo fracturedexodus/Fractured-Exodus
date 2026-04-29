@@ -14,9 +14,10 @@ public class ShipMenuPresenterService
 		if (ui.WeaponNameLabel != null) ui.WeaponNameLabel.Visible = false;
 		if (ui.HullNameLabel != null) ui.HullNameLabel.Visible = false;
 		if (ui.ShieldNameLabel != null) ui.ShieldNameLabel.Visible = false;
+		if (ui.MissileNameLabel != null) ui.MissileNameLabel.Visible = false;
 	}
 
-	public void ApplyMenuState(BattleUI ui, MapEntity ship, ShipMenuState menuState, string weaponName, string hullName, string shieldName)
+	public void ApplyMenuState(BattleUI ui, MapEntity ship, ShipMenuState menuState, string weaponName, string hullName, string shieldName, string missileName)
 	{
 		if (ui == null || ship == null || menuState == null) return;
 
@@ -43,9 +44,11 @@ public class ShipMenuPresenterService
 		ui.WeaponNameLabel.Text = $"WEAPON: {weaponName}";
 		ui.HullNameLabel.Text = $"HULL: {hullName}";
 		ui.ShieldNameLabel.Text = $"SHIELD: {shieldName}";
+		ui.MissileNameLabel.Text = $"MISSILE: {missileName}";
 		ui.WeaponNameLabel.Visible = true;
 		ui.HullNameLabel.Visible = true;
 		ui.ShieldNameLabel.Visible = true;
+		ui.MissileNameLabel.Visible = true;
 
 		ui.BtnRepair.Visible = menuState.IsPlayerShip;
 		ui.BtnRepair.Disabled = !menuState.CanRepair;

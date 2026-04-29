@@ -68,11 +68,14 @@ public class EquipmentData
 {
 	public string ItemID { get; set; }
 	public string Name { get; set; }
-	public string Category { get; set; } // "Weapon", "Shield", or "Armor"
+	public string Category { get; set; } // "Weapon", "Shield", "Armor", or "Missile"
 	public int BonusStat { get; set; } // The amount of extra Dmg, HP, or Shields it gives
 	public float CostTech { get; set; }
 	public float CostRaw { get; set; }
 	public string Description { get; set; }
+	public int MissileDamage { get; set; } = 0;
+	public int MissileRange { get; set; } = 0;
+	public string MissileAbility { get; set; } = string.Empty;
 }
 
 public class ShipLoadout
@@ -80,6 +83,7 @@ public class ShipLoadout
 	public string WeaponID { get; set; } = "";
 	public string ShieldID { get; set; } = "";
 	public string ArmorID { get; set; } = "";
+	public string MissileID { get; set; } = "";
 }
 
 // ==========================================

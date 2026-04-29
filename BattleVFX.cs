@@ -26,6 +26,57 @@ public static class BattleVFX
 		}));
 	}
 
+	public static void DrawMissileStrike(Node2D parentLayer, Vector2 startPos, Vector2 endPos, string attackerType)
+	{
+		if (!IsNodeAlive(parentLayer)) return;
+
+		Node2D missileRoot = new Node2D();
+		missileRoot.Position = startPos;
+		parentLayer.AddChild(missileRoot);
+
+		Line2D contrail = new Line2D();
+		contrail.Width = 3.0f;
+		contrail.DefaultColor = new Color(1f, 0.7f, 0.2f, 0.85f);
+		contrail.AddPoint(Vector2.Zero);
+		contrail.AddPoint(new Vector2(-24f, 0f));
+		missileRoot.AddChild(contrail);
+
+		Polygon2D missileBody = new Polygon2D();
+		missileBody.Polygon = new[]
+		{
+			new Vector2(16f, 0f),
+			new Vector2(-8f, -6f),
+			new Vector2(-14f, 0f),
+			new Vector2(-8f, 6f)
+		};
+		missileBody.Color = attackerType == GameConstants.EntityTypes.PlayerFleet
+			? new Color(1f, 0.85f, 0.25f, 1f)
+			: new Color(1f, 0.45f, 0.2f, 1f);
+		missileRoot.AddChild(missileBody);
+
+		Polygon2D engineFlare = new Polygon2D();
+		engineFlare.Polygon = new[]
+		{
+			new Vector2(-14f, 0f),
+			new Vector2(-26f, -4f),
+			new Vector2(-32f, 0f),
+			new Vector2(-26f, 4f)
+		};
+		engineFlare.Color = new Color(1f, 0.95f, 0.6f, 0.9f);
+		missileRoot.AddChild(engineFlare);
+
+		Vector2 travel = endPos - startPos;
+		missileRoot.Rotation = travel.Angle();
+
+		Tween tween = missileRoot.CreateTween();
+		tween.TweenProperty(missileRoot, "position", endPos, 0.45f).SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.In);
+		tween.Parallel().TweenProperty(engineFlare, "modulate:a", 0.35f, 0.45f).SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.InOut);
+		tween.TweenCallback(Callable.From(() =>
+		{
+			if (GodotObject.IsInstanceValid(missileRoot)) missileRoot.QueueFree();
+		}));
+	}
+
 	public static void DrawExplosion(Node2D parentLayer, Vector2 pos, float hexSize)
 	{
 		if (!IsNodeAlive(parentLayer)) return;

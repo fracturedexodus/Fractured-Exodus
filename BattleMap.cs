@@ -352,6 +352,7 @@ public partial class BattleMap : Node2D
 		UI.MainMenuButton.Pressed += OnMainMenuPressed;
 		UI.JumpButton.Pressed += OnJumpPressed;
 		UI.AttackButton.Pressed += OnAttackPressed;
+		if (UI.MissileButton != null) UI.MissileButton.Pressed += OnMissilePressed;
 		UI.GameOverReturnButton.Pressed += OnMainMenuPressed;
 		UI.BtnRepair.Pressed += OnRepairPressed;
 		UI.BtnScan.Pressed += OnScanPressed;
@@ -417,7 +418,6 @@ public partial class BattleMap : Node2D
 	{
 		if (_inventoryService == null || _terminalMenuPresenterService == null) return;
 		string outpostName = GetCurrentTradeOutpostName();
-		int standardSaleValue = _inventoryService.GetStandardIssueSaleValue(outpostName);
 		_terminalMenuPresenterService.PopulateShopMenu(
 			_shopItemList,
 			_inventoryService.GetShopItems(),
@@ -425,8 +425,7 @@ public partial class BattleMap : Node2D
 			BuyItem,
 			_inventoryService.GetAncientTechUnitCount(),
 			SellAncientTech,
-			_inventoryService.GetGroupedSellableInventory(),
-			standardSaleValue,
+			_inventoryService.GetSellableInventoryEntries(outpostName),
 			outpostName,
 			SellInventoryItem);
 
@@ -546,12 +545,14 @@ public partial class BattleMap : Node2D
 		string wpn = _inventoryService.GetEquippedItemName(loadout.WeaponID);
 		string shld = _inventoryService.GetEquippedItemName(loadout.ShieldID);
 		string armr = _inventoryService.GetEquippedItemName(loadout.ArmorID);
+		string missile = _inventoryService.GetActiveMissileName(shipName);
 		_terminalMenuPresenterService.PopulateEquipMenu(
 			_equipItemList,
 			shipName,
 			wpn,
 			shld,
 			armr,
+			missile,
 			_inventoryService.GetGroupedEquippableInventory(),
 			itemId => EquipItem(shipName, itemId));
 		
@@ -972,6 +973,7 @@ public partial class BattleMap : Node2D
 		Hazards.ProcessHazards(delta);
 		UpdateJumpButton();
 		UpdateAttackButton();
+		UpdateMissileButton();
 	}
 
 	private void UpdateHoverPresentation()
@@ -1018,6 +1020,29 @@ public partial class BattleMap : Node2D
 		_battleActionButtonPresenterService.ApplyAttackButtonState(UI, Combat, state);
 	}
 
+	private void UpdateMissileButton()
+	{
+		if (_battleActionButtonPresenterService == null || UI?.MissileButton == null) return;
+
+		bool hasMissileEquipped = false;
+		bool hasMissileEnergy = _inventoryService?.HasMissileEnergy() ?? false;
+		if (SelectedHexes.Count == 1 && HexContents.ContainsKey(SelectedHexes[0]))
+		{
+			MapEntity ship = HexContents[SelectedHexes[0]];
+			hasMissileEquipped = _inventoryService?.GetActiveMissile(ship.Name) != null;
+		}
+
+		MissileButtonState state = _battleActionButtonPresenterService.BuildMissileButtonState(
+			SelectedHexes,
+			HexContents,
+			Combat.InCombat,
+			Combat.ActiveShip,
+			hasMissileEquipped,
+			Combat.IsTargetingMissile,
+			hasMissileEnergy);
+		_battleActionButtonPresenterService.ApplyMissileButtonState(UI, Combat, state);
+	}
+
 	internal void ToggleShipMenu(bool expand, MapEntity ship = null)
 	{
 		if (UI == null) return;
@@ -1039,7 +1064,8 @@ public partial class BattleMap : Node2D
 			string weaponName = _inventoryService?.GetActiveWeaponName(ship.Name) ?? FleetInventoryService.DefaultWeaponName;
 			string hullName = _inventoryService?.GetActiveHullName(ship.Name) ?? FleetInventoryService.DefaultHullName;
 			string shieldName = _inventoryService?.GetActiveShieldName(ship.Name) ?? FleetInventoryService.DefaultShieldName;
-			_shipMenuPresenterService?.ApplyMenuState(UI, ship, menuState, weaponName, hullName, shieldName);
+			string missileName = _inventoryService?.GetActiveMissileName(ship.Name) ?? FleetInventoryService.DefaultMissileName;
+			_shipMenuPresenterService?.ApplyMenuState(UI, ship, menuState, weaponName, hullName, shieldName, missileName);
 
 			if (menuState.ShowEquip && _btnEquip != null)
 			{
@@ -1261,6 +1287,7 @@ public partial class BattleMap : Node2D
 		{
 			UI.JumpButton.Visible = false;
 			UI.AttackButton.Visible = false;
+			if (UI.MissileButton != null) UI.MissileButton.Visible = false;
 			UI.InfoPanel.Visible = false;
 		}
 		ToggleShipMenu(false);
@@ -1528,8 +1555,111 @@ public partial class BattleMap : Node2D
 	private void OnAttackPressed()
 	{
 		if (IsFleetMoving) return; 
+		Combat.IsTargetingMissile = false;
+		if (UI?.MissileButton != null) UI.MissileButton.Text = "MISSILE";
 		Combat.IsTargeting = !Combat.IsTargeting;
 		if (UI != null) UI.AttackButton.Text = Combat.IsTargeting ? "CANCEL TARGET" : "ATTACK";
+	}
+
+	internal void OnMissilePressed()
+	{
+		if (IsFleetMoving || !Combat.InCombat || UI?.MissileButton == null) return;
+		if (SelectedHexes.Count != 1 || !HexContents.ContainsKey(SelectedHexes[0])) return;
+		MapEntity ship = HexContents[SelectedHexes[0]];
+		if (_inventoryService?.GetActiveMissile(ship.Name) == null) return;
+		if (!(_inventoryService?.HasMissileEnergy() ?? false)) return;
+
+		Combat.IsTargeting = false;
+		if (UI.AttackButton != null) UI.AttackButton.Text = "ATTACK";
+		Combat.IsTargetingMissile = !Combat.IsTargetingMissile;
+		UI.MissileButton.Text = Combat.IsTargetingMissile ? "CANCEL MISSILE" : "MISSILE";
+	}
+
+	internal void ResetCombatTargetingUi()
+	{
+		Combat.IsTargeting = false;
+		Combat.IsTargetingMissile = false;
+		if (UI?.AttackButton != null) UI.AttackButton.Text = "ATTACK";
+		if (UI?.MissileButton != null) UI.MissileButton.Text = "MISSILE";
+	}
+
+	internal bool TryHandleTargetedCombatClick(Vector2I clickedHex)
+	{
+		if (!Combat.InCombat || SelectedHexes.Count != 1 || !HexContents.ContainsKey(SelectedHexes[0])) return false;
+
+		if (Combat.IsTargetingMissile)
+		{
+			MapEntity attacker = HexContents[SelectedHexes[0]];
+			EquipmentData missile = _inventoryService?.GetActiveMissile(attacker.Name);
+			if (_inventoryService == null || missile == null)
+			{
+				ResetCombatTargetingUi();
+				return true;
+			}
+			if (!_inventoryService.SpendMissileEnergy())
+			{
+				if (UI != null) UI.CombatLogPanel.Visible = true;
+				LogCombatMessage($"\n[color=red]*** MISSILE LAUNCH FAILED: INSUFFICIENT {GameConstants.ResourceKeys.EnergyCores.ToUpper()} (1.0 Req) ***[/color]");
+				ResetCombatTargetingUi();
+				UpdateResourceUI();
+				return true;
+			}
+
+			if (HexContents.ContainsKey(clickedHex) && HexContents[clickedHex].Type == GameConstants.EntityTypes.EnemyFleet)
+			{
+				int dist = HexMath.HexDistance(SelectedHexes[0], clickedHex);
+				if (dist <= missile.MissileRange)
+				{
+					Combat.PerformMissileAttack(SelectedHexes[0], clickedHex);
+					ResetCombatTargetingUi();
+					UpdateResourceUI();
+					Combat.CheckForCombatTrigger();
+				}
+				else
+				{
+					_globalData.FleetResources[GameConstants.ResourceKeys.EnergyCores] =
+						_globalData.FleetResources[GameConstants.ResourceKeys.EnergyCores].AsSingle() + 1f;
+					UpdateResourceUI();
+					GD.Print("Missile target out of range!");
+				}
+			}
+			else
+			{
+				_globalData.FleetResources[GameConstants.ResourceKeys.EnergyCores] =
+					_globalData.FleetResources[GameConstants.ResourceKeys.EnergyCores].AsSingle() + 1f;
+				UpdateResourceUI();
+				ResetCombatTargetingUi();
+			}
+
+			return true;
+		}
+
+		if (Combat.IsTargeting)
+		{
+			if (HexContents.ContainsKey(clickedHex) && HexContents[clickedHex].Type == GameConstants.EntityTypes.EnemyFleet)
+			{
+				int dist = HexMath.HexDistance(SelectedHexes[0], clickedHex);
+				MapEntity attacker = HexContents[SelectedHexes[0]];
+				if (dist <= attacker.AttackRange)
+				{
+					Combat.PerformAttack(SelectedHexes[0], clickedHex);
+					ResetCombatTargetingUi();
+					Combat.CheckForCombatTrigger();
+				}
+				else
+				{
+					GD.Print("Target out of range!");
+				}
+			}
+			else
+			{
+				ResetCombatTargetingUi();
+			}
+
+			return true;
+		}
+
+		return false;
 	}
 
 	private Vector2I FindNearestEmptyHex(Vector2I target)

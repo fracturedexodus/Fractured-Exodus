@@ -85,6 +85,7 @@ public class FleetLoadoutSaveData
 	public string WeaponID { get; set; } = string.Empty;
 	public string ShieldID { get; set; } = string.Empty;
 	public string ArmorID { get; set; } = string.Empty;
+	public string MissileID { get; set; } = string.Empty;
 
 	public static FleetLoadoutSaveData FromRuntime(ShipLoadout loadout)
 	{
@@ -92,7 +93,8 @@ public class FleetLoadoutSaveData
 		{
 			WeaponID = loadout?.WeaponID ?? string.Empty,
 			ShieldID = loadout?.ShieldID ?? string.Empty,
-			ArmorID = loadout?.ArmorID ?? string.Empty
+			ArmorID = loadout?.ArmorID ?? string.Empty,
+			MissileID = loadout?.MissileID ?? string.Empty
 		};
 	}
 
@@ -102,7 +104,8 @@ public class FleetLoadoutSaveData
 		{
 			WeaponID = WeaponID,
 			ShieldID = ShieldID,
-			ArmorID = ArmorID
+			ArmorID = ArmorID,
+			MissileID = MissileID
 		};
 	}
 
@@ -112,7 +115,8 @@ public class FleetLoadoutSaveData
 		{
 			WeaponID = dict.ContainsKey("WeaponID") ? (string)dict["WeaponID"] : string.Empty,
 			ShieldID = dict.ContainsKey("ShieldID") ? (string)dict["ShieldID"] : string.Empty,
-			ArmorID = dict.ContainsKey("ArmorID") ? (string)dict["ArmorID"] : string.Empty
+			ArmorID = dict.ContainsKey("ArmorID") ? (string)dict["ArmorID"] : string.Empty,
+			MissileID = dict.ContainsKey("MissileID") ? (string)dict["MissileID"] : string.Empty
 		};
 	}
 
@@ -122,7 +126,8 @@ public class FleetLoadoutSaveData
 		{
 			{ "WeaponID", WeaponID },
 			{ "ShieldID", ShieldID },
-			{ "ArmorID", ArmorID }
+			{ "ArmorID", ArmorID },
+			{ "MissileID", MissileID }
 		};
 	}
 }

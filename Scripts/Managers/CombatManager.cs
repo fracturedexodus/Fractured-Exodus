@@ -9,6 +9,7 @@ public class CombatManager
 
 	public bool InCombat { get; private set; } = false;
 	public bool IsTargeting { get; set; } = false;
+	public bool IsTargetingMissile { get; set; } = false;
 	public MapEntity ActiveShip { get; private set; } = null;
 
 	private List<MapEntity> _initiativeQueue = new List<MapEntity>();
@@ -268,6 +269,8 @@ public class CombatManager
 	{
 		_initiativeQueue.RemoveAll(s => s.IsDead);
 		_map.SelectedHexes.Clear();
+		IsTargeting = false;
+		IsTargetingMissile = false;
 
 		if (_initiativeQueue.Count == 0 || !AreBothSidesAlive())
 		{
@@ -312,6 +315,8 @@ public class CombatManager
 	public void EndActiveTurn()
 	{
 		if (!InCombat) return;
+		IsTargeting = false;
+		IsTargetingMissile = false;
 		_map.SelectedHexes.Clear();
 		_map.ToggleShipMenu(false); 
 		_map.UpdateHighlights();
@@ -334,6 +339,8 @@ public class CombatManager
 	public void EndCombat()
 	{
 		InCombat = false;
+		IsTargeting = false;
+		IsTargetingMissile = false;
 		ActiveShip = null;
 		
 		if (_map.UI != null)
@@ -504,6 +511,120 @@ public class CombatManager
 			if (InCombat) UpdateInitiativeUI();
 			if (InCombat && !AreBothSidesAlive()) EndCombat(); 
 			
+			_map.SelectedHexes.Remove(defenderHex);
+		}
+	}
+
+	public EquipmentData GetEquippedMissile(MapEntity attacker)
+	{
+		if (_map?._globalData == null || attacker == null || string.IsNullOrEmpty(attacker.Name)) return null;
+		if (!_map._globalData.FleetLoadouts.ContainsKey(attacker.Name)) return null;
+
+		ShipLoadout loadout = _map._globalData.FleetLoadouts[attacker.Name];
+		if (string.IsNullOrEmpty(loadout.MissileID) || !_map._globalData.MasterEquipmentDB.ContainsKey(loadout.MissileID))
+		{
+			return null;
+		}
+
+		return _map._globalData.MasterEquipmentDB[loadout.MissileID];
+	}
+
+	public void PerformMissileAttack(Vector2I attackerHex, Vector2I defenderHex)
+	{
+		if (!CanUseBattleScene()) return;
+		if (!_map.HexContents.ContainsKey(attackerHex) || !_map.HexContents.ContainsKey(defenderHex)) return;
+
+		MapEntity attacker = _map.HexContents[attackerHex];
+		MapEntity defender = _map.HexContents[defenderHex];
+		EquipmentData missile = GetEquippedMissile(attacker);
+		if (missile == null || missile.Category != GameConstants.EquipmentCategories.Missile) return;
+		if (HexMath.HexDistance(attackerHex, defenderHex) > missile.MissileRange) return;
+
+		attacker.CurrentActions--;
+
+		BattleVFX.DrawMissileStrike(_map.EntityLayer, HexMath.HexToPixel(attackerHex, _map.HexSize), HexMath.HexToPixel(defenderHex, _map.HexSize), attacker.Type);
+		if (_map.LaserPlayer.Stream != null) _map.LaserPlayer.Play();
+
+		int damageRolled = missile.MissileDamage;
+		int shieldDmg = 0;
+		int hullDmg = 0;
+		string attackerColor = attacker.Type == GameConstants.EntityTypes.PlayerFleet ? "#44ff44" : "#ff4444";
+
+		if (missile.MissileAbility == "ShieldPiercing")
+		{
+			hullDmg = damageRolled;
+			defender.CurrentHP -= hullDmg;
+		}
+		else if (missile.MissileAbility == "ShieldBreaker")
+		{
+			int boostedShieldDamage = damageRolled + 20;
+			if (defender.CurrentShields > 0)
+			{
+				shieldDmg = Mathf.Min(defender.CurrentShields, boostedShieldDamage);
+				defender.CurrentShields -= shieldDmg;
+			}
+
+			if (defender.CurrentShields <= 0)
+			{
+				hullDmg = Mathf.Max(0, damageRolled - Mathf.Max(0, shieldDmg - 20));
+				defender.CurrentHP -= hullDmg;
+			}
+		}
+		else
+		{
+			int damageRemaining = damageRolled;
+			if (defender.CurrentShields > 0)
+			{
+				if (defender.CurrentShields >= damageRemaining)
+				{
+					shieldDmg = damageRemaining;
+					defender.CurrentShields -= damageRemaining;
+					damageRemaining = 0;
+				}
+				else
+				{
+					shieldDmg = defender.CurrentShields;
+					damageRemaining -= defender.CurrentShields;
+					defender.CurrentShields = 0;
+				}
+			}
+
+			hullDmg = damageRemaining;
+			defender.CurrentHP -= hullDmg;
+		}
+
+		string logMsg = $"[color={attackerColor}]{attacker.Name}[/color] launches [color=orange]{missile.Name}[/color] at {defender.Name}!\n";
+		logMsg += $"-> Missile payload detonates for [color=yellow]{damageRolled} DMG[/color]!";
+		if (shieldDmg > 0) logMsg += $" ([color=#00ffff]Shields -{shieldDmg}[/color])";
+		if (hullDmg > 0) logMsg += $" ([color=#ff4444]Hull -{hullDmg}[/color])";
+		if (missile.MissileAbility == "ShieldPiercing") logMsg += " [color=orange](Shield-Piercing)[/color]";
+		if (missile.MissileAbility == "ShieldBreaker") logMsg += " [color=orange](Shield Breaker)[/color]";
+		_map.LogCombatMessage(logMsg);
+
+		bool hitShields = shieldDmg > 0 && hullDmg == 0;
+		SpawnAttackEffect(defenderHex, hitShields);
+
+		if (_map.SelectedHexes.Count == 1 && _map.SelectedHexes[0] == attackerHex) _map.ToggleShipMenu(true, attacker);
+
+		if (defender.CurrentHP <= 0)
+		{
+			_map.LogCombatMessage($"[color=red]*** {defender.Name.ToUpper()} DESTROYED ***[/color]\n");
+
+			if (defender.Type == GameConstants.EntityTypes.EnemyFleet)
+			{
+				_map.AwardEnemyKillSalvage(defender.Name);
+			}
+
+			if (_map.ExplosionPlayer.Stream != null) _map.ExplosionPlayer.Play();
+			BattleVFX.DrawExplosion(_map.EntityLayer, HexMath.HexToPixel(defenderHex, _map.HexSize), _map.HexSize);
+
+			defender.IsDead = true;
+			if (GodotObject.IsInstanceValid(defender.VisualSprite)) defender.VisualSprite.QueueFree();
+			_map.HexContents.Remove(defenderHex);
+
+			if (InCombat) UpdateInitiativeUI();
+			if (InCombat && !AreBothSidesAlive()) EndCombat();
+
 			_map.SelectedHexes.Remove(defenderHex);
 		}
 	}
