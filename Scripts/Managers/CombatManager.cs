@@ -345,7 +345,7 @@ public class CombatManager
 		
 		if (_map.UI != null)
 		{
-			_map.UI.CombatLogPanel.Visible = false; 
+			_map.UI.CombatLogPanel.Visible = true; 
 			_map.UI.EndTurnButton.Visible = false; 
 			_map.UI.RepairFleetButton.Visible = true; 
 			_map.UI.InventoryButton.Visible = true;

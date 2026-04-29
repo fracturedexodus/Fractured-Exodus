@@ -134,15 +134,19 @@ layout_mode = 2
 text = "END TURN"
 
 [node name="CombatLogPanel" type="PanelContainer" parent="UIRoot" unique_id=266343479]
+visible = true
 custom_minimum_size = Vector2(350, 250)
 layout_mode = 1
-anchors_preset = 4
-anchor_top = 0.5
-anchor_bottom = 0.5
-offset_top = -125.0
-offset_right = 350.0
-offset_bottom = 125.0
-grow_vertical = 2
+anchors_preset = 3
+anchor_left = 0.0
+anchor_right = 0.0
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 20.0
+offset_top = -280.0
+offset_right = 370.0
+offset_bottom = -20.0
+grow_vertical = 0
 
 [node name="CombatLogText" type="RichTextLabel" parent="UIRoot/CombatLogPanel" unique_id=830800881]
 custom_minimum_size = Vector2(320, 220)
@@ -151,16 +155,14 @@ bbcode_enabled = true
 scroll_following = true
 
 [node name="InfoPanel" type="PanelContainer" parent="UIRoot" unique_id=483008472]
+visible = false
 layout_mode = 1
-anchors_preset = 2
-anchor_top = 1.0
-anchor_bottom = 1.0
-offset_top = -40.0
-offset_right = 40.0
-grow_vertical = 0
+anchors_preset = 0
+offset_right = 330.0
+offset_bottom = 160.0
 
 [node name="InfoLabel" type="Label" parent="UIRoot/InfoPanel" unique_id=1395127949]
-custom_minimum_size = Vector2(250, 0)
+custom_minimum_size = Vector2(300, 130)
 layout_mode = 2
 autowrap_mode = 2
 

@@ -19,7 +19,6 @@ public class HoverPresentationService
 		bool isTargetingLongRange,
 		Vector2I hoveredHex,
 		float hexSize,
-		float viewportScale,
 		Dictionary<Vector2I, Node2D> hexGrid,
 		Dictionary<Vector2I, MapEntity> hexContents)
 	{
@@ -66,7 +65,9 @@ public class HoverPresentationService
 			: new Color(0f, 1f, 0f, 0.4f);
 		state.TooltipVisible = true;
 		state.TooltipText = $"=== {hoveredEntity.Name.ToUpper()} ===\nHP: {hoveredEntity.CurrentHP} / {hoveredEntity.MaxHP}\nShields: {hoveredEntity.CurrentShields} / {hoveredEntity.MaxShields}\nAttack: {hoveredEntity.AttackDamage} DMG\nRange: {hoveredEntity.AttackRange} Hexes";
-		state.TooltipPosition = state.HoverPosition + new Vector2((hexSize * viewportScale) + 15, -60);
+
+		Vector2 spriteScreenPosition = hoveredEntity.VisualSprite.GetGlobalTransformWithCanvas().Origin;
+		state.TooltipPosition = spriteScreenPosition + new Vector2((hexSize * 0.9f) + 18f, -72f);
 		return state;
 	}
 

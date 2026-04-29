@@ -96,6 +96,11 @@ public partial class BattleMap : Node2D
 	private BattleMapAnimationService _battleMapAnimationService;
 	private AudioPlaybackService _audioPlaybackService;
 	private MovementExecutionService _movementExecutionService;
+	private OfficerPanelPresenterService _officerPanelPresenterService;
+	private PanelContainer _officerMenuPanel;
+	private Label _officerMenuTitle;
+	private TextureRect _officerPortraitDisplay;
+	private Label _officerDetailsLabel;
 
 	public override void _Ready()
 	{
@@ -118,6 +123,7 @@ public partial class BattleMap : Node2D
 		_battleMapAnimationService = new BattleMapAnimationService();
 		_audioPlaybackService = new AudioPlaybackService();
 		_movementExecutionService = new MovementExecutionService();
+		_officerPanelPresenterService = new OfficerPanelPresenterService();
 		if (_globalData != null && _globalData.CurrentTurn > 0) CurrentTurn = _globalData.CurrentTurn;
 		
 		Texture2D cursorTex = GD.Load<Texture2D>("res://Assets/UI/Cursor.png");
@@ -190,6 +196,7 @@ public partial class BattleMap : Node2D
 		BuildStrandedMenu(); 
 		BuildShopUI(); 
 		BuildEquipUI(); // --- NEW: BUILD THE EQUIP UI ---
+		BuildOfficerPanel();
 		
 		_btnTrade = new Button();
 		_btnTrade.Text = "ACCESS OUTPOST EXCHANGE"; 
@@ -301,7 +308,11 @@ public partial class BattleMap : Node2D
 			UI.InventoryButton.Visible = !Combat.InCombat;
 			UI.GameOverPanel.Visible = false;
 			UI.InfoPanel.Visible = false;
-			UI.CombatLogPanel.Visible = false;
+			UI.CombatLogPanel.Visible = true;
+			if (UI.CombatLogText != null && string.IsNullOrWhiteSpace(UI.CombatLogText.Text))
+			{
+				UI.CombatLogText.Text = "[color=gray]--- ACTION LOG READY ---[/color]\n";
+			}
 			UI.AttackButton.Visible = false;
 			UI.JumpButton.Visible = false;
 			UI.ShipMenuPanel.Position = new Vector2(GetCollapsedShipMenuX(), UI.ShipMenuPanel.Position.Y);
@@ -967,6 +978,7 @@ public partial class BattleMap : Node2D
 		Vector2 globalMousePos = GetGlobalMousePosition();
 		_currentHoveredHex = HexMath.PixelToHex(globalMousePos, HexSize);
 		UpdateHoverPresentation();
+		UpdateHoverInfoPanel();
 		UpdateShipFacing(globalMousePos);
 		UpdateEnvironmentAnimation((float)delta);
 		
@@ -984,10 +996,58 @@ public partial class BattleMap : Node2D
 			IsTargetingLongRange,
 			_currentHoveredHex,
 			HexSize,
-			GetViewportTransform().Scale.X,
 			HexGrid,
 			HexContents);
 		_hoverPresentationService.ApplyState(_radarHighlight, _hoverHighlight, _hoverTooltip, state);
+	}
+
+	private void UpdateHoverInfoPanel()
+	{
+		if (UI?.InfoPanel == null || UI.InfoLabel == null)
+		{
+			return;
+		}
+
+		if (!HexContents.ContainsKey(_currentHoveredHex))
+		{
+			UI.InfoPanel.Visible = false;
+			return;
+		}
+
+		MapEntity entity = HexContents[_currentHoveredHex];
+		if (entity == null)
+		{
+			UI.InfoPanel.Visible = false;
+			return;
+		}
+
+		if (entity.Type == GameConstants.EntityTypes.EnemyFleet &&
+			(!GodotObject.IsInstanceValid(entity.VisualSprite) || !entity.VisualSprite.Visible))
+		{
+			UI.InfoPanel.Visible = false;
+			return;
+		}
+
+		string dynamicStats = string.Empty;
+		if (entity.Type == GameConstants.EntityTypes.PlayerFleet || entity.Type == GameConstants.EntityTypes.EnemyFleet)
+		{
+			string initText = Combat.InCombat ? $" | INIT: {entity.CurrentInitiativeRoll}" : string.Empty;
+			dynamicStats = $"HP: {entity.CurrentHP}/{entity.MaxHP} | SHIELD: {entity.CurrentShields}/{entity.MaxShields}\n" +
+						   $"ACTIONS: {entity.CurrentActions}/{entity.MaxActions}{initText}\n" +
+						   $"RANGE: {entity.AttackRange} | DMG: 0-{entity.AttackDamage}\n";
+		}
+
+		UI.InfoLabel.Text = $"[ {entity.Name.ToUpper()} ]\nType: {entity.Type}\n{dynamicStats}Data: {entity.Details}";
+		if (GodotObject.IsInstanceValid(entity.VisualSprite))
+		{
+			Vector2 spriteScreenPosition = entity.VisualSprite.GetGlobalTransformWithCanvas().Origin;
+			UI.InfoPanel.AnchorLeft = 0f;
+			UI.InfoPanel.AnchorRight = 0f;
+			UI.InfoPanel.AnchorTop = 0f;
+			UI.InfoPanel.AnchorBottom = 0f;
+			UI.InfoPanel.Position = spriteScreenPosition + new Vector2((HexSize * 0.9f) + 18f, -72f);
+		}
+		UI.InfoPanel.Visible = true;
 	}
 
 	private void UpdateShipFacing(Vector2 mousePosition)
@@ -1049,6 +1109,7 @@ public partial class BattleMap : Node2D
 		Tween tween = CreateTween();
 		float targetX = expand ? GetExpandedShipMenuX() : GetCollapsedShipMenuX();
 		tween.TweenProperty(UI.ShipMenuPanel, "position:x", targetX, 0.3f).SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.Out);
+		ToggleOfficerPanel(expand, ship);
 		
 		_shipMenuPresenterService?.ResetMenu(UI);
 		
@@ -1090,6 +1151,83 @@ public partial class BattleMap : Node2D
 	{
 		if (UI?.ShipMenuPanel == null) return GetViewportRect().Size.X + 24f;
 		return GetViewportRect().Size.X + 24f;
+	}
+
+	private void BuildOfficerPanel()
+	{
+		if (UI == null) return;
+
+		Control uiRoot = UI.GetNodeOrNull<Control>("UIRoot");
+		if (uiRoot == null) return;
+
+		_officerMenuPanel = new PanelContainer
+		{
+			CustomMinimumSize = new Vector2(360, 560),
+			Visible = true
+		};
+		_officerMenuPanel.AnchorTop = 0.22f;
+		_officerMenuPanel.AnchorBottom = 0.22f;
+		_officerMenuPanel.OffsetTop = -280f;
+		_officerMenuPanel.OffsetBottom = 280f;
+		_officerMenuPanel.Position = new Vector2(GetCollapsedOfficerPanelX(), 0f);
+		uiRoot.AddChild(_officerMenuPanel);
+
+		VBoxContainer layout = new VBoxContainer();
+		layout.AddThemeConstantOverride("separation", 8);
+		_officerMenuPanel.AddChild(layout);
+
+		_officerMenuTitle = new Label
+		{
+			HorizontalAlignment = HorizontalAlignment.Center
+		};
+		layout.AddChild(_officerMenuTitle);
+
+		_officerPortraitDisplay = new TextureRect
+		{
+			CustomMinimumSize = new Vector2(150, 220),
+			ExpandMode = TextureRect.ExpandModeEnum.FitWidthProportional,
+			StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered
+		};
+		layout.AddChild(_officerPortraitDisplay);
+
+		_officerDetailsLabel = new Label
+		{
+			AutowrapMode = TextServer.AutowrapMode.WordSmart,
+			SizeFlagsVertical = Control.SizeFlags.ExpandFill
+		};
+		layout.AddChild(_officerDetailsLabel);
+	}
+
+	private void ToggleOfficerPanel(bool expand, MapEntity ship = null)
+	{
+		if (_officerMenuPanel == null || _officerPanelPresenterService == null) return;
+
+		_officerPanelPresenterService.Reset(_officerMenuTitle, _officerPortraitDisplay, _officerDetailsLabel);
+		float targetX = GetCollapsedOfficerPanelX();
+
+		if (expand && ship != null)
+		{
+			bool hasOfficer = _officerPanelPresenterService.Apply(_globalData, ship, _officerMenuTitle, _officerPortraitDisplay, _officerDetailsLabel);
+			if (hasOfficer)
+			{
+				targetX = GetExpandedOfficerPanelX();
+			}
+		}
+
+		Tween tween = CreateTween();
+		tween.TweenProperty(_officerMenuPanel, "position:x", targetX, 0.3f).SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.Out);
+	}
+
+	private float GetExpandedOfficerPanelX()
+	{
+		return 0f;
+	}
+
+	private float GetCollapsedOfficerPanelX()
+	{
+		if (_officerMenuPanel == null) return -384f;
+		float panelWidth = _officerMenuPanel.Size.X > 0f ? _officerMenuPanel.Size.X : _officerMenuPanel.CustomMinimumSize.X;
+		return -panelWidth - 24f;
 	}
 
 	private void OnScanPressed()
