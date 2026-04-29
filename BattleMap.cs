@@ -79,6 +79,7 @@ public partial class BattleMap : Node2D
 	private CenterContainer _equipMenuWrapper;
 	private VBoxContainer _equipItemList;
 	private FleetInventoryService _inventoryService;
+	private OfficerService _officerService;
 	private ShipContextService _shipContextService;
 	private ExplorationActionService _explorationActionService;
 	private ExplorationTurnService _explorationTurnService;
@@ -108,6 +109,7 @@ public partial class BattleMap : Node2D
 	{
 		_globalData = GetNodeOrNull<GlobalData>("/root/GlobalData");
 		if (_globalData != null) _inventoryService = new FleetInventoryService(_globalData);
+		if (_globalData != null) _officerService = new OfficerService(_globalData);
 		if (_globalData != null) _shipContextService = new ShipContextService(_globalData);
 		if (_globalData != null) _explorationActionService = new ExplorationActionService(_globalData);
 		if (_globalData != null) _distressSignalService = new DistressSignalService(_globalData);
@@ -454,11 +456,18 @@ public partial class BattleMap : Node2D
 		if (_inventoryService.BuyItem(itemID))
 		{
 			UpdateResourceUI();
-			OnSaveGamePressed(); // Auto-save after a purchase
 			
 			if (UI != null) UI.CombatLogPanel.Visible = true;
 			LogCombatMessage($"\n[color=green]--- TRANSACTION APPROVED ---[/color]");
 			LogCombatMessage($"Purchased: [color=yellow]{item.Name}[/color] (-{item.CostTech} Tech, -{item.CostRaw} Raw)");
+			ApplyOfficerApprovalEvent(
+				OfficerApprovalEventType.PurchaseEquipment,
+				new OfficerApprovalContext
+				{
+					ItemName = item.Name,
+					ItemCategory = item.Category
+				});
+			OnSaveGamePressed(); // Auto-save after a purchase
 			
 		if (SfxPlayer != null)
 		{
@@ -474,11 +483,12 @@ public partial class BattleMap : Node2D
 		if (_inventoryService == null || !_inventoryService.SellAncientTech()) return;
 
 		UpdateResourceUI();
-		OnSaveGamePressed();
 
 		if (UI != null) UI.CombatLogPanel.Visible = true;
 		LogCombatMessage($"\n[color=green]--- EXCHANGE COMPLETED ---[/color]");
 		LogCombatMessage($"Sold 1 [color=yellow]{GameConstants.ResourceKeys.AncientTech}[/color] for [color=cyan]{GameConstants.StandardEquipment.AncientTechSaleRaw} {GameConstants.ResourceKeys.RawMaterials}[/color].");
+		ApplyOfficerApprovalEvent(OfficerApprovalEventType.SellAncientTech);
+		OnSaveGamePressed();
 
 		OpenShop();
 	}
@@ -587,8 +597,6 @@ public partial class BattleMap : Node2D
 		{
 			_inventoryService.ApplyLoadoutStats(CurrentlyViewedShip);
 		}
-
-		OnSaveGamePressed(); // Save state
 		
 		if (SfxPlayer != null)
 		{
@@ -598,6 +606,15 @@ public partial class BattleMap : Node2D
 		if (UI != null) UI.CombatLogPanel.Visible = true;
 		LogCombatMessage($"\n[color=green]--- LOADOUT UPDATED ---[/color]");
 		LogCombatMessage($"{shipName} equipped [color=yellow]{itemToEquip.Name}[/color].");
+		ApplyOfficerApprovalEvent(
+			OfficerApprovalEventType.EquipItem,
+			new OfficerApprovalContext
+			{
+				ActingShipName = shipName,
+				ItemName = itemToEquip.Name,
+				ItemCategory = itemToEquip.Category
+			});
+		OnSaveGamePressed(); // Save state
 
 		OpenEquipMenu(); // Refresh the UI to reflect the swap
 	}
@@ -635,6 +652,7 @@ public partial class BattleMap : Node2D
 		
 		LogCombatMessage("\n[color=yellow]--- BROADCASTING WIDE-BAND DISTRESS SIGNAL ---[/color]");
 		LogCombatMessage("Awaiting response...");
+		ApplyOfficerApprovalEvent(OfficerApprovalEventType.DistressSignalBroadcast);
 		
 		GetTree().CreateTimer(1.5f).Timeout += () => 
 		{
@@ -645,12 +663,14 @@ public partial class BattleMap : Node2D
 				
 				LogCombatMessage($"[color=green]SIGNAL RECEIVED![/color] A passing smuggler vessel dropped emergency supplies.");
 				LogCombatMessage($"[color=cyan]+{result.FuelSalvaged} Raw Materials Acquired.[/color]");
+				ApplyOfficerApprovalEvent(OfficerApprovalEventType.DistressSignalRescue);
 				_isWaitingForDistressSignal = false;
 			}
 			else if (result.TriggerAmbush)
 			{
 				LogCombatMessage($"[color=red]WARNING: SLIPSPACE SIGNATURES DETECTED![/color]");
 				LogCombatMessage($"[color=red]Hostile forces intercepted the signal. Prepare for combat![/color]");
+				ApplyOfficerApprovalEvent(OfficerApprovalEventType.DistressSignalAmbush);
 				
 				_distressSignalAmbush = true; 
 				_isWaitingForDistressSignal = false;
@@ -1242,6 +1262,39 @@ public partial class BattleMap : Node2D
 		return -panelWidth - 24f;
 	}
 
+	private void ApplyOfficerApprovalEvent(OfficerApprovalEventType eventType, OfficerApprovalContext context = null)
+	{
+		if (_officerService == null || UI == null)
+		{
+			return;
+		}
+
+		List<OfficerApprovalChange> changes = _officerService.ApplyApprovalEvent(eventType, context);
+		if (changes.Count == 0)
+		{
+			return;
+		}
+
+		UI.CombatLogPanel.Visible = true;
+		foreach (OfficerApprovalChange change in changes)
+		{
+			string color = change.Delta > 0 ? "#7CFF6B" : "#FF8A8A";
+			string disposition = change.Delta > 0 ? "approves of" : "disapproves of";
+			LogCombatMessage($"[color={color}]{change.Officer.DisplayName} {disposition} {change.Reason} ({(change.Delta > 0 ? "+" : string.Empty)}{change.Delta})[/color]");
+
+			if (!string.IsNullOrEmpty(change.QueuedDowntimeEventId))
+			{
+				LogCombatMessage($"[color=orange]{change.Officer.DisplayName} now has something important to discuss.[/color]");
+			}
+		}
+
+		bool shipMenuExpanded = UI.ShipMenuPanel != null && UI.ShipMenuPanel.Position.X > GetCollapsedShipMenuX() + 1f;
+		if (shipMenuExpanded && CurrentlyViewedShip != null)
+		{
+			ToggleShipMenu(true, CurrentlyViewedShip);
+		}
+	}
+
 	private void OnScanPressed()
 	{
 		if (IsFleetMoving) return; 
@@ -1270,6 +1323,12 @@ public partial class BattleMap : Node2D
 		{
 			UI.CombatLogPanel.Visible = true;
 			LogCombatMessage($"\n[color=yellow]*** INCOMING TRANSMISSION FROM SURFACE ***[/color]");
+			ApplyOfficerApprovalEvent(
+				OfficerApprovalEventType.ScanPlanet,
+				new OfficerApprovalContext
+				{
+					ActingShipName = CurrentlyViewedShip.Name
+				});
 			ConversationUI.StartConversation(result.ConversationId);
 			ToggleShipMenu(true, CurrentlyViewedShip);
 			return;
@@ -1281,6 +1340,12 @@ public partial class BattleMap : Node2D
 		LogCombatMessage($"Size Class: {result.SizeClass}");
 		LogCombatMessage($"Projected Salvage Operation: {result.ProjectedSalvageTurns} Turns");
 		LogCombatMessage($"Caution: extended operations carry risk of hostile detection.");
+		ApplyOfficerApprovalEvent(
+			OfficerApprovalEventType.ScanPlanet,
+			new OfficerApprovalContext
+			{
+				ActingShipName = CurrentlyViewedShip.Name
+			});
 
 		ToggleShipMenu(true, CurrentlyViewedShip); 
 	}
@@ -1317,6 +1382,12 @@ public partial class BattleMap : Node2D
 		UI.CombatLogPanel.Visible = true;
 		LogCombatMessage($"\n[color=yellow]--- SALVAGE OPERATION COMMENCED (-{result.RawCost:0.#} Raw Materials) ---[/color]");
 		UpdateResourceUI();
+		ApplyOfficerApprovalEvent(
+			OfficerApprovalEventType.SalvagePlanet,
+			new OfficerApprovalContext
+			{
+				ActingShipName = CurrentlyViewedShip.Name
+			});
 
 		if (result.Ambushed)
 		{
@@ -1377,6 +1448,15 @@ public partial class BattleMap : Node2D
 		{
 			_audioPlaybackService?.TryPlay(SfxPlayer, "res://Sounds/laser.mp3", 1.5f);
 		}
+
+		UI.CombatLogPanel.Visible = true;
+		LogCombatMessage($"\n[color=cyan]--- FIELD REPAIRS COMPLETED (+{result.HealedHull} Hull, +{result.HealedShields} Shields) ---[/color]");
+		ApplyOfficerApprovalEvent(
+			OfficerApprovalEventType.RepairShip,
+			new OfficerApprovalContext
+			{
+				ActingShipName = CurrentlyViewedShip?.Name ?? string.Empty
+			});
 		
 		ToggleShipMenu(true, CurrentlyViewedShip);
 	}
@@ -1391,6 +1471,7 @@ public partial class BattleMap : Node2D
 
 		UI.CombatLogPanel.Visible = true;
 		LogCombatMessage($"\n[color=cyan]--- REPAIRING FLEET (Estimated {result.TurnsNeeded} Turns) ---[/color]");
+		ApplyOfficerApprovalEvent(OfficerApprovalEventType.RepairFleet);
 
 		if (result.Ambushed)
 		{
