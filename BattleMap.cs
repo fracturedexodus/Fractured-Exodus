@@ -92,6 +92,7 @@ public partial class BattleMap : Node2D
 	private LongRangeScanService _longRangeScanService;
 	private BattleMapSaveSnapshotService _battleMapSaveSnapshotService;
 	private BattleActionButtonPresenterService _battleActionButtonPresenterService;
+	private HoverPresentationService _hoverPresentationService;
 
 	public override void _Ready()
 	{
@@ -110,6 +111,7 @@ public partial class BattleMap : Node2D
 		_highlightPresenterService = new HighlightPresenterService();
 		_battleMapSaveSnapshotService = new BattleMapSaveSnapshotService();
 		_battleActionButtonPresenterService = new BattleActionButtonPresenterService();
+		_hoverPresentationService = new HoverPresentationService();
 		if (_globalData != null && _globalData.CurrentTurn > 0) CurrentTurn = _globalData.CurrentTurn;
 		
 		Texture2D cursorTex = GD.Load<Texture2D>("res://Assets/UI/Cursor.png");
@@ -960,58 +962,7 @@ public partial class BattleMap : Node2D
 
 		Vector2 globalMousePos = GetGlobalMousePosition();
 		_currentHoveredHex = HexMath.PixelToHex(globalMousePos, HexSize);
-		
-		if (IsTargetingLongRange)
-		{
-			_radarHighlight.Visible = true;
-			_radarHighlight.Position = HexMath.HexToPixel(_currentHoveredHex, HexSize);
-			_hoverHighlight.Visible = false;
-		}
-		else
-		{
-			_radarHighlight.Visible = false;
-			if (HexGrid.ContainsKey(_currentHoveredHex))
-			{
-				_hoverHighlight.Visible = true;
-				_hoverHighlight.Position = HexMath.HexToPixel(_currentHoveredHex, HexSize);
-
-				if (HexContents.ContainsKey(_currentHoveredHex))
-				{
-					MapEntity hoveredEntity = HexContents[_currentHoveredHex];
-					bool isEnemy = hoveredEntity.Type == GameConstants.EntityTypes.EnemyFleet;
-					bool isPlayer = hoveredEntity.Type == GameConstants.EntityTypes.PlayerFleet;
-
-					if ((isEnemy || isPlayer) && GodotObject.IsInstanceValid(hoveredEntity.VisualSprite) && hoveredEntity.VisualSprite.Visible)
-					{
-						if (isEnemy) _hoverHighlight.Color = new Color(1f, 0f, 0f, 0.4f); 
-						else _hoverHighlight.Color = new Color(0f, 1f, 0f, 0.4f); 
-						
-						_hoverTooltip.Text = $"=== {hoveredEntity.Name.ToUpper()} ===\nHP: {hoveredEntity.CurrentHP} / {hoveredEntity.MaxHP}\nShields: {hoveredEntity.CurrentShields} / {hoveredEntity.MaxShields}\nAttack: {hoveredEntity.AttackDamage} DMG\nRange: {hoveredEntity.AttackRange} Hexes";
-						
-						Vector2 screenPos = _hoverHighlight.GetGlobalTransformWithCanvas().Origin;
-						float currentZoom = GetViewportTransform().Scale.X;
-						
-						_hoverTooltip.Position = screenPos + new Vector2((HexSize * currentZoom) + 15, -60);
-						_hoverTooltip.Visible = true;
-					}
-					else
-					{
-						_hoverHighlight.Color = new Color(0f, 1f, 1f, 0.4f); 
-						_hoverTooltip.Visible = false;
-					}
-				}
-				else
-				{
-					_hoverHighlight.Color = new Color(0f, 1f, 1f, 0.4f); 
-					_hoverTooltip.Visible = false;
-				}
-			}
-			else
-			{
-				_hoverHighlight.Visible = false;
-				_hoverTooltip.Visible = false; 
-			}
-		}
+		UpdateHoverPresentation();
 
 		foreach (Vector2I hex in SelectedHexes)
 		{
@@ -1039,6 +990,20 @@ public partial class BattleMap : Node2D
 		Hazards.ProcessHazards(delta);
 		UpdateJumpButton();
 		UpdateAttackButton();
+	}
+
+	private void UpdateHoverPresentation()
+	{
+		if (_hoverPresentationService == null) return;
+
+		HoverPresentationState state = _hoverPresentationService.BuildState(
+			IsTargetingLongRange,
+			_currentHoveredHex,
+			HexSize,
+			GetViewportTransform().Scale.X,
+			HexGrid,
+			HexContents);
+		_hoverPresentationService.ApplyState(_radarHighlight, _hoverHighlight, _hoverTooltip, state);
 	}
 
 	private void UpdateJumpButton()
