@@ -664,6 +664,14 @@ public partial class GalacticMap : Control
 	{
 		if (!IsInstanceValid(_systemWindow)) return;
 
+		// During the initial new-campaign flow, stars should not open the old
+		// "start in this system" popup. The region-selection menu is now the
+		// only way to begin a fresh run.
+		if (_globalData != null && string.IsNullOrEmpty(_globalData.SavedSystem) && !_globalData.JustJumped)
+		{
+			return;
+		}
+
 		if (_globalData.JustJumped)
 		{
 			GalacticJumpResult jumpResult = _jumpService != null
