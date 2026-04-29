@@ -86,6 +86,7 @@ public partial class BattleMap : Node2D
 	private JumpService _jumpService;
 	private ShipMenuPresenterService _shipMenuPresenterService;
 	private TerminalMenuPresenterService _terminalMenuPresenterService;
+	private StrandedMenuPresenterService _strandedMenuPresenterService;
 
 	public override void _Ready()
 	{
@@ -98,6 +99,7 @@ public partial class BattleMap : Node2D
 		_explorationTurnService = new ExplorationTurnService();
 		_shipMenuPresenterService = new ShipMenuPresenterService();
 		_terminalMenuPresenterService = new TerminalMenuPresenterService();
+		_strandedMenuPresenterService = new StrandedMenuPresenterService();
 		if (_globalData != null && _globalData.CurrentTurn > 0) CurrentTurn = _globalData.CurrentTurn;
 		
 		Texture2D cursorTex = GD.Load<Texture2D>("res://Assets/UI/Cursor.png");
@@ -575,58 +577,8 @@ public partial class BattleMap : Node2D
 	// ==========================================
 	private void BuildStrandedMenu()
 	{
-		CanvasLayer menuLayer = new CanvasLayer { Layer = 150 };
-		AddChild(menuLayer);
-
-		_strandedMenuWrapper = new CenterContainer();
-		_strandedMenuWrapper.SetAnchorsPreset(Control.LayoutPreset.FullRect); 
-		_strandedMenuWrapper.MouseFilter = Control.MouseFilterEnum.Stop; 
-		_strandedMenuWrapper.Visible = false;
-		menuLayer.AddChild(_strandedMenuWrapper);
-
-		PanelContainer strandedPanel = new PanelContainer();
-		
-		StyleBoxFlat style = new StyleBoxFlat();
-		style.BgColor = new Color(0.05f, 0.05f, 0.1f, 0.95f);
-		style.BorderWidthTop = 2; style.BorderWidthBottom = 2; style.BorderWidthLeft = 2; style.BorderWidthRight = 2;
-		style.BorderColor = new Color(1f, 0f, 0f, 0.8f); 
-		style.ContentMarginLeft = 20; style.ContentMarginRight = 20; style.ContentMarginTop = 20; style.ContentMarginBottom = 20;
-		strandedPanel.AddThemeStyleboxOverride("panel", style);
-		
-		_strandedMenuWrapper.AddChild(strandedPanel);
-
-		VBoxContainer container = new VBoxContainer();
-		container.AddThemeConstantOverride("separation", 15);
-		strandedPanel.AddChild(container);
-
-		Label title = new Label();
-		title.Text = "=== WARNING: CRITICAL FUEL DEPLETION ===";
-		title.HorizontalAlignment = HorizontalAlignment.Center;
-		title.AddThemeColorOverride("font_color", new Color(1f, 0f, 0f));
-		title.AddThemeFontSizeOverride("font_size", 18);
-		container.AddChild(title);
-
-		Label body = new Label();
-		body.Text = "Your fleet has run out of Raw Materials.\nMain engines are offline. Life support is failing.\n\nWhat are your orders, Commander?";
-		body.HorizontalAlignment = HorizontalAlignment.Center;
-		body.AddThemeFontSizeOverride("font_size", 14);
-		container.AddChild(body);
-
-		Button btnDistress = new Button();
-		btnDistress.Text = "SEND FTL DISTRESS SIGNAL (Gamble)";
-		btnDistress.CustomMinimumSize = new Vector2(0, 40);
-		btnDistress.AddThemeColorOverride("font_color", new Color(1f, 1f, 0f));
-		btnDistress.Pressed += OnDistressSignalPressed;
-		container.AddChild(btnDistress);
-
-		Button btnAbandon = new Button();
-		btnAbandon.Text = "ABANDON FLEET (Return to Menu)";
-		btnAbandon.CustomMinimumSize = new Vector2(0, 40);
-		btnAbandon.Pressed += () => {
-			if (_globalData != null) _globalData.ResetForNewGame();
-			OnMainMenuPressed();
-		};
-		container.AddChild(btnAbandon);
+		if (_strandedMenuPresenterService == null) return;
+		_strandedMenuWrapper = _strandedMenuPresenterService.BuildMenu(this, OnDistressSignalPressed, OnAbandonFleetPressed);
 	}
 
 	private void ShowStrandedMenu()
@@ -637,6 +589,12 @@ public partial class BattleMap : Node2D
 			if (UI != null) UI.CombatLogPanel.Visible = true;
 			LogCombatMessage("\n[color=red]*** FLEET STRANDED: OUT OF FUEL ***[/color]");
 		}
+	}
+
+	private void OnAbandonFleetPressed()
+	{
+		if (_globalData != null) _globalData.ResetForNewGame();
+		OnMainMenuPressed();
 	}
 
 	private void OnDistressSignalPressed()
