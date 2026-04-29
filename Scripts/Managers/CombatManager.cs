@@ -66,6 +66,7 @@ public class CombatManager
 	public void StartCombat()
 	{
 		InCombat = true;
+		_map.PlayCombatMusic();
 		if (_map.UI != null)
 		{
 			_map.UI.EndTurnButton.Visible = true; 
@@ -134,6 +135,7 @@ public class CombatManager
 	public void RestoreCombatState(int savedQueueIndex)
 	{
 		InCombat = true;
+		_map.PlayCombatMusic();
 		if (_map.UI != null)
 		{
 			_map.UI.EndTurnButton.Visible = true; 
@@ -342,6 +344,7 @@ public class CombatManager
 		IsTargeting = false;
 		IsTargetingMissile = false;
 		ActiveShip = null;
+		_map.PlayExplorationMusic();
 		
 		if (_map.UI != null)
 		{

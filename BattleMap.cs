@@ -101,6 +101,8 @@ public partial class BattleMap : Node2D
 	private Label _officerMenuTitle;
 	private TextureRect _officerPortraitDisplay;
 	private Label _officerDetailsLabel;
+	private const string ExplorationMusicPath = "res://Sounds/battle_theme.mp3";
+	private const string CombatMusicPath = "res://Sounds/fractured_combat_theme.wav";
 
 	public override void _Ready()
 	{
@@ -704,7 +706,7 @@ public partial class BattleMap : Node2D
 		_bgmPlayer = new AudioStreamPlayer();
 		AddChild(_bgmPlayer);
 		_bgmPlayer.VolumeDb = -15.0f;
-		_audioPlaybackService?.TryPlay(_bgmPlayer, "res://Sounds/battle_theme.mp3");
+		PlayExplorationMusic();
 
 		SfxPlayer = new AudioStreamPlayer();
 		AddChild(SfxPlayer);
@@ -719,6 +721,16 @@ public partial class BattleMap : Node2D
 		AddChild(ExplosionPlayer);
 		ExplosionPlayer.VolumeDb = 0.0f; 
 		if (_audioPlaybackService != null) ExplosionPlayer.Stream = _audioPlaybackService.GetStream("res://Sounds/explosion.wav");
+	}
+
+	internal void PlayExplorationMusic()
+	{
+		_audioPlaybackService?.TryPlay(_bgmPlayer, ExplorationMusicPath);
+	}
+
+	internal void PlayCombatMusic()
+	{
+		_audioPlaybackService?.TryPlay(_bgmPlayer, CombatMusicPath);
 	}
 
 	private void SetupCamera() 
