@@ -90,6 +90,13 @@ public partial class FleetSelection : Control
 
 		// Load the real ship data
 		LoadAvailableShips();
+
+		if (_globalData.SelectedPlayerFleet != null && _globalData.SelectedPlayerFleet.Count > 0)
+		{
+			int restoredSlots = _globalData.SelectedFleetCapacity > 0 ? _globalData.SelectedFleetCapacity : _globalData.SelectedPlayerFleet.Count;
+			StartFleetBuilder(restoredSlots);
+			RestoreSelectedFleet();
+		}
 	}
 
 	// --- HELPER FOR PLANET TEXTURES ---
@@ -118,6 +125,21 @@ public partial class FleetSelection : Control
 
 		RefreshSlotsVisuals();
 		PopulateAvailableShips();
+	}
+
+	private void RestoreSelectedFleet()
+	{
+		if (_selectedFleet == null || _globalData.SelectedPlayerFleet == null)
+		{
+			return;
+		}
+
+		for (int i = 0; i < _selectedFleet.Length && i < _globalData.SelectedPlayerFleet.Count; i++)
+		{
+			_selectedFleet[i] = _masterShipList.Find(ship => ship.Name == _globalData.SelectedPlayerFleet[i]);
+		}
+
+		RefreshSlotsVisuals();
 	}
 
 	// --- SLOT MANAGEMENT ---
@@ -268,8 +290,9 @@ public partial class FleetSelection : Control
 	// --- NEW: TRANSITION TO BATTLE MAP ---
 	private void OnDeployButtonPressed()
 	{
-		// 1. Wipe old data from the suitcase
+		// 1. Save the current selected fleet
 		_globalData.SelectedPlayerFleet.Clear();
+		_globalData.SelectedFleetCapacity = _maxSlots;
 
 		bool hasShips = false;
 
@@ -290,11 +313,20 @@ public partial class FleetSelection : Control
 			return;
 		}
 
+		HashSet<string> selectedShips = new HashSet<string>(_globalData.SelectedPlayerFleet);
+		foreach (string shipName in new List<string>(_globalData.ShipOfficers.Keys))
+		{
+			if (!selectedShips.Contains(shipName))
+			{
+				_globalData.ShipOfficers.Remove(shipName);
+			}
+		}
+
 		GD.Print($"Deploying Fleet: {string.Join(", ", _globalData.SelectedPlayerFleet)}");
 
-		// 3. Launch the new hex map!
+		// 3. Hand off to officer assignment before entering the run.
 		var transitioner = GetNode<SceneTransition>("/root/SceneTransition");
-		transitioner.ChangeScene("res://exploration_battle.tscn");
+		transitioner.ChangeScene("res://officer_assignment.tscn");
 	}
 
 	public void _on_back_button_pressed()

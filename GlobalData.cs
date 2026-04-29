@@ -63,6 +63,44 @@ public class QuestData
 	public bool IsComplete { get; set; } = false;
 }
 
+public class OfficerTemplate
+{
+	public string OfficerID { get; set; } = string.Empty;
+	public string ShipName { get; set; } = string.Empty;
+	public string Name { get; set; } = string.Empty;
+	public string PortraitPath { get; set; } = string.Empty;
+	public string Biography { get; set; } = string.Empty;
+	public string Ideology { get; set; } = string.Empty;
+	public string Archetype { get; set; } = string.Empty;
+	public string Specialty { get; set; } = string.Empty;
+	public string Flaw { get; set; } = string.Empty;
+	public int StartingApproval { get; set; } = 0;
+	public string PersonalQuestID { get; set; } = string.Empty;
+	public string CombatAbilityID { get; set; } = string.Empty;
+}
+
+public class OfficerState
+{
+	public string OfficerID { get; set; } = string.Empty;
+	public string TemplateOfficerID { get; set; } = string.Empty;
+	public string ShipName { get; set; } = string.Empty;
+	public string DisplayName { get; set; } = string.Empty;
+	public bool IsCustom { get; set; } = false;
+	public string PortraitPath { get; set; } = string.Empty;
+	public string Biography { get; set; } = string.Empty;
+	public string BiographySeed { get; set; } = string.Empty;
+	public string Ideology { get; set; } = string.Empty;
+	public string Archetype { get; set; } = string.Empty;
+	public string Specialty { get; set; } = string.Empty;
+	public string Flaw { get; set; } = string.Empty;
+	public int Approval { get; set; } = 0;
+	public int Stress { get; set; } = 0;
+	public string CombatAbilityID { get; set; } = string.Empty;
+	public string PersonalQuestID { get; set; } = string.Empty;
+	public List<string> Flags { get; set; } = new List<string>();
+	public List<string> CompletedScenes { get; set; } = new List<string>();
+}
+
 // --- NEW: EQUIPMENT AND LOADOUT CLASSES ---
 public class EquipmentData
 {
@@ -98,6 +136,7 @@ public partial class GlobalData : Node
 	public string SelectedBasePlanetType { get; set; } = ""; 
 	public Vector2 SelectedBasePlanetHexCoords { get; set; } = new Vector2(0, 0);
 	public List<string> SelectedPlayerFleet { get; set; } = new List<string>();
+	public int SelectedFleetCapacity { get; set; } = 0;
 
 	public Dictionary<string, SystemData> ExploredSystems { get; set; } = new Dictionary<string, SystemData>();
 	public List<StarMapData> CurrentSectorStars { get; set; } = new List<StarMapData>();
@@ -122,6 +161,8 @@ public partial class GlobalData : Node
 	
 	// Maps a Ship's Name to its specific loadout
 	public Dictionary<string, ShipLoadout> FleetLoadouts { get; set; } = new Dictionary<string, ShipLoadout>();
+	public Dictionary<string, OfficerState> ShipOfficers { get; set; } = new Dictionary<string, OfficerState>();
+	public List<string> PendingDowntimeEvents { get; set; } = new List<string>();
 
 	public List<QuestData> ActiveQuests { get; set; } = new List<QuestData>();
 	public Godot.Collections.Array CompletedQuestIDs { get; set; } = new Godot.Collections.Array();
@@ -131,10 +172,12 @@ public partial class GlobalData : Node
 	// --- MASTER EQUIPMENT DATABASE ---
 	// Loaded from res://Data/equipment_catalog.json at startup.
 	public Dictionary<string, EquipmentData> MasterEquipmentDB { get; set; } = new Dictionary<string, EquipmentData>();
+	public Dictionary<string, OfficerTemplate> MasterOfficerDB { get; set; } = new Dictionary<string, OfficerTemplate>();
 
 	public override void _Ready()
 	{
 		MasterEquipmentDB = EquipmentCatalogLoader.LoadCatalog();
+		MasterOfficerDB = OfficerCatalogLoader.LoadCatalog();
 		GD.Print("GlobalData Singleton Initialized successfully.");
 	}
 
@@ -151,10 +194,10 @@ public partial class GlobalData : Node
 	public void ResetForNewGame()
 	{
 		SavedSystem = ""; SavedPlanet = ""; SavedType = ""; SelectedBasePlanetType = "";
-		SelectedBasePlanetHexCoords = Vector2.Zero; SelectedPlayerFleet.Clear();
+		SelectedBasePlanetHexCoords = Vector2.Zero; SelectedPlayerFleet.Clear(); SelectedFleetCapacity = 0;
 		ExploredSystems.Clear(); CurrentSectorStars.Clear();
 		CurrentTurn = 1; InCombat = false; CurrentQueueIndex = 0; JustJumped = false; 
-		SavedFleetState.Clear(); UnequippedInventory.Clear(); FleetLoadouts.Clear();
+		SavedFleetState.Clear(); UnequippedInventory.Clear(); FleetLoadouts.Clear(); ShipOfficers.Clear(); PendingDowntimeEvents.Clear();
 		
 		FleetResources = new Godot.Collections.Dictionary<string, Variant> {
 			{ GameConstants.ResourceKeys.RawMaterials, 350.0f },

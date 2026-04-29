@@ -132,6 +132,128 @@ public class FleetLoadoutSaveData
 	}
 }
 
+public class OfficerStateSaveData
+{
+	public string OfficerID { get; set; } = string.Empty;
+	public string TemplateOfficerID { get; set; } = string.Empty;
+	public string ShipName { get; set; } = string.Empty;
+	public string DisplayName { get; set; } = string.Empty;
+	public bool IsCustom { get; set; }
+	public string PortraitPath { get; set; } = string.Empty;
+	public string Biography { get; set; } = string.Empty;
+	public string BiographySeed { get; set; } = string.Empty;
+	public string Ideology { get; set; } = string.Empty;
+	public string Archetype { get; set; } = string.Empty;
+	public string Specialty { get; set; } = string.Empty;
+	public string Flaw { get; set; } = string.Empty;
+	public int Approval { get; set; }
+	public int Stress { get; set; }
+	public string CombatAbilityID { get; set; } = string.Empty;
+	public string PersonalQuestID { get; set; } = string.Empty;
+	public List<string> Flags { get; set; } = new List<string>();
+	public List<string> CompletedScenes { get; set; } = new List<string>();
+
+	public static OfficerStateSaveData FromRuntime(OfficerState officer)
+	{
+		return new OfficerStateSaveData
+		{
+			OfficerID = officer?.OfficerID ?? string.Empty,
+			TemplateOfficerID = officer?.TemplateOfficerID ?? string.Empty,
+			ShipName = officer?.ShipName ?? string.Empty,
+			DisplayName = officer?.DisplayName ?? string.Empty,
+			IsCustom = officer != null && officer.IsCustom,
+			PortraitPath = officer?.PortraitPath ?? string.Empty,
+			Biography = officer?.Biography ?? string.Empty,
+			BiographySeed = officer?.BiographySeed ?? string.Empty,
+			Ideology = officer?.Ideology ?? string.Empty,
+			Archetype = officer?.Archetype ?? string.Empty,
+			Specialty = officer?.Specialty ?? string.Empty,
+			Flaw = officer?.Flaw ?? string.Empty,
+			Approval = officer?.Approval ?? 0,
+			Stress = officer?.Stress ?? 0,
+			CombatAbilityID = officer?.CombatAbilityID ?? string.Empty,
+			PersonalQuestID = officer?.PersonalQuestID ?? string.Empty,
+			Flags = (officer?.Flags ?? new List<string>()).ToList(),
+			CompletedScenes = (officer?.CompletedScenes ?? new List<string>()).ToList()
+		};
+	}
+
+	public OfficerState ToRuntime()
+	{
+		return new OfficerState
+		{
+			OfficerID = OfficerID,
+			TemplateOfficerID = TemplateOfficerID,
+			ShipName = ShipName,
+			DisplayName = DisplayName,
+			IsCustom = IsCustom,
+			PortraitPath = PortraitPath,
+			Biography = Biography,
+			BiographySeed = BiographySeed,
+			Ideology = Ideology,
+			Archetype = Archetype,
+			Specialty = Specialty,
+			Flaw = Flaw,
+			Approval = Approval,
+			Stress = Stress,
+			CombatAbilityID = CombatAbilityID,
+			PersonalQuestID = PersonalQuestID,
+			Flags = Flags.ToList(),
+			CompletedScenes = CompletedScenes.ToList()
+		};
+	}
+
+	public static OfficerStateSaveData FromVariantDictionary(Godot.Collections.Dictionary dict)
+	{
+		return new OfficerStateSaveData
+		{
+			OfficerID = dict.ContainsKey("OfficerID") ? (string)dict["OfficerID"] : string.Empty,
+			TemplateOfficerID = dict.ContainsKey("TemplateOfficerID") ? (string)dict["TemplateOfficerID"] : string.Empty,
+			ShipName = dict.ContainsKey("ShipName") ? (string)dict["ShipName"] : string.Empty,
+			DisplayName = dict.ContainsKey("DisplayName") ? (string)dict["DisplayName"] : string.Empty,
+			IsCustom = dict.ContainsKey("IsCustom") && (bool)dict["IsCustom"],
+			PortraitPath = dict.ContainsKey("PortraitPath") ? (string)dict["PortraitPath"] : string.Empty,
+			Biography = dict.ContainsKey("Biography") ? (string)dict["Biography"] : string.Empty,
+			BiographySeed = dict.ContainsKey("BiographySeed") ? (string)dict["BiographySeed"] : string.Empty,
+			Ideology = dict.ContainsKey("Ideology") ? (string)dict["Ideology"] : string.Empty,
+			Archetype = dict.ContainsKey("Archetype") ? (string)dict["Archetype"] : string.Empty,
+			Specialty = dict.ContainsKey("Specialty") ? (string)dict["Specialty"] : string.Empty,
+			Flaw = dict.ContainsKey("Flaw") ? (string)dict["Flaw"] : string.Empty,
+			Approval = dict.ContainsKey("Approval") ? (int)dict["Approval"] : 0,
+			Stress = dict.ContainsKey("Stress") ? (int)dict["Stress"] : 0,
+			CombatAbilityID = dict.ContainsKey("CombatAbilityID") ? (string)dict["CombatAbilityID"] : string.Empty,
+			PersonalQuestID = dict.ContainsKey("PersonalQuestID") ? (string)dict["PersonalQuestID"] : string.Empty,
+			Flags = CampaignSaveData.FromStringArray(dict.ContainsKey("Flags") ? (Godot.Collections.Array)dict["Flags"] : new Godot.Collections.Array()),
+			CompletedScenes = CampaignSaveData.FromStringArray(dict.ContainsKey("CompletedScenes") ? (Godot.Collections.Array)dict["CompletedScenes"] : new Godot.Collections.Array())
+		};
+	}
+
+	public Godot.Collections.Dictionary<string, Variant> ToVariantDictionary()
+	{
+		return new Godot.Collections.Dictionary<string, Variant>
+		{
+			{ "OfficerID", OfficerID },
+			{ "TemplateOfficerID", TemplateOfficerID },
+			{ "ShipName", ShipName },
+			{ "DisplayName", DisplayName },
+			{ "IsCustom", IsCustom },
+			{ "PortraitPath", PortraitPath },
+			{ "Biography", Biography },
+			{ "BiographySeed", BiographySeed },
+			{ "Ideology", Ideology },
+			{ "Archetype", Archetype },
+			{ "Specialty", Specialty },
+			{ "Flaw", Flaw },
+			{ "Approval", Approval },
+			{ "Stress", Stress },
+			{ "CombatAbilityID", CombatAbilityID },
+			{ "PersonalQuestID", PersonalQuestID },
+			{ "Flags", CampaignSaveData.ToVariantArray(Flags) },
+			{ "CompletedScenes", CampaignSaveData.ToVariantArray(CompletedScenes) }
+		};
+	}
+}
+
 public class PlanetSaveData
 {
 	public string Name { get; set; } = string.Empty;
@@ -422,6 +544,9 @@ public class CampaignSaveData
 	public List<string> UnequippedInventory { get; set; } = new List<string>();
 	public Dictionary<string, FleetLoadoutSaveData> FleetLoadouts { get; set; } = new Dictionary<string, FleetLoadoutSaveData>();
 	public List<string> SelectedPlayerFleet { get; set; } = new List<string>();
+	public int SelectedFleetCapacity { get; set; }
+	public Dictionary<string, OfficerStateSaveData> ShipOfficers { get; set; } = new Dictionary<string, OfficerStateSaveData>();
+	public List<string> PendingDowntimeEvents { get; set; } = new List<string>();
 	public Dictionary<string, SystemSaveData> ExploredSystems { get; set; } = new Dictionary<string, SystemSaveData>();
 	public List<StarMapSaveData> CurrentSectorStars { get; set; } = new List<StarMapSaveData>();
 
@@ -440,6 +565,9 @@ public class CampaignSaveData
 			UnequippedInventory = (globalData.UnequippedInventory ?? new List<string>()).ToList(),
 			FleetLoadouts = (globalData.FleetLoadouts ?? new Dictionary<string, ShipLoadout>()).ToDictionary(kvp => kvp.Key, kvp => FleetLoadoutSaveData.FromRuntime(kvp.Value)),
 			SelectedPlayerFleet = (globalData.SelectedPlayerFleet ?? new List<string>()).ToList(),
+			SelectedFleetCapacity = globalData.SelectedFleetCapacity,
+			ShipOfficers = (globalData.ShipOfficers ?? new Dictionary<string, OfficerState>()).ToDictionary(kvp => kvp.Key, kvp => OfficerStateSaveData.FromRuntime(kvp.Value)),
+			PendingDowntimeEvents = (globalData.PendingDowntimeEvents ?? new List<string>()).ToList(),
 			ExploredSystems = (globalData.ExploredSystems ?? new Dictionary<string, SystemData>()).ToDictionary(kvp => kvp.Key, kvp => SystemSaveData.FromRuntime(kvp.Value)),
 			CurrentSectorStars = (globalData.CurrentSectorStars ?? new List<StarMapData>()).Select(StarMapSaveData.FromRuntime).ToList()
 		};
@@ -463,6 +591,9 @@ public class CampaignSaveData
 		globalData.UnequippedInventory = UnequippedInventory.ToList();
 		globalData.FleetLoadouts = FleetLoadouts.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.ToRuntime());
 		globalData.SelectedPlayerFleet = SelectedPlayerFleet.ToList();
+		globalData.SelectedFleetCapacity = SelectedFleetCapacity;
+		globalData.ShipOfficers = ShipOfficers.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.ToRuntime());
+		globalData.PendingDowntimeEvents = PendingDowntimeEvents.ToList();
 		globalData.ExploredSystems = ExploredSystems.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.ToRuntime());
 		globalData.CurrentSectorStars = CurrentSectorStars.Select(s => s.ToRuntime()).ToList();
 	}
@@ -479,6 +610,12 @@ public class CampaignSaveData
 		foreach (KeyValuePair<string, SystemSaveData> kvp in ExploredSystems)
 		{
 			systemDict[kvp.Key] = kvp.Value.ToVariantDictionary();
+		}
+
+		var officerDict = new Godot.Collections.Dictionary<string, Variant>();
+		foreach (KeyValuePair<string, OfficerStateSaveData> kvp in ShipOfficers)
+		{
+			officerDict[kvp.Key] = kvp.Value.ToVariantDictionary();
 		}
 
 		var fleetResources = new Godot.Collections.Dictionary<string, Variant>();
@@ -500,6 +637,9 @@ public class CampaignSaveData
 			{ "UnequippedInventory", ToVariantArray(UnequippedInventory) },
 			{ "FleetLoadouts", loadoutDict },
 			{ "SelectedPlayerFleet", ToVariantArray(SelectedPlayerFleet) },
+			{ "SelectedFleetCapacity", SelectedFleetCapacity },
+			{ "ShipOfficers", officerDict },
+			{ "PendingDowntimeEvents", ToVariantArray(PendingDowntimeEvents) },
 			{ "ExploredSystems", systemDict },
 			{ "CurrentSectorStars", ToVariantArray(CurrentSectorStars.Select(s => s.ToVariantDictionary())) }
 		};
@@ -520,6 +660,9 @@ public class CampaignSaveData
 			UnequippedInventory = FromStringArray(dict.ContainsKey("UnequippedInventory") ? (Godot.Collections.Array)dict["UnequippedInventory"] : new Godot.Collections.Array()),
 			FleetLoadouts = FromLoadoutDictionary(dict.ContainsKey("FleetLoadouts") ? (Godot.Collections.Dictionary)dict["FleetLoadouts"] : new Godot.Collections.Dictionary()),
 			SelectedPlayerFleet = FromStringArray(dict.ContainsKey("SelectedPlayerFleet") ? (Godot.Collections.Array)dict["SelectedPlayerFleet"] : new Godot.Collections.Array()),
+			SelectedFleetCapacity = dict.ContainsKey("SelectedFleetCapacity") ? (int)dict["SelectedFleetCapacity"] : 0,
+			ShipOfficers = FromOfficerDictionary(dict.ContainsKey("ShipOfficers") ? (Godot.Collections.Dictionary)dict["ShipOfficers"] : new Godot.Collections.Dictionary()),
+			PendingDowntimeEvents = FromStringArray(dict.ContainsKey("PendingDowntimeEvents") ? (Godot.Collections.Array)dict["PendingDowntimeEvents"] : new Godot.Collections.Array()),
 			ExploredSystems = FromSystemDictionary(dict.ContainsKey("ExploredSystems") ? (Godot.Collections.Dictionary)dict["ExploredSystems"] : new Godot.Collections.Dictionary()),
 			CurrentSectorStars = FromVariantObjectList(dict.ContainsKey("CurrentSectorStars") ? (Godot.Collections.Array)dict["CurrentSectorStars"] : new Godot.Collections.Array(), StarMapSaveData.FromVariantDictionary)
 		};
@@ -604,8 +747,18 @@ public class CampaignSaveData
 		return systems;
 	}
 
-	private static List<string> FromStringArray(Godot.Collections.Array array)
+	public static List<string> FromStringArray(Godot.Collections.Array array)
 	{
 		return array.Select(v => (string)v).ToList();
+	}
+
+	private static Dictionary<string, OfficerStateSaveData> FromOfficerDictionary(Godot.Collections.Dictionary dict)
+	{
+		var officers = new Dictionary<string, OfficerStateSaveData>();
+		foreach (Variant key in dict.Keys)
+		{
+			officers[(string)key] = OfficerStateSaveData.FromVariantDictionary((Godot.Collections.Dictionary)dict[key]);
+		}
+		return officers;
 	}
 }
