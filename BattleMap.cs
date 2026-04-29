@@ -87,6 +87,7 @@ public partial class BattleMap : Node2D
 	private ShipMenuPresenterService _shipMenuPresenterService;
 	private TerminalMenuPresenterService _terminalMenuPresenterService;
 	private StrandedMenuPresenterService _strandedMenuPresenterService;
+	private FleetCommandService _fleetCommandService;
 
 	public override void _Ready()
 	{
@@ -100,6 +101,7 @@ public partial class BattleMap : Node2D
 		_shipMenuPresenterService = new ShipMenuPresenterService();
 		_terminalMenuPresenterService = new TerminalMenuPresenterService();
 		_strandedMenuPresenterService = new StrandedMenuPresenterService();
+		_fleetCommandService = new FleetCommandService();
 		if (_globalData != null && _globalData.CurrentTurn > 0) CurrentTurn = _globalData.CurrentTurn;
 		
 		Texture2D cursorTex = GD.Load<Texture2D>("res://Assets/UI/Cursor.png");
@@ -743,84 +745,54 @@ public partial class BattleMap : Node2D
 
 		if (isMoveCommand && !IsFleetMoving)
 		{
-			if (SelectedHexes.Count > 0 && HexGrid.ContainsKey(targetHex))
-			{
-				float totalFuelNeeded = 0f;
-				bool containsPlayerFleet = false;
+			HandlePlayerMoveCommand(targetHex);
+		}
+	}
 
-				foreach (Vector2I sHex in SelectedHexes)
-				{
-					if (HexContents.ContainsKey(sHex) && HexContents[sHex].Type == GameConstants.EntityTypes.PlayerFleet)
-					{
-						totalFuelNeeded += HexMath.HexDistance(sHex, targetHex) * 0.25f;
-						containsPlayerFleet = true;
-					}
-				}
+	private void HandlePlayerMoveCommand(Vector2I targetHex)
+	{
+		if (_fleetCommandService == null) return;
 
-				if (!containsPlayerFleet) return;
-				if (totalFuelNeeded == 0f && !Combat.InCombat) return;
+		float currentFuel = _globalData != null ? _globalData.FleetResources[GameConstants.ResourceKeys.RawMaterials].AsSingle() : 0f;
+		FleetMovePlan movePlan = _fleetCommandService.BuildMovePlan(
+			SelectedHexes,
+			targetHex,
+			Combat.InCombat,
+			currentFuel,
+			HexGrid,
+			HexContents,
+			IsHexWalkable,
+			GetReachableHexes);
 
-				if (!Combat.InCombat)
-				{
-					float currentFuel = _globalData != null ? _globalData.FleetResources[GameConstants.ResourceKeys.RawMaterials].AsSingle() : 0f;
+		if (movePlan.ShowStrandedMenu)
+		{
+			ShowStrandedMenu();
+			return;
+		}
 
-					if (currentFuel < 0.25f)
-					{
-						ShowStrandedMenu();
-						return; 
-					}
+		if (!string.IsNullOrEmpty(movePlan.FailureMessage))
+		{
+			if (UI != null) UI.CombatLogPanel.Visible = true;
+			LogCombatMessage($"\n[color=red]{movePlan.FailureMessage}[/color]");
+			return;
+		}
 
-					if (currentFuel < totalFuelNeeded)
-					{
-						if (UI != null) UI.CombatLogPanel.Visible = true;
-						LogCombatMessage($"\n[color=red]*** MOVEMENT ABORTED: INSUFFICIENT FUEL ({totalFuelNeeded} {GameConstants.ResourceKeys.RawMaterials} Req) ***[/color]");
-						return; 
-					}
-				}
+		if (!movePlan.Allowed) return;
 
-				bool playerActuallyMoved = false;
+		if (movePlan.IsGroupMove)
+		{
+			MoveGroup(SelectedHexes, targetHex);
+		}
+		else
+		{
+			MoveShip(movePlan.FromHex, movePlan.ToHex, movePlan.MovementCost);
+			SelectedHexes = movePlan.UpdatedSelection;
+			UpdateHighlights();
+		}
 
-				if (SelectedHexes.Count == 1)
-				{
-					Vector2I shipHex = SelectedHexes[0];
-					if (HexContents.ContainsKey(shipHex) && HexContents[shipHex].Type == GameConstants.EntityTypes.PlayerFleet)
-					{
-						MapEntity ship = HexContents[shipHex];
-						
-						if (!Combat.InCombat)
-						{
-							if (IsHexWalkable(targetHex))
-							{
-								MoveShip(shipHex, targetHex, 0);
-								SelectedHexes[0] = targetHex;
-								UpdateHighlights();
-								playerActuallyMoved = true;
-							}
-						}
-						else
-						{
-							Dictionary<Vector2I, int> reachable = GetReachableHexes(shipHex, ship.CurrentActions);
-							if (reachable.ContainsKey(targetHex))
-							{
-								int cost = reachable[targetHex];
-								MoveShip(shipHex, targetHex, cost);
-								SelectedHexes[0] = targetHex;
-								UpdateHighlights();
-							}
-						}
-					}
-				}
-				else if (!Combat.InCombat) 
-				{
-					MoveGroup(SelectedHexes, targetHex);
-					playerActuallyMoved = true;
-				}
-
-				if (playerActuallyMoved && !Combat.InCombat)
-				{
-					RunAfterMovementCompletes(AdvanceExplorationTurn);
-				}
-			}
+		if (movePlan.ShouldAdvanceTurnAfterMovement && !Combat.InCombat)
+		{
+			RunAfterMovementCompletes(AdvanceExplorationTurn);
 		}
 	}
 
@@ -875,117 +847,65 @@ public partial class BattleMap : Node2D
 
 	private void RefreshPlayerShipHotkeys()
 	{
-		HashSet<string> currentPlayerShipNames = HexContents.Values
-			.Where(entity => entity.Type == GameConstants.EntityTypes.PlayerFleet && !string.IsNullOrEmpty(entity.Name))
-			.Select(entity => entity.Name)
-			.ToHashSet();
-
-		List<string> staleShipNames = _playerShipHotkeys.Keys.Where(name => !currentPlayerShipNames.Contains(name)).ToList();
-		foreach (string staleShipName in staleShipNames)
-		{
-			_playerShipHotkeys.Remove(staleShipName);
-		}
-
-		HashSet<int> usedSlots = _playerShipHotkeys.Values.ToHashSet();
-		foreach (string shipName in currentPlayerShipNames.Where(name => !_playerShipHotkeys.ContainsKey(name)).OrderBy(name => name))
-		{
-			for (int slot = 1; slot <= 5; slot++)
-			{
-				if (usedSlots.Contains(slot)) continue;
-				_playerShipHotkeys[shipName] = slot;
-				usedSlots.Add(slot);
-				break;
-			}
-		}
+		_fleetCommandService?.RefreshPlayerShipHotkeys(_playerShipHotkeys, HexContents);
 	}
 
 	private List<Vector2I> GetOrderedPlayerShipHexes()
 	{
-		RefreshPlayerShipHotkeys();
-
-		return HexContents
-			.Where(kvp => kvp.Value.Type == GameConstants.EntityTypes.PlayerFleet)
-			.OrderBy(kvp => _playerShipHotkeys.TryGetValue(kvp.Value.Name, out int slot) ? slot : int.MaxValue)
-			.ThenBy(kvp => kvp.Value.Name)
-			.ThenBy(kvp => kvp.Key.X)
-			.ThenBy(kvp => kvp.Key.Y)
-			.Select(kvp => kvp.Key)
-			.ToList();
+		return _fleetCommandService != null
+			? _fleetCommandService.GetOrderedPlayerShipHexes(HexContents, _playerShipHotkeys)
+			: new List<Vector2I>();
 	}
 
 	internal void ActivateFleetTravelMode()
 	{
-		if (Combat.InCombat || IsFleetMoving) return;
-
-		List<Vector2I> playerShipHexes = GetOrderedPlayerShipHexes();
-		if (playerShipHexes.Count == 0) return;
-
-		IsFleetTravelMode = true;
-		SelectedHexes = playerShipHexes;
-		ToggleShipMenu(false);
-		UpdateHighlights();
+		FleetSelectionState state = _fleetCommandService?.BuildFleetTravelSelection(Combat.InCombat, IsFleetMoving, HexContents, _playerShipHotkeys);
+		ApplySelectionState(state);
 	}
 
 	internal bool TrySelectPlayerShipByHotkey(int slotNumber)
 	{
-		if (Combat.InCombat || IsFleetMoving || slotNumber < 1 || slotNumber > 5) return false;
+		Vector2I? matchingShipHex = _fleetCommandService?.TryFindPlayerShipHexByHotkey(slotNumber, Combat.InCombat, IsFleetMoving, HexContents, _playerShipHotkeys);
+		if (!matchingShipHex.HasValue) return false;
 
-		RefreshPlayerShipHotkeys();
-		KeyValuePair<Vector2I, MapEntity> matchingShip = HexContents
-			.Where(kvp => kvp.Value.Type == GameConstants.EntityTypes.PlayerFleet)
-			.FirstOrDefault(kvp => _playerShipHotkeys.TryGetValue(kvp.Value.Name, out int slot) && slot == slotNumber);
-
-		if (matchingShip.Value == null) return false;
-
-		SelectSinglePlayerShip(matchingShip.Key, true);
+		SelectSinglePlayerShip(matchingShipHex.Value, true);
 		return true;
 	}
 
 	internal void SelectSinglePlayerShip(Vector2I shipHex, bool openMenu)
 	{
-		if (!HexContents.ContainsKey(shipHex)) return;
+		FleetSelectionState state = _fleetCommandService?.BuildSinglePlayerSelection(shipHex, Combat.InCombat, Combat.ActiveShip, HexContents, openMenu);
+		ApplySelectionState(state);
+	}
 
-		MapEntity ship = HexContents[shipHex];
-		if (ship.Type != GameConstants.EntityTypes.PlayerFleet) return;
-		if (Combat.InCombat && ship != Combat.ActiveShip) return;
+	internal void SetManualPlayerSelection(List<Vector2I> selectedShipHexes)
+	{
+		FleetSelectionState state = _fleetCommandService?.BuildManualPlayerSelection(selectedShipHexes, HexContents);
+		ApplySelectionState(state);
+	}
 
-		IsFleetTravelMode = false;
-		SelectedHexes.Clear();
-		SelectedHexes.Add(shipHex);
+	internal void ClearSelectionState(bool deactivateFleetMode = true)
+	{
+		FleetSelectionState state = _fleetCommandService?.BuildClearedSelection(SelectedHexes, IsFleetTravelMode, deactivateFleetMode);
+		ApplySelectionState(state);
+	}
 
-		if (openMenu && ship.VisualSprite.Visible)
+	private void ApplySelectionState(FleetSelectionState state)
+	{
+		if (state == null) return;
+
+		IsFleetTravelMode = state.IsFleetTravelMode;
+		SelectedHexes = state.SelectedHexes ?? new List<Vector2I>();
+
+		if (state.ExpandShipMenu && state.ShipToOpen != null)
 		{
-			ToggleShipMenu(true, ship);
+			ToggleShipMenu(true, state.ShipToOpen);
 		}
 		else
 		{
 			ToggleShipMenu(false);
 		}
 
-		UpdateHighlights();
-	}
-
-	internal void SetManualPlayerSelection(List<Vector2I> selectedShipHexes)
-	{
-		IsFleetTravelMode = false;
-		SelectedHexes = selectedShipHexes
-			.Where(hex => HexContents.ContainsKey(hex) && HexContents[hex].Type == GameConstants.EntityTypes.PlayerFleet)
-			.Distinct()
-			.ToList();
-
-		ToggleShipMenu(false);
-		UpdateHighlights();
-	}
-
-	internal void ClearSelectionState(bool deactivateFleetMode = true)
-	{
-		if (deactivateFleetMode)
-		{
-			IsFleetTravelMode = false;
-		}
-
-		SelectedHexes.Clear();
-		ToggleShipMenu(false);
 		UpdateHighlights();
 	}
 
