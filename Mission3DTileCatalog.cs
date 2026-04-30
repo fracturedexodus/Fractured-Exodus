@@ -24,16 +24,34 @@ public static class Mission3DTileCatalog
 	{
 		new Mission3DTileDefinition("floor_panel", "Floor Panel", MissionTileCategory.Floor, Vector3.Zero),
 		new Mission3DTileDefinition("floor_hazard", "Floor Hazard", MissionTileCategory.Floor, Vector3.Zero),
+		new Mission3DTileDefinition("floor_aetherweb", "Aetherweb Floor", MissionTileCategory.Floor, Vector3.Zero),
+		new Mission3DTileDefinition("floor_shattered_reach", "Shattered Reach Floor", MissionTileCategory.Floor, Vector3.Zero),
+		new Mission3DTileDefinition("floor_ember_waste", "Ember Waste Floor", MissionTileCategory.Floor, Vector3.Zero),
+		new Mission3DTileDefinition("floor_verdant_shroud", "Verdant Shroud Floor", MissionTileCategory.Floor, Vector3.Zero),
 		new Mission3DTileDefinition("wall_north", "Wall North", MissionTileCategory.Wall, new Vector3(0f, 1.5f, -1.85f)),
 		new Mission3DTileDefinition("wall_west", "Wall West", MissionTileCategory.Wall, new Vector3(-1.85f, 1.5f, 0f)),
 		new Mission3DTileDefinition("wall_corner_nw", "Wall Corner NW", MissionTileCategory.Wall, new Vector3(0f, 0f, 0f)),
 		new Mission3DTileDefinition("door_north", "Door North", MissionTileCategory.Wall, new Vector3(0f, 0f, -1.85f)),
+		new Mission3DTileDefinition("wall_obsidian_belt", "Obsidian Belt Bulkhead", MissionTileCategory.Wall, new Vector3(0f, 1.5f, -1.85f)),
+		new Mission3DTileDefinition("wall_crystal_verge", "Luminous Verge Wall", MissionTileCategory.Wall, new Vector3(0f, 1.35f, -1.85f)),
+		new Mission3DTileDefinition("wall_rift_barrier", "Rift Barrier", MissionTileCategory.Wall, new Vector3(0f, 1.25f, -1.85f)),
 		new Mission3DTileDefinition("console_terminal", "Console Terminal", MissionTileCategory.Prop, new Vector3(0f, 0.5f, 0f)),
 		new Mission3DTileDefinition("crate", "Crate", MissionTileCategory.Prop, new Vector3(0f, 0.7f, 0f)),
 		new Mission3DTileDefinition("medical_bed", "Medical Bed", MissionTileCategory.Prop, new Vector3(0f, 0.45f, 0f)),
 		new Mission3DTileDefinition("archive_core", "Archive Core", MissionTileCategory.Prop, new Vector3(0f, 0f, 0f)),
 		new Mission3DTileDefinition("pipe_bundle", "Pipe Bundle", MissionTileCategory.Prop, new Vector3(0f, 0.2f, 0f)),
-		new Mission3DTileDefinition("debris", "Debris", MissionTileCategory.Prop, new Vector3(0f, 0.2f, 0f))
+		new Mission3DTileDefinition("debris", "Debris", MissionTileCategory.Prop, new Vector3(0f, 0.2f, 0f)),
+		new Mission3DTileDefinition("aetherweb_relay_pylon", "Aetherweb Relay Pylon", MissionTileCategory.Prop, new Vector3(0f, 0f, 0f)),
+		new Mission3DTileDefinition("nexus_wound_core", "Nexus Wound Core", MissionTileCategory.Prop, new Vector3(0f, 0f, 0f)),
+		new Mission3DTileDefinition("thronevault_data_shrine", "Thronevault Data Shrine", MissionTileCategory.Prop, new Vector3(0f, 0f, 0f)),
+		new Mission3DTileDefinition("luminous_myth_node", "Luminous Myth Node", MissionTileCategory.Prop, new Vector3(0f, 0f, 0f)),
+		new Mission3DTileDefinition("ember_terraformer_core", "Ember Terraformer Core", MissionTileCategory.Prop, new Vector3(0f, 0f, 0f)),
+		new Mission3DTileDefinition("obsidian_trade_beacon", "Obsidian Trade Beacon", MissionTileCategory.Prop, new Vector3(0f, 0f, 0f)),
+		new Mission3DTileDefinition("verdant_biosphere_pod", "Verdant Biosphere Pod", MissionTileCategory.Prop, new Vector3(0f, 0f, 0f)),
+		new Mission3DTileDefinition("echo_spiral_time_anchor", "Echo Spiral Time Anchor", MissionTileCategory.Prop, new Vector3(0f, 0f, 0f)),
+		new Mission3DTileDefinition("far_silence_probe", "Far Silence Probe", MissionTileCategory.Prop, new Vector3(0f, 0f, 0f)),
+		new Mission3DTileDefinition("distress_lighthouse", "Lighthouse Red Beacon", MissionTileCategory.Prop, new Vector3(0f, 0f, 0f)),
+		new Mission3DTileDefinition("broken_stargate_arc", "Broken Stargate Arc", MissionTileCategory.Prop, new Vector3(0f, 0f, 0f))
 	};
 
 	private static StandardMaterial3D _steelMaterial;
@@ -46,6 +64,15 @@ public static class Mission3DTileCatalog
 	private static StandardMaterial3D _glassMaterial;
 	private static StandardMaterial3D _debrisMaterial;
 	private static StandardMaterial3D _outlineMaterial;
+	private static StandardMaterial3D _voidMaterial;
+	private static StandardMaterial3D _obsidianMaterial;
+	private static StandardMaterial3D _crystalMaterial;
+	private static StandardMaterial3D _riftMaterial;
+	private static StandardMaterial3D _emberMaterial;
+	private static StandardMaterial3D _verdantMaterial;
+	private static StandardMaterial3D _bioglassMaterial;
+	private static StandardMaterial3D _signalRedMaterial;
+	private static StandardMaterial3D _goldMaterial;
 
 	public static IReadOnlyList<Mission3DTileDefinition> All => Definitions;
 
@@ -75,6 +102,18 @@ public static class Mission3DTileCatalog
 			case "floor_hazard":
 				BuildFloor(visuals, true);
 				break;
+			case "floor_aetherweb":
+				BuildAetherwebFloor(visuals);
+				break;
+			case "floor_shattered_reach":
+				BuildShatteredReachFloor(visuals);
+				break;
+			case "floor_ember_waste":
+				BuildEmberWasteFloor(visuals);
+				break;
+			case "floor_verdant_shroud":
+				BuildVerdantShroudFloor(visuals);
+				break;
 			case "wall_north":
 				AddMesh(visuals, CreateBox(new Vector3(4.0f, 3.0f, 0.35f), _darkSteelMaterial), Vector3.Zero);
 				AddMesh(visuals, CreateBox(new Vector3(4.0f, 0.2f, 0.4f), _accentCyanMaterial), new Vector3(0f, 0.3f, 0f), new Vector3(1f, 1f, 0.25f));
@@ -89,6 +128,15 @@ public static class Mission3DTileCatalog
 				break;
 			case "door_north":
 				BuildDoor(visuals);
+				break;
+			case "wall_obsidian_belt":
+				BuildObsidianBeltWall(visuals);
+				break;
+			case "wall_crystal_verge":
+				BuildCrystalVergeWall(visuals);
+				break;
+			case "wall_rift_barrier":
+				BuildRiftBarrier(visuals);
 				break;
 			case "console_terminal":
 				BuildConsole(visuals);
@@ -107,6 +155,39 @@ public static class Mission3DTileCatalog
 				break;
 			case "debris":
 				BuildDebris(visuals);
+				break;
+			case "aetherweb_relay_pylon":
+				BuildAetherwebRelayPylon(visuals);
+				break;
+			case "nexus_wound_core":
+				BuildNexusWoundCore(visuals);
+				break;
+			case "thronevault_data_shrine":
+				BuildThronevaultDataShrine(visuals);
+				break;
+			case "luminous_myth_node":
+				BuildLuminousMythNode(visuals);
+				break;
+			case "ember_terraformer_core":
+				BuildEmberTerraformerCore(visuals);
+				break;
+			case "obsidian_trade_beacon":
+				BuildObsidianTradeBeacon(visuals);
+				break;
+			case "verdant_biosphere_pod":
+				BuildVerdantBiospherePod(visuals);
+				break;
+			case "echo_spiral_time_anchor":
+				BuildEchoSpiralTimeAnchor(visuals);
+				break;
+			case "far_silence_probe":
+				BuildFarSilenceProbe(visuals);
+				break;
+			case "distress_lighthouse":
+				BuildDistressLighthouse(visuals);
+				break;
+			case "broken_stargate_arc":
+				BuildBrokenStargateArc(visuals);
 				break;
 		}
 
@@ -198,6 +279,168 @@ public static class Mission3DTileCatalog
 		AddMesh(parent, CreateBox(new Vector3(1.2f, 0.55f, 1.8f), _darkSteelMaterial), new Vector3(0.9f, 0.28f, -0.3f), new Vector3(1f, 1f, 1f), new Vector3(10f, -20f, 0f));
 	}
 
+	private static void BuildAetherwebFloor(Node3D parent)
+	{
+		AddMesh(parent, CreateBox(new Vector3(4.0f, 0.2f, 4.0f), _darkSteelMaterial), Vector3.Zero);
+		AddMesh(parent, CreateBox(new Vector3(3.55f, 0.04f, 0.12f), _accentCyanMaterial), new Vector3(0f, 0.14f, 0f));
+		AddMesh(parent, CreateBox(new Vector3(0.12f, 0.04f, 3.55f), _accentCyanMaterial), new Vector3(0f, 0.14f, 0f));
+		AddMesh(parent, CreateBox(new Vector3(1.7f, 0.04f, 0.10f), _accentAmberMaterial), new Vector3(0.85f, 0.15f, 0.85f), Vector3.One, new Vector3(0f, 45f, 0f));
+		AddMesh(parent, CreateBox(new Vector3(1.7f, 0.04f, 0.10f), _accentAmberMaterial), new Vector3(-0.85f, 0.15f, -0.85f), Vector3.One, new Vector3(0f, 45f, 0f));
+	}
+
+	private static void BuildShatteredReachFloor(Node3D parent)
+	{
+		AddMesh(parent, CreateBox(new Vector3(4.0f, 0.18f, 4.0f), _debrisMaterial), Vector3.Zero);
+		AddMesh(parent, CreateBox(new Vector3(1.55f, 0.06f, 1.2f), _steelMaterial), new Vector3(-0.9f, 0.14f, 0.55f), Vector3.One, new Vector3(0f, -18f, 0f));
+		AddMesh(parent, CreateBox(new Vector3(1.25f, 0.06f, 1.55f), _darkSteelMaterial), new Vector3(0.85f, 0.15f, -0.55f), Vector3.One, new Vector3(0f, 24f, 0f));
+		AddMesh(parent, CreateBox(new Vector3(0.16f, 0.05f, 2.8f), _riftMaterial), new Vector3(0.1f, 0.18f, 0f), Vector3.One, new Vector3(0f, -35f, 0f));
+	}
+
+	private static void BuildEmberWasteFloor(Node3D parent)
+	{
+		AddMesh(parent, CreateBox(new Vector3(4.0f, 0.2f, 4.0f), _debrisMaterial), Vector3.Zero);
+		AddMesh(parent, CreateBox(new Vector3(3.4f, 0.05f, 0.18f), _emberMaterial), new Vector3(0f, 0.15f, 0f), Vector3.One, new Vector3(0f, 16f, 0f));
+		AddMesh(parent, CreateBox(new Vector3(2.4f, 0.05f, 0.16f), _emberMaterial), new Vector3(0.2f, 0.16f, -0.95f), Vector3.One, new Vector3(0f, -26f, 0f));
+		AddMesh(parent, CreateCylinder(0.24f, 0.08f, _warningMaterial), new Vector3(-1.35f, 0.18f, 1.15f));
+	}
+
+	private static void BuildVerdantShroudFloor(Node3D parent)
+	{
+		AddMesh(parent, CreateBox(new Vector3(4.0f, 0.18f, 4.0f), _steelMaterial), Vector3.Zero);
+		AddMesh(parent, CreateBox(new Vector3(3.2f, 0.05f, 0.28f), _verdantMaterial), new Vector3(0f, 0.15f, 0f));
+		AddMesh(parent, CreateBox(new Vector3(0.28f, 0.05f, 3.2f), _verdantMaterial), new Vector3(0f, 0.15f, 0f));
+		AddMesh(parent, CreateSphere(0.22f, _verdantMaterial), new Vector3(-1.25f, 0.28f, -1.25f), new Vector3(1f, 0.45f, 1f));
+		AddMesh(parent, CreateSphere(0.18f, _verdantMaterial), new Vector3(1.4f, 0.25f, 1.05f), new Vector3(1f, 0.4f, 1f));
+	}
+
+	private static void BuildObsidianBeltWall(Node3D parent)
+	{
+		AddMesh(parent, CreateBox(new Vector3(4.0f, 3.0f, 0.38f), _obsidianMaterial), Vector3.Zero);
+		AddMesh(parent, CreateBox(new Vector3(3.4f, 0.14f, 0.42f), _signalRedMaterial), new Vector3(0f, 2.15f, 0f));
+		AddMesh(parent, CreateBox(new Vector3(0.22f, 2.4f, 0.44f), _goldMaterial), new Vector3(-1.45f, 0.2f, 0f));
+		AddMesh(parent, CreateBox(new Vector3(0.22f, 2.4f, 0.44f), _goldMaterial), new Vector3(1.45f, 0.2f, 0f));
+	}
+
+	private static void BuildCrystalVergeWall(Node3D parent)
+	{
+		AddMesh(parent, CreateBox(new Vector3(4.0f, 0.55f, 0.34f), _darkSteelMaterial), new Vector3(0f, -0.95f, 0f));
+		for (int i = 0; i < 5; i++)
+		{
+			float x = -1.6f + (i * 0.8f);
+			float height = 1.8f + ((i % 2) * 0.7f);
+			AddMesh(parent, CreateCylinder(0.22f, height, _crystalMaterial, 0.06f), new Vector3(x, height * 0.48f, 0f), Vector3.One, new Vector3(0f, 0f, i % 2 == 0 ? 8f : -8f));
+		}
+		AddMesh(parent, CreateBox(new Vector3(3.5f, 0.08f, 0.18f), _accentCyanMaterial), new Vector3(0f, 0.65f, 0.1f));
+	}
+
+	private static void BuildRiftBarrier(Node3D parent)
+	{
+		AddMesh(parent, CreateBox(new Vector3(4.0f, 0.22f, 0.32f), _darkSteelMaterial), new Vector3(0f, -0.95f, 0f));
+		AddMesh(parent, CreateBox(new Vector3(0.28f, 2.8f, 0.18f), _riftMaterial), new Vector3(-0.85f, 0.45f, 0f), Vector3.One, new Vector3(0f, 0f, -18f));
+		AddMesh(parent, CreateBox(new Vector3(0.22f, 2.3f, 0.18f), _riftMaterial), new Vector3(0.15f, 0.35f, 0.05f), Vector3.One, new Vector3(0f, 0f, 12f));
+		AddMesh(parent, CreateBox(new Vector3(0.18f, 2.0f, 0.18f), _riftMaterial), new Vector3(1.1f, 0.25f, 0f), Vector3.One, new Vector3(0f, 0f, -10f));
+	}
+
+	private static void BuildAetherwebRelayPylon(Node3D parent)
+	{
+		AddMesh(parent, CreateCylinder(1.0f, 0.35f, _darkSteelMaterial), new Vector3(0f, 0.18f, 0f));
+		AddMesh(parent, CreateCylinder(0.38f, 3.0f, _steelMaterial, 0.22f), new Vector3(0f, 1.65f, 0f));
+		AddMesh(parent, CreateSphere(0.52f, _accentCyanMaterial), new Vector3(0f, 3.35f, 0f));
+		AddMesh(parent, CreateBox(new Vector3(2.8f, 0.08f, 0.18f), _accentCyanMaterial), new Vector3(0f, 2.35f, 0f));
+		AddMesh(parent, CreateBox(new Vector3(0.18f, 0.08f, 2.8f), _accentCyanMaterial), new Vector3(0f, 2.35f, 0f));
+	}
+
+	private static void BuildNexusWoundCore(Node3D parent)
+	{
+		AddMesh(parent, CreateCylinder(1.25f, 0.28f, _obsidianMaterial), new Vector3(0f, 0.14f, 0f));
+		AddMesh(parent, CreateSphere(0.76f, _voidMaterial), new Vector3(0f, 1.35f, 0f));
+		AddMesh(parent, CreateCylinder(0.9f, 0.08f, _riftMaterial), new Vector3(0f, 1.35f, 0f), new Vector3(1f, 1f, 1f), new Vector3(90f, 0f, 0f));
+		AddMesh(parent, CreateCylinder(0.65f, 0.08f, _accentCyanMaterial), new Vector3(0f, 1.35f, 0f), new Vector3(1f, 1f, 1f), new Vector3(0f, 0f, 90f));
+	}
+
+	private static void BuildThronevaultDataShrine(Node3D parent)
+	{
+		AddMesh(parent, CreateBox(new Vector3(2.6f, 0.35f, 2.0f), _goldMaterial), new Vector3(0f, 0.18f, 0f));
+		AddMesh(parent, CreateBox(new Vector3(1.5f, 2.2f, 0.28f), _goldMaterial), new Vector3(0f, 1.25f, -0.72f));
+		AddMesh(parent, CreateBox(new Vector3(0.18f, 1.65f, 0.2f), _accentAmberMaterial), new Vector3(-0.45f, 1.35f, -0.53f));
+		AddMesh(parent, CreateBox(new Vector3(0.18f, 1.65f, 0.2f), _accentAmberMaterial), new Vector3(0f, 1.35f, -0.5f));
+		AddMesh(parent, CreateBox(new Vector3(0.18f, 1.65f, 0.2f), _accentAmberMaterial), new Vector3(0.45f, 1.35f, -0.53f));
+		AddMesh(parent, CreateSphere(0.38f, _glassMaterial), new Vector3(0f, 2.5f, -0.55f));
+	}
+
+	private static void BuildLuminousMythNode(Node3D parent)
+	{
+		AddMesh(parent, CreateCylinder(0.85f, 0.24f, _crystalMaterial), new Vector3(0f, 0.12f, 0f));
+		AddMesh(parent, CreateCylinder(0.36f, 2.8f, _crystalMaterial, 0.05f), new Vector3(0f, 1.55f, 0f), Vector3.One, new Vector3(0f, 0f, 6f));
+		AddMesh(parent, CreateSphere(0.42f, _accentCyanMaterial), new Vector3(0f, 3.1f, 0f));
+		AddMesh(parent, CreateBox(new Vector3(1.8f, 0.08f, 0.12f), _accentCyanMaterial), new Vector3(0f, 1.55f, 0f), Vector3.One, new Vector3(0f, 0f, 25f));
+		AddMesh(parent, CreateBox(new Vector3(1.8f, 0.08f, 0.12f), _accentAmberMaterial), new Vector3(0f, 1.95f, 0f), Vector3.One, new Vector3(0f, 0f, -25f));
+	}
+
+	private static void BuildEmberTerraformerCore(Node3D parent)
+	{
+		AddMesh(parent, CreateCylinder(1.05f, 0.35f, _darkSteelMaterial), new Vector3(0f, 0.18f, 0f));
+		AddMesh(parent, CreateSphere(0.72f, _emberMaterial), new Vector3(0f, 1.25f, 0f));
+		AddMesh(parent, CreateCylinder(0.18f, 2.2f, _steelMaterial), new Vector3(-0.9f, 1.1f, 0f), Vector3.One, new Vector3(0f, 0f, 22f));
+		AddMesh(parent, CreateCylinder(0.18f, 2.2f, _steelMaterial), new Vector3(0.9f, 1.1f, 0f), Vector3.One, new Vector3(0f, 0f, -22f));
+		AddMesh(parent, CreateBox(new Vector3(2.2f, 0.12f, 0.16f), _warningMaterial), new Vector3(0f, 2.2f, 0f));
+	}
+
+	private static void BuildObsidianTradeBeacon(Node3D parent)
+	{
+		AddMesh(parent, CreateCylinder(0.75f, 0.25f, _obsidianMaterial), new Vector3(0f, 0.13f, 0f));
+		AddMesh(parent, CreateBox(new Vector3(0.45f, 2.4f, 0.45f), _obsidianMaterial), new Vector3(0f, 1.3f, 0f));
+		AddMesh(parent, CreateBox(new Vector3(2.4f, 0.16f, 0.16f), _goldMaterial), new Vector3(0f, 1.9f, 0f));
+		AddMesh(parent, CreateBox(new Vector3(0.16f, 0.16f, 2.4f), _goldMaterial), new Vector3(0f, 1.55f, 0f));
+		AddMesh(parent, CreateSphere(0.28f, _signalRedMaterial), new Vector3(0f, 2.65f, 0f));
+	}
+
+	private static void BuildVerdantBiospherePod(Node3D parent)
+	{
+		AddMesh(parent, CreateCylinder(1.1f, 0.25f, _steelMaterial), new Vector3(0f, 0.13f, 0f));
+		AddMesh(parent, CreateSphere(0.98f, _bioglassMaterial), new Vector3(0f, 1.2f, 0f), new Vector3(1f, 1.25f, 1f));
+		AddMesh(parent, CreateSphere(0.42f, _verdantMaterial), new Vector3(-0.25f, 1.0f, 0.2f), new Vector3(1f, 0.7f, 1f));
+		AddMesh(parent, CreateCylinder(0.08f, 1.1f, _verdantMaterial), new Vector3(0.28f, 1.0f, -0.22f), Vector3.One, new Vector3(0f, 0f, 18f));
+		AddMesh(parent, CreateSphere(0.18f, _verdantMaterial), new Vector3(0.42f, 1.55f, -0.32f));
+	}
+
+	private static void BuildEchoSpiralTimeAnchor(Node3D parent)
+	{
+		AddMesh(parent, CreateCylinder(0.9f, 0.28f, _darkSteelMaterial), new Vector3(0f, 0.14f, 0f));
+		AddMesh(parent, CreateCylinder(0.16f, 2.7f, _steelMaterial), new Vector3(0f, 1.45f, 0f));
+		AddMesh(parent, CreateCylinder(1.1f, 0.08f, _riftMaterial), new Vector3(0f, 1.55f, 0f), Vector3.One, new Vector3(90f, 0f, 0f));
+		AddMesh(parent, CreateCylinder(0.78f, 0.08f, _accentCyanMaterial), new Vector3(0f, 1.95f, 0f), Vector3.One, new Vector3(90f, 35f, 0f));
+		AddMesh(parent, CreateSphere(0.26f, _accentAmberMaterial), new Vector3(0f, 2.45f, 0f));
+	}
+
+	private static void BuildFarSilenceProbe(Node3D parent)
+	{
+		AddMesh(parent, CreateCylinder(0.6f, 0.2f, _voidMaterial), new Vector3(0f, 0.1f, 0f));
+		AddMesh(parent, CreateCylinder(0.22f, 2.1f, _obsidianMaterial, 0.12f), new Vector3(0f, 1.15f, 0f));
+		AddMesh(parent, CreateSphere(0.36f, _glassMaterial), new Vector3(0f, 2.35f, 0f));
+		AddMesh(parent, CreateBox(new Vector3(2.6f, 0.08f, 0.18f), _darkSteelMaterial), new Vector3(0f, 1.45f, 0f), Vector3.One, new Vector3(0f, 25f, 0f));
+		AddMesh(parent, CreateBox(new Vector3(2.6f, 0.08f, 0.18f), _darkSteelMaterial), new Vector3(0f, 1.45f, 0f), Vector3.One, new Vector3(0f, -25f, 0f));
+	}
+
+	private static void BuildDistressLighthouse(Node3D parent)
+	{
+		AddMesh(parent, CreateCylinder(0.7f, 0.25f, _darkSteelMaterial), new Vector3(0f, 0.13f, 0f));
+		AddMesh(parent, CreateCylinder(0.2f, 2.6f, _steelMaterial), new Vector3(0f, 1.4f, 0f));
+		AddMesh(parent, CreateBox(new Vector3(1.1f, 0.18f, 1.1f), _darkSteelMaterial), new Vector3(0f, 2.72f, 0f));
+		AddMesh(parent, CreateSphere(0.42f, _signalRedMaterial), new Vector3(0f, 3.05f, 0f));
+		AddMesh(parent, CreateCylinder(1.4f, 0.05f, _signalRedMaterial), new Vector3(0f, 3.05f, 0f), Vector3.One, new Vector3(90f, 0f, 0f));
+	}
+
+	private static void BuildBrokenStargateArc(Node3D parent)
+	{
+		AddMesh(parent, CreateCylinder(1.45f, 0.22f, _darkSteelMaterial), new Vector3(0f, 0.11f, 0f));
+		AddMesh(parent, CreateCylinder(0.22f, 2.4f, _steelMaterial), new Vector3(-1.2f, 1.25f, 0f), Vector3.One, new Vector3(0f, 0f, -20f));
+		AddMesh(parent, CreateCylinder(0.22f, 2.4f, _steelMaterial), new Vector3(1.2f, 1.25f, 0f), Vector3.One, new Vector3(0f, 0f, 20f));
+		AddMesh(parent, CreateCylinder(0.22f, 2.35f, _steelMaterial), new Vector3(0f, 2.35f, 0f), Vector3.One, new Vector3(0f, 0f, 90f));
+		AddMesh(parent, CreateBox(new Vector3(0.18f, 1.3f, 0.12f), _accentCyanMaterial), new Vector3(-0.52f, 1.65f, 0.02f), Vector3.One, new Vector3(0f, 0f, -35f));
+		AddMesh(parent, CreateBox(new Vector3(0.14f, 1.0f, 0.12f), _riftMaterial), new Vector3(0.56f, 1.88f, 0.02f), Vector3.One, new Vector3(0f, 0f, 28f));
+	}
+
 	private static MeshInstance3D CreateBox(Vector3 size, Material material)
 	{
 		BoxMesh mesh = new BoxMesh { Size = size };
@@ -208,14 +451,30 @@ public static class Mission3DTileCatalog
 		};
 	}
 
-	private static MeshInstance3D CreateCylinder(float radius, float height, Material material)
+	private static MeshInstance3D CreateCylinder(float radius, float height, Material material, float? topRadius = null)
 	{
 		CylinderMesh mesh = new CylinderMesh
 		{
-			TopRadius = radius,
+			TopRadius = topRadius ?? radius,
 			BottomRadius = radius,
 			Height = height,
 			RadialSegments = 18
+		};
+		return new MeshInstance3D
+		{
+			Mesh = mesh,
+			MaterialOverride = material
+		};
+	}
+
+	private static MeshInstance3D CreateSphere(float radius, Material material)
+	{
+		SphereMesh mesh = new SphereMesh
+		{
+			Radius = radius,
+			Height = radius * 2f,
+			RadialSegments = 24,
+			Rings = 12
 		};
 		return new MeshInstance3D
 		{
@@ -244,6 +503,15 @@ public static class Mission3DTileCatalog
 		_glassMaterial ??= CreateEmissiveMaterial(new Color(0.18f, 0.82f, 0.94f), 2.1f, 0.45f);
 		_debrisMaterial ??= CreateMaterial(new Color(0.25f, 0.18f, 0.12f), 0.05f, 0.95f);
 		_outlineMaterial ??= CreateEmissiveMaterial(new Color(0.35f, 0.96f, 1.00f), 2.0f, 0.35f);
+		_voidMaterial ??= CreateEmissiveMaterial(new Color(0.05f, 0.03f, 0.10f), 0.8f);
+		_obsidianMaterial ??= CreateMaterial(new Color(0.04f, 0.04f, 0.06f), 0.35f, 0.52f);
+		_crystalMaterial ??= CreateEmissiveMaterial(new Color(0.58f, 0.86f, 1.00f), 1.5f, 0.62f);
+		_riftMaterial ??= CreateEmissiveMaterial(new Color(0.62f, 0.22f, 1.00f), 2.0f, 0.72f);
+		_emberMaterial ??= CreateEmissiveMaterial(new Color(1.00f, 0.28f, 0.08f), 2.2f);
+		_verdantMaterial ??= CreateEmissiveMaterial(new Color(0.22f, 0.95f, 0.42f), 1.35f);
+		_bioglassMaterial ??= CreateEmissiveMaterial(new Color(0.36f, 0.95f, 0.75f), 1.1f, 0.38f);
+		_signalRedMaterial ??= CreateEmissiveMaterial(new Color(1.00f, 0.08f, 0.05f), 2.6f);
+		_goldMaterial ??= CreateMaterial(new Color(0.78f, 0.58f, 0.24f), 0.4f, 0.35f);
 	}
 
 	private static StandardMaterial3D CreateMaterial(Color albedo, float metallic, float roughness)

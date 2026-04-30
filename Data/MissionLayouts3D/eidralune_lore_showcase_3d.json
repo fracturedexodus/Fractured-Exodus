@@ -1,0 +1,173 @@
+[
+	{
+		"tile_id": "floor_aetherweb",
+		"grid_x": 0,
+		"grid_z": 0,
+		"offset_x": 0.0,
+		"offset_y": 0.0,
+		"offset_z": 0.0,
+		"rotation_degrees": 0.0
+	},
+	{
+		"tile_id": "floor_shattered_reach",
+		"grid_x": -1,
+		"grid_z": 0,
+		"offset_x": 0.0,
+		"offset_y": 0.0,
+		"offset_z": 0.0,
+		"rotation_degrees": 0.0
+	},
+	{
+		"tile_id": "floor_ember_waste",
+		"grid_x": 1,
+		"grid_z": 0,
+		"offset_x": 0.0,
+		"offset_y": 0.0,
+		"offset_z": 0.0,
+		"rotation_degrees": 0.0
+	},
+	{
+		"tile_id": "floor_verdant_shroud",
+		"grid_x": 0,
+		"grid_z": 1,
+		"offset_x": 0.0,
+		"offset_y": 0.0,
+		"offset_z": 0.0,
+		"rotation_degrees": 0.0
+	},
+	{
+		"tile_id": "floor_panel",
+		"grid_x": 0,
+		"grid_z": -1,
+		"offset_x": 0.0,
+		"offset_y": 0.0,
+		"offset_z": 0.0,
+		"rotation_degrees": 0.0
+	},
+	{
+		"tile_id": "nexus_wound_core",
+		"grid_x": 0,
+		"grid_z": 0,
+		"offset_x": 0.0,
+		"offset_y": 0.0,
+		"offset_z": 0.0,
+		"rotation_degrees": 0.0
+	},
+	{
+		"tile_id": "aetherweb_relay_pylon",
+		"grid_x": 0,
+		"grid_z": -1,
+		"offset_x": -0.6,
+		"offset_y": 0.0,
+		"offset_z": 0.0,
+		"rotation_degrees": 0.0
+	},
+	{
+		"tile_id": "broken_stargate_arc",
+		"grid_x": -1,
+		"grid_z": 0,
+		"offset_x": 0.25,
+		"offset_y": 0.0,
+		"offset_z": 0.0,
+		"rotation_degrees": -20.0
+	},
+	{
+		"tile_id": "ember_terraformer_core",
+		"grid_x": 1,
+		"grid_z": 0,
+		"offset_x": 0.0,
+		"offset_y": 0.0,
+		"offset_z": 0.0,
+		"rotation_degrees": 0.0
+	},
+	{
+		"tile_id": "verdant_biosphere_pod",
+		"grid_x": 0,
+		"grid_z": 1,
+		"offset_x": 0.0,
+		"offset_y": 0.0,
+		"offset_z": 0.0,
+		"rotation_degrees": 0.0
+	},
+	{
+		"tile_id": "luminous_myth_node",
+		"grid_x": -1,
+		"grid_z": -1,
+		"offset_x": 0.0,
+		"offset_y": 0.0,
+		"offset_z": 0.0,
+		"rotation_degrees": 0.0
+	},
+	{
+		"tile_id": "echo_spiral_time_anchor",
+		"grid_x": 1,
+		"grid_z": -1,
+		"offset_x": 0.0,
+		"offset_y": 0.0,
+		"offset_z": 0.0,
+		"rotation_degrees": 20.0
+	},
+	{
+		"tile_id": "obsidian_trade_beacon",
+		"grid_x": -1,
+		"grid_z": 1,
+		"offset_x": 0.0,
+		"offset_y": 0.0,
+		"offset_z": 0.0,
+		"rotation_degrees": -25.0
+	},
+	{
+		"tile_id": "far_silence_probe",
+		"grid_x": 1,
+		"grid_z": 1,
+		"offset_x": 0.0,
+		"offset_y": 0.0,
+		"offset_z": 0.0,
+		"rotation_degrees": 35.0
+	},
+	{
+		"tile_id": "distress_lighthouse",
+		"grid_x": -2,
+		"grid_z": 0,
+		"offset_x": 0.0,
+		"offset_y": 0.0,
+		"offset_z": 0.0,
+		"rotation_degrees": 0.0
+	},
+	{
+		"tile_id": "thronevault_data_shrine",
+		"grid_x": 2,
+		"grid_z": 0,
+		"offset_x": 0.0,
+		"offset_y": 0.0,
+		"offset_z": 0.0,
+		"rotation_degrees": 0.0
+	},
+	{
+		"tile_id": "wall_obsidian_belt",
+		"grid_x": -2,
+		"grid_z": -1,
+		"offset_x": 0.0,
+		"offset_y": 0.0,
+		"offset_z": 0.0,
+		"rotation_degrees": 0.0
+	},
+	{
+		"tile_id": "wall_crystal_verge",
+		"grid_x": 0,
+		"grid_z": -2,
+		"offset_x": 0.0,
+		"offset_y": 0.0,
+		"offset_z": 0.0,
+		"rotation_degrees": 0.0
+	},
+	{
+		"tile_id": "wall_rift_barrier",
+		"grid_x": 2,
+		"grid_z": -1,
+		"offset_x": 0.0,
+		"offset_y": 0.0,
+		"offset_z": 0.0,
+		"rotation_degrees": 0.0
+	}
+]
