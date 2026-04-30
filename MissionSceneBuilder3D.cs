@@ -203,6 +203,7 @@ public partial class MissionSceneBuilder3D : Node3D
 		GetNode<Button>("UILayer/TopBar/Margin/TopRow/SaveButton").Pressed += SaveLayout;
 		GetNode<Button>("UILayer/TopBar/Margin/TopRow/LoadButton").Pressed += LoadLayout;
 		GetNode<Button>("UILayer/TopBar/Margin/TopRow/ClearButton").Pressed += ClearLayout;
+		GetNode<Button>("UILayer/TopBar/Margin/TopRow/ExitButton").Pressed += ExitBuilder;
 	}
 
 	private void BuildPalette()
@@ -294,7 +295,7 @@ public partial class MissionSceneBuilder3D : Node3D
 		}
 
 		Vector2I cell = GetMouseCell();
-		_hoverCell.Position = new Vector3(cell.X * CellSize, 0.03f, cell.Y * CellSize);
+		_hoverCell.Position = GetCellCenter(cell) + new Vector3(0f, 0.03f, 0f);
 	}
 
 	private Vector2I GetMouseCell()
@@ -305,9 +306,14 @@ public partial class MissionSceneBuilder3D : Node3D
 			return Vector2I.Zero;
 		}
 
-		int x = Mathf.RoundToInt(point.Value.X / CellSize);
-		int z = Mathf.RoundToInt(point.Value.Z / CellSize);
+		int x = Mathf.FloorToInt(point.Value.X / CellSize);
+		int z = Mathf.FloorToInt(point.Value.Z / CellSize);
 		return new Vector2I(x, z);
+	}
+
+	private Vector3 GetCellCenter(Vector2I cell)
+	{
+		return new Vector3((cell.X + 0.5f) * CellSize, 0f, (cell.Y + 0.5f) * CellSize);
 	}
 
 	private (Vector3? point, Node collider) GetMousePlaneIntersection()
@@ -408,7 +414,7 @@ public partial class MissionSceneBuilder3D : Node3D
 			tile.GetMeta("offset_y", 0f).AsSingle(),
 			tile.GetMeta("offset_z", 0f).AsSingle());
 
-		tile.Position = new Vector3(cell.X * CellSize, 0f, cell.Y * CellSize) + definition.DefaultOffset + adjustment;
+		tile.Position = GetCellCenter(cell) + definition.DefaultOffset + adjustment;
 		tile.SetMeta("grid_x", cell.X);
 		tile.SetMeta("grid_z", cell.Y);
 		UpdateSelectedLabel();
@@ -602,6 +608,11 @@ public partial class MissionSceneBuilder3D : Node3D
 		{
 			child.QueueFree();
 		}
+	}
+
+	private void ExitBuilder()
+	{
+		GetTree().Quit();
 	}
 
 	private string GetLayoutAbsolutePath()
