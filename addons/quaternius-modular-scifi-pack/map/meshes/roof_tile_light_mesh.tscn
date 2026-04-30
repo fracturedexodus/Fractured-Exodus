@@ -1,0 +1,34 @@
+[gd_scene format=4]
+
+[ext_resource type="Material" path="res://addons/quaternius-modular-scifi-pack/materials/roof_light_material.tres" id="1"]
+[ext_resource type="Material" path="res://addons/quaternius-modular-scifi-pack/materials/main_material.tres" id="2"]
+
+[sub_resource type="ArrayMesh" id="1"]
+resource_name = "RoofTile_Empty_Plane119"
+_surfaces = [{
+"aabb": AABB(-1, -0.00423224, -1, 2, 0.0773379, 2),
+"format": 34359742467,
+"index_count": 198,
+"index_data": PackedByteArray("BAB3AAoABAB0AHcAFgApABoAFgAlACkADwAjABMADwAfACMAEAAYAAwAEAAUABgAHQAyACEAHQAuADIAPABOAEAAPABKAE4ALAA+ADAALAA6AD4AJwA5ACsAJwA2ADkANQBGADgANQBDAEYASABWAEwASABUAFYARABTAEcARABRAFMAAQBaAF0AAQADAFoAEgAVABEAEgAgABUADQAcAA4ADQAZABwAMQA0ACQAMQA/ADQAIgAmABcAIgAzACYAGwAvAB4AGwAqAC8AKAA7AC0AKAA3ADsATQBQAEIATQBXAFAAQQBDADUAQQBPAEMAOABLAD0AOABGAEsARQBVAEkARQBSAFUACQBfAFgACQAHAF8ABgBcAF4ABgAAAFwABQBZAFsABQALAFkAdgBpAGwAdgBhAGkAbgBoAHEAbgBrAGgAcgBgAHUAcgBjAGAAZwBiAGUAZwBqAGIAbwBkAHMAbwBmAGQACABwAAIACABtAHAACgBtAAgACgB3AG0AAgB0AAQAAgBwAHQA"),
+"material": ExtResource("2"),
+"name": "Main",
+"primitive": 3,
+"uv_scale": Vector4(0, 0, 0, 0),
+"vertex_count": 120,
+"vertex_data": PackedByteArray("kLN7v7poOz2Ps3s/kLN7v7poOz2Ps3s/kLN7v7poOz2Ps3s/kLN7P7poOz2Ps3s/kLN7P7poOz2Ps3s/kLN7P7poOz2Ps3s/kLN7v7poOz2Ps3u/kLN7v7poOz2Ps3u/kLN7v7poOz2Ps3u/kLN7P7poOz2Ps3u/kLN7P7poOz2Ps3u/kLN7P7poOz2Ps3u/kI5yvyjiUzySjnI/kI5yvyjiUzySjnI/kI5yPyjiUzySjnI/kI5yPyjiUzySjnI/kI5yvyjiUzySjnK/kI5yvyjiUzySjnK/kI5yPyjiUzySjnK/kI5yPyjiUzySjnK/kI5yv224lT2SjnK/kI5yv224lT2SjnK/kI5yv224lT2SjnK/kI5yv224lT2SjnK/kI5yv224lT2SjnI/kI5yv224lT2SjnI/kI5yv224lT2SjnI/kI5yv224lT2SjnI/kI5yP224lT2SjnI/kI5yP224lT2SjnI/kI5yP224lT2SjnI/kI5yP224lT2SjnI/kI5yP224lT2SjnK/kI5yP224lT2SjnK/kI5yP224lT2SjnK/kI5yP224lT2SjnK/sJFsv224lT2zkWy/sJFsv224lT2zkWy/sJFsv224lT2zkWy/sJFsv224lT2zkWy/sJFsv224lT2zkWw/sJFsv224lT2zkWw/sJFsv224lT2zkWw/sJFsv224lT2zkWw/sJFsP224lT2zkWw/sJFsP224lT2zkWw/sJFsP224lT2zkWw/sJFsP224lT2zkWw/sJFsP224lT2zkWy/sJFsP224lT2zkWy/sJFsP224lT2zkWy/sJFsP224lT2zkWy/+HJmv8pscz34cma/+HJmv8pscz34cma/+HJmv8pscz34cma/+HJmv8pscz34cmY/+HJmv8pscz34cmY/+HJmv8pscz34cmY/8HJmP8pscz34cmY/8HJmP8pscz34cmY/8HJmP8pscz34cmY/8HJmP8pscz34cmY/8HJmP8pscz34cma/8HJmP8pscz34cma/8HJmP8pscz34cma/8HJmP8pscz34cma/4CdZv8pscz3kJ1m/4CdZv8pscz3kJ1m/4CdZv8pscz3kJ1m/4CdZv8pscz3kJ1k/4CdZv8pscz3kJ1k/4CdZv8pscz3kJ1k/4CdZP8pscz3kJ1k/4CdZP8pscz3kJ1k/4CdZP8pscz3kJ1k/4CdZP8pscz3kJ1k/4CdZP8pscz3kJ1m/4CdZP8pscz3kJ1m/4CdZP8pscz3kJ1m/4CdZP8pscz3kJ1m/OKpRv6ZYCD03qlG/OKpRv6ZYCD03qlG/OKpRv6ZYCD03qlE/OKpRv6ZYCD03qlE/MKpRP6ZYCD03qlE/MKpRP6ZYCD03qlE/MKpRP6ZYCD03qlG/MKpRP6ZYCD03qlG/AACAPwAAAAAAAIC/AACAPwAAAAAAAIC/AACAPwAAAAAAAIA/AACAPwAAAAAAAIA/AACAvwAAAAAAAIA/AACAvwAAAAAAAIA/AACAvwAAAAAAAIC/AACAvwAAAAAAAIC/ObxoP5Cuirs5vGi/ObxoP5Cuirs5vGi/ObxoP5Cuirs5vGi/ObxoP5Cuirs5vGg/ObxoP5Cuirs5vGg/ObxoP5Cuirs5vGg/Obxov5Cuirs5vGg/Obxov5Cuirs5vGg/Obxov5Cuirs5vGg/Obxov5Cuirs5vGi/Obxov5Cuirs5vGi/Obxov5Cuirs5vGi/7Jpvv7poOz3smm+/7Jpvv7poOz3smm+/7Jpvv7poOz3smm+/7Jpvv7poOz3smm8/7Jpvv7poOz3smm8/7Jpvv7poOz3smm8/7JpvP7poOz3smm8/7JpvP7poOz3smm8/7JpvP7poOz3smm8/7JpvP7poOz3smm+/7JpvP7poOz3smm+/7JpvP7poOz3smm+/XqJcIgAAXCIAAP9/AABcIgAA/3+iXVwiXqJcIqJd/38AAP9/ol3/fwAA/3+iXVwiAYAAAAAAAAAAAAAA/38AAAGAAAD/f/9//3//f/9/AAABgAAA/3//fwAA/38AAP9/AYAAAAAAAAAAAP9/AAD/fwAAAAAAAP9/AAD/f/9/AAD/f/9/AAD/fwAA/3//fwAAAABrUQAA/38AAP9/ky5rUZMu/38AAP9/AAD/f5Mua1Ft0WtRky7/fwAA/38AAP9/bdFrUQAAa1EAAP9/AAD/fwAAa1EAAP9/ky5rUZMu/38AAP9/ky5rUW3Ra1GTLv9/AAD/fwAA/39t0WtRAABrUQAA/38AAP9/AACZQwAA/39lPJlDZTz/fwAA/39lPJlDm8OZQ2U8/38AAP9/AAD/f5vDmUMAAJlDAAD/fwAA/38AAJlDZTyZQ2U8/39lPJlDm8OZQ2U8/3+bw5lDAACZQ6Jd/3+iXVwiAABcIqJdXCJeolwiAABcIl6iXCKiXf9/uKy2LAAAtiwAAP9/uKy2LEhT/38AAP9/SFP/fwAA/39IU7YsAAC2LAAA/39IU7YsAAC2LAAA/39IU7YsSFP/fwAA/39IU7YsuKy2LEhT/38AAP9/uKy2LAAAtiwAAP9/")
+}, {
+"aabb": AABB(-0.819004, 0.0332877, -0.819004, 1.63801, 9.99868e-06, 1.63801),
+"format": 34359742467,
+"index_count": 6,
+"index_data": PackedByteArray("AAACAAEAAAADAAIA"),
+"material": ExtResource("1"),
+"name": "RoofLight",
+"primitive": 3,
+"uv_scale": Vector4(0, 0, 0, 0),
+"vertex_count": 4,
+"vertex_data": PackedByteArray("OKpRv6ZYCD03qlG/OKpRv6ZYCD03qlE/MKpRP6ZYCD03qlE/MKpRP6ZYCD03qlG/AAD/fwAA/38AAP9/AAD/fw==")
+}]
+
+[node name="RoofTileLightMesh" type="MeshInstance"]
+use_in_baked_light = true
+mesh = SubResource("1")

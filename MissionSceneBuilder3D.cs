@@ -21,6 +21,7 @@ public partial class MissionSceneBuilder3D : Node3D
 	private VBoxContainer _paletteContainer;
 	private Label _statusLabel;
 	private LineEdit _layoutNameEdit;
+	private OptionButton _skinOption;
 	private Label _selectedLabel;
 	private Mission3DTileDefinition _selectedDefinition;
 	private Node3D _selectedPlacedTile;
@@ -39,8 +40,10 @@ public partial class MissionSceneBuilder3D : Node3D
 		_paletteContainer = GetNode<VBoxContainer>("UILayer/PalettePanel/Margin/PaletteScroll/PaletteList");
 		_statusLabel = GetNode<Label>("UILayer/BottomBar/Margin/StatusLabel");
 		_layoutNameEdit = GetNode<LineEdit>("UILayer/TopBar/Margin/TopRow/LayoutNameEdit");
+		_skinOption = GetNode<OptionButton>("UILayer/TopBar/Margin/TopRow/SkinOption");
 		_selectedLabel = GetNode<Label>("UILayer/TopBar/Margin/TopRow/SelectedTileLabel");
 
+		BuildSkinOptions();
 		BuildPalette();
 		BuildGrid();
 		BuildHoverCell();
@@ -204,6 +207,32 @@ public partial class MissionSceneBuilder3D : Node3D
 		GetNode<Button>("UILayer/TopBar/Margin/TopRow/LoadButton").Pressed += LoadLayout;
 		GetNode<Button>("UILayer/TopBar/Margin/TopRow/ClearButton").Pressed += ClearLayout;
 		GetNode<Button>("UILayer/TopBar/Margin/TopRow/ExitButton").Pressed += ExitBuilder;
+		_skinOption.ItemSelected += OnSkinSelected;
+	}
+
+	private void BuildSkinOptions()
+	{
+		_skinOption.Clear();
+		foreach (Mission3DSkinDefinition skin in Mission3DTileCatalog.AllSkins)
+		{
+			_skinOption.AddItem(skin.DisplayName);
+			_skinOption.SetItemMetadata(_skinOption.ItemCount - 1, skin.Id);
+		}
+		_skinOption.Select(0);
+	}
+
+	private void OnSkinSelected(long index)
+	{
+		if (_selectedPlacedTile == null)
+		{
+			UpdateSelectedLabel();
+			return;
+		}
+
+		string skinId = GetSelectedSkinId();
+		Mission3DTileCatalog.ApplySkin(_selectedPlacedTile, skinId);
+		SetStatus($"Applied {GetSelectedSkinName()} skin to {_selectedPlacedTile.GetMeta("tile_id", "").AsString()}.");
+		UpdateSelectedLabel();
 	}
 
 	private void BuildPalette()
@@ -343,6 +372,16 @@ public partial class MissionSceneBuilder3D : Node3D
 			Node3D tileRoot = GetTileRootFromCollider(collider);
 			if (tileRoot != null)
 			{
+				if (ShouldPlaceSelectedOnTile(tileRoot))
+				{
+					Vector2I floorCell = GetTileCell(tileRoot);
+					Node3D stackedTile = CreatePlacedTile(_selectedDefinition, floorCell, Vector3.Zero, 0f, GetSelectedSkinId());
+					_placementRoot.AddChild(stackedTile);
+					SelectPlacedTile(stackedTile);
+					SetStatus($"Placed {_selectedDefinition.DisplayName} on floor at {floorCell.X},{floorCell.Y}");
+					return;
+				}
+
 				SelectPlacedTile(tileRoot);
 				_draggedTile = tileRoot;
 				_draggedCell = GetMouseCell();
@@ -357,10 +396,38 @@ public partial class MissionSceneBuilder3D : Node3D
 		}
 
 		Vector2I cell = GetMouseCell();
-		Node3D tile = CreatePlacedTile(_selectedDefinition, cell, Vector3.Zero, 0f);
+		Node3D tile = CreatePlacedTile(_selectedDefinition, cell, Vector3.Zero, 0f, GetSelectedSkinId());
 		_placementRoot.AddChild(tile);
 		SelectPlacedTile(tile);
-		SetStatus($"Placed {_selectedDefinition.DisplayName} at {cell.X},{cell.Y}");
+		SetStatus($"Placed {_selectedDefinition.DisplayName} with {GetSelectedSkinName()} skin at {cell.X},{cell.Y}");
+	}
+
+	private bool ShouldPlaceSelectedOnTile(Node3D tileRoot)
+	{
+		if (_selectedDefinition == null || _selectedDefinition.Category == MissionTileCategory.Floor)
+		{
+			return false;
+		}
+
+		if (!TryGetPlacedTileDefinition(tileRoot, out Mission3DTileDefinition clickedDefinition))
+		{
+			return false;
+		}
+
+		return clickedDefinition.Category == MissionTileCategory.Floor;
+	}
+
+	private static bool TryGetPlacedTileDefinition(Node3D tile, out Mission3DTileDefinition definition)
+	{
+		string tileId = tile.GetMeta("tile_id", "").AsString();
+		return Mission3DTileCatalog.TryGetById(tileId, out definition);
+	}
+
+	private static Vector2I GetTileCell(Node3D tile)
+	{
+		return new Vector2I(
+			tile.GetMeta("grid_x", 0).AsInt32(),
+			tile.GetMeta("grid_z", 0).AsInt32());
 	}
 
 	private void DeleteTileAtMouse()
@@ -383,13 +450,25 @@ public partial class MissionSceneBuilder3D : Node3D
 
 	private static Node3D GetTileRootFromCollider(Node collider)
 	{
-		return collider?.GetParent() as Node3D;
+		Node current = collider;
+		while (current != null)
+		{
+			if (current is Node3D node3d && node3d.HasMeta("tile_id"))
+			{
+				return node3d;
+			}
+
+			current = current.GetParent();
+		}
+
+		return null;
 	}
 
-	private Node3D CreatePlacedTile(Mission3DTileDefinition definition, Vector2I cell, Vector3 adjustment, float yawDegrees)
+	private Node3D CreatePlacedTile(Mission3DTileDefinition definition, Vector2I cell, Vector3 adjustment, float yawDegrees, string skinId)
 	{
-		Node3D tile = Mission3DTileCatalog.CreateTileNode(definition);
+		Node3D tile = Mission3DTileCatalog.CreateTileNode(definition, skinId);
 		tile.SetMeta("tile_id", definition.Id);
+		tile.SetMeta("skin_id", skinId);
 		tile.SetMeta("grid_x", cell.X);
 		tile.SetMeta("grid_z", cell.Y);
 		tile.SetMeta("offset_x", adjustment.X);
@@ -502,15 +581,17 @@ public partial class MissionSceneBuilder3D : Node3D
 		if (_selectedPlacedTile != null)
 		{
 			string tileId = _selectedPlacedTile.GetMeta("tile_id", "").AsString();
+			string skinId = _selectedPlacedTile.GetMeta("skin_id", "default").AsString();
 			int x = _selectedPlacedTile.GetMeta("grid_x", 0).AsInt32();
 			int z = _selectedPlacedTile.GetMeta("grid_z", 0).AsInt32();
-			_selectedLabel.Text = $"Tile: {tileId} @ {x},{z}";
+			string skinName = Mission3DTileCatalog.TryGetSkinById(skinId, out Mission3DSkinDefinition skin) ? skin.DisplayName : "Default";
+			_selectedLabel.Text = $"Tile: {tileId} / {skinName} @ {x},{z}";
 			return;
 		}
 
 		_selectedLabel.Text = _selectedDefinition == null
 			? "Palette: None"
-			: $"Palette: {_selectedDefinition.DisplayName}";
+			: $"Palette: {_selectedDefinition.DisplayName} / {GetSelectedSkinName()}";
 	}
 
 	private void SaveLayout()
@@ -535,6 +616,7 @@ public partial class MissionSceneBuilder3D : Node3D
 			items.Add(new Godot.Collections.Dictionary<string, Variant>
 			{
 				{ "tile_id", tile.GetMeta("tile_id", "").AsString() },
+				{ "skin_id", tile.GetMeta("skin_id", "default").AsString() },
 				{ "grid_x", tile.GetMeta("grid_x", 0).AsInt32() },
 				{ "grid_z", tile.GetMeta("grid_z", 0).AsInt32() },
 				{ "offset_x", tile.GetMeta("offset_x", 0f).AsSingle() },
@@ -576,6 +658,7 @@ public partial class MissionSceneBuilder3D : Node3D
 		{
 			Godot.Collections.Dictionary tile = tileVariant.AsGodotDictionary();
 			string tileId = tile.TryGetValue("tile_id", out Variant tileIdVariant) ? tileIdVariant.AsString() : "";
+			string skinId = tile.TryGetValue("skin_id", out Variant skinIdVariant) ? skinIdVariant.AsString() : "default";
 			int gridX = tile.TryGetValue("grid_x", out Variant gridXVariant) ? gridXVariant.AsInt32() : 0;
 			int gridZ = tile.TryGetValue("grid_z", out Variant gridZVariant) ? gridZVariant.AsInt32() : 0;
 			float offsetX = tile.TryGetValue("offset_x", out Variant offsetXVariant) ? offsetXVariant.AsSingle() : 0f;
@@ -588,7 +671,7 @@ public partial class MissionSceneBuilder3D : Node3D
 				continue;
 			}
 
-			Node3D placed = CreatePlacedTile(definition, new Vector2I(gridX, gridZ), new Vector3(offsetX, offsetY, offsetZ), rotationDegrees);
+			Node3D placed = CreatePlacedTile(definition, new Vector2I(gridX, gridZ), new Vector3(offsetX, offsetY, offsetZ), rotationDegrees, skinId);
 			_placementRoot.AddChild(placed);
 		}
 
@@ -613,6 +696,23 @@ public partial class MissionSceneBuilder3D : Node3D
 	private void ExitBuilder()
 	{
 		GetTree().Quit();
+	}
+
+	private string GetSelectedSkinId()
+	{
+		int selected = _skinOption.Selected;
+		if (selected < 0)
+		{
+			return "default";
+		}
+
+		return _skinOption.GetItemMetadata(selected).AsString();
+	}
+
+	private string GetSelectedSkinName()
+	{
+		int selected = _skinOption.Selected;
+		return selected < 0 ? "Default" : _skinOption.GetItemText(selected);
 	}
 
 	private string GetLayoutAbsolutePath()

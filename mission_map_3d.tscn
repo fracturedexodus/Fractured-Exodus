@@ -1,0 +1,120 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://MissionMap3D.cs" id="1_mission3d"]
+
+[sub_resource type="Environment" id="1_env"]
+background_mode = 1
+background_color = Color(0.027451, 0.0352941, 0.054902, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.54, 0.6, 0.68, 1)
+ambient_light_energy = 0.95
+tonemap_mode = 2
+
+[node name="MissionMap3D" type="Node3D"]
+script = ExtResource("1_mission3d")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("1_env")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+position = Vector3(0, 14, 0)
+rotation = Vector3(-0.872665, 0.785398, 0)
+light_energy = 1.8
+shadow_enabled = true
+
+[node name="CameraRig" type="Node3D" parent="."]
+
+[node name="Camera3D" type="Camera3D" parent="CameraRig"]
+projection = 1
+size = 34.0
+near = 0.1
+far = 500.0
+position = Vector3(0, 48, 48)
+current = true
+
+[node name="World" type="Node3D" parent="."]
+
+[node name="GridRoot" type="Node3D" parent="World"]
+
+[node name="PlacementRoot" type="Node3D" parent="World"]
+
+[node name="OfficerRoot" type="Node3D" parent="World"]
+
+[node name="UILayer" type="CanvasLayer" parent="."]
+
+[node name="TopLeftPanel" type="PanelContainer" parent="UILayer"]
+offset_left = 18.0
+offset_top = 18.0
+offset_right = 520.0
+offset_bottom = 218.0
+
+[node name="Margin" type="MarginContainer" parent="UILayer/TopLeftPanel"]
+theme_override_constants/margin_left = 14
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 14
+theme_override_constants/margin_bottom = 12
+
+[node name="Content" type="VBoxContainer" parent="UILayer/TopLeftPanel/Margin"]
+
+[node name="TitleLabel" type="Label" parent="UILayer/TopLeftPanel/Margin/Content"]
+theme_override_font_sizes/font_size = 22
+text = "BLACK SITE RELAY"
+
+[node name="ObjectiveLabel" type="Label" parent="UILayer/TopLeftPanel/Margin/Content"]
+autowrap_mode = 3
+text = "Investigate the relay, assess the survivors, and decide what to save."
+
+[node name="SelectedOfficerLabel" type="Label" parent="UILayer/TopLeftPanel/Margin/Content"]
+autowrap_mode = 3
+text = "ACTIVE OFFICER: None assigned"
+
+[node name="StatusLabel" type="Label" parent="UILayer/TopLeftPanel/Margin/Content"]
+autowrap_mode = 3
+text = "Loading 3D mission."
+
+[node name="BottomRightPanel" type="PanelContainer" parent="UILayer"]
+offset_left = 1450.0
+offset_top = 812.0
+offset_right = 1902.0
+offset_bottom = 1062.0
+
+[node name="Margin" type="MarginContainer" parent="UILayer/BottomRightPanel"]
+theme_override_constants/margin_left = 14
+theme_override_constants/margin_top = 14
+theme_override_constants/margin_right = 14
+theme_override_constants/margin_bottom = 14
+
+[node name="ButtonStack" type="VBoxContainer" parent="UILayer/BottomRightPanel/Margin"]
+
+[node name="SaveSurvivorsButton" type="Button" parent="UILayer/BottomRightPanel/Margin/ButtonStack"]
+custom_minimum_size = Vector2(0, 48)
+text = "Save Survivors"
+
+[node name="SecureArchiveButton" type="Button" parent="UILayer/BottomRightPanel/Margin/ButtonStack"]
+custom_minimum_size = Vector2(0, 48)
+text = "Secure Archive"
+
+[node name="ReturnButton" type="Button" parent="UILayer/BottomRightPanel/Margin/ButtonStack"]
+custom_minimum_size = Vector2(0, 48)
+text = "Return"
+
+[node name="ControlsPanel" type="PanelContainer" parent="UILayer"]
+offset_left = 1450.0
+offset_top = 18.0
+offset_right = 1902.0
+offset_bottom = 210.0
+
+[node name="Margin" type="MarginContainer" parent="UILayer/ControlsPanel"]
+theme_override_constants/margin_left = 14
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 14
+theme_override_constants/margin_bottom = 12
+
+[node name="ControlsText" type="Label" parent="UILayer/ControlsPanel/Margin"]
+autowrap_mode = 3
+text = "3D MISSION CONTROLS
+Left Click: move selected officer
+TAB: switch officer
+Mouse Wheel or +/-: zoom
+Middle Mouse Drag or WASD: move camera
+ESC: return"

@@ -1,6 +1,7 @@
 [
 	{
 		"tile_id": "floor_aetherweb",
+		"skin_id": "aetherweb",
 		"grid_x": 0,
 		"grid_z": 0,
 		"offset_x": 0.0,
@@ -10,6 +11,7 @@
 	},
 	{
 		"tile_id": "floor_shattered_reach",
+		"skin_id": "echo_rift",
 		"grid_x": -1,
 		"grid_z": 0,
 		"offset_x": 0.0,
@@ -19,6 +21,7 @@
 	},
 	{
 		"tile_id": "floor_ember_waste",
+		"skin_id": "ember_wastes",
 		"grid_x": 1,
 		"grid_z": 0,
 		"offset_x": 0.0,
@@ -28,6 +31,7 @@
 	},
 	{
 		"tile_id": "floor_verdant_shroud",
+		"skin_id": "verdant_shroud",
 		"grid_x": 0,
 		"grid_z": 1,
 		"offset_x": 0.0,
@@ -37,6 +41,7 @@
 	},
 	{
 		"tile_id": "floor_panel",
+		"skin_id": "default",
 		"grid_x": 0,
 		"grid_z": -1,
 		"offset_x": 0.0,
@@ -46,6 +51,7 @@
 	},
 	{
 		"tile_id": "nexus_wound_core",
+		"skin_id": "echo_rift",
 		"grid_x": 0,
 		"grid_z": 0,
 		"offset_x": 0.0,
@@ -55,6 +61,7 @@
 	},
 	{
 		"tile_id": "aetherweb_relay_pylon",
+		"skin_id": "aetherweb",
 		"grid_x": 0,
 		"grid_z": -1,
 		"offset_x": 0.0,
@@ -64,6 +71,7 @@
 	},
 	{
 		"tile_id": "broken_stargate_arc",
+		"skin_id": "aetherweb",
 		"grid_x": -1,
 		"grid_z": 0,
 		"offset_x": 0.0,
@@ -73,6 +81,7 @@
 	},
 	{
 		"tile_id": "ember_terraformer_core",
+		"skin_id": "ember_wastes",
 		"grid_x": 1,
 		"grid_z": 0,
 		"offset_x": 0.0,
@@ -82,6 +91,7 @@
 	},
 	{
 		"tile_id": "verdant_biosphere_pod",
+		"skin_id": "verdant_shroud",
 		"grid_x": 0,
 		"grid_z": 1,
 		"offset_x": 0.0,
@@ -91,6 +101,7 @@
 	},
 	{
 		"tile_id": "luminous_myth_node",
+		"skin_id": "luminous_verge",
 		"grid_x": -1,
 		"grid_z": -1,
 		"offset_x": 0.0,
@@ -100,6 +111,7 @@
 	},
 	{
 		"tile_id": "echo_spiral_time_anchor",
+		"skin_id": "echo_rift",
 		"grid_x": 1,
 		"grid_z": -1,
 		"offset_x": 0.0,
@@ -109,6 +121,7 @@
 	},
 	{
 		"tile_id": "obsidian_trade_beacon",
+		"skin_id": "obsidian_belt",
 		"grid_x": -1,
 		"grid_z": 1,
 		"offset_x": 0.0,
@@ -118,6 +131,7 @@
 	},
 	{
 		"tile_id": "far_silence_probe",
+		"skin_id": "luminous_verge",
 		"grid_x": 1,
 		"grid_z": 1,
 		"offset_x": 0.0,
@@ -127,6 +141,7 @@
 	},
 	{
 		"tile_id": "distress_lighthouse",
+		"skin_id": "obsidian_belt",
 		"grid_x": -2,
 		"grid_z": 0,
 		"offset_x": 0.0,
@@ -136,6 +151,7 @@
 	},
 	{
 		"tile_id": "thronevault_data_shrine",
+		"skin_id": "luminous_verge",
 		"grid_x": 2,
 		"grid_z": 0,
 		"offset_x": 0.0,
@@ -145,6 +161,7 @@
 	},
 	{
 		"tile_id": "wall_obsidian_belt",
+		"skin_id": "obsidian_belt",
 		"grid_x": -2,
 		"grid_z": -1,
 		"offset_x": 0.0,
@@ -154,6 +171,7 @@
 	},
 	{
 		"tile_id": "wall_crystal_verge",
+		"skin_id": "luminous_verge",
 		"grid_x": 0,
 		"grid_z": -2,
 		"offset_x": 0.0,
@@ -163,6 +181,7 @@
 	},
 	{
 		"tile_id": "wall_rift_barrier",
+		"skin_id": "echo_rift",
 		"grid_x": 2,
 		"grid_z": -1,
 		"offset_x": 0.0,

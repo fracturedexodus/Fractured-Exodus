@@ -92,6 +92,9 @@ text = "Load Layout"
 [node name="ClearButton" type="Button" parent="UILayer/TopBar/Margin/TopRow"]
 text = "Clear"
 
+[node name="SkinOption" type="OptionButton" parent="UILayer/TopBar/Margin/TopRow"]
+custom_minimum_size = Vector2(180, 0)
+
 [node name="ExitButton" type="Button" parent="UILayer/TopBar/Margin/TopRow"]
 text = "Exit Builder"
 
