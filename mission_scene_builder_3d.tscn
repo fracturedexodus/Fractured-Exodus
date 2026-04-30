@@ -1,0 +1,161 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://MissionSceneBuilder3D.cs" id="1_builder3d"]
+
+[sub_resource type="Environment" id="1_env"]
+background_mode = 1
+background_color = Color(0.0313726, 0.0431373, 0.0705882, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.513726, 0.596078, 0.67451, 1)
+ambient_light_energy = 0.9
+tonemap_mode = 2
+
+[node name="MissionSceneBuilder3D" type="Node3D"]
+script = ExtResource("1_builder3d")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("1_env")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+position = Vector3(0, 12, 0)
+rotation = Vector3(-0.872665, 0.785398, 0)
+light_energy = 1.7
+shadow_enabled = true
+
+[node name="CameraRig" type="Node3D" parent="."]
+position = Vector3(0, 0, 0)
+rotation = Vector3(-0.785398, 0.785398, 0)
+
+[node name="Camera3D" type="Camera3D" parent="CameraRig"]
+projection = 1
+size = 26.0
+near = 0.1
+far = 400.0
+position = Vector3(0, 36, 36)
+current = true
+
+[node name="World" type="Node3D" parent="."]
+
+[node name="GridRoot" type="Node3D" parent="World"]
+
+[node name="PlacementRoot" type="Node3D" parent="World"]
+
+[node name="HoverRoot" type="Node3D" parent="World"]
+
+[node name="UILayer" type="CanvasLayer" parent="."]
+
+[node name="PalettePanel" type="PanelContainer" parent="UILayer"]
+offset_left = 12.0
+offset_top = 12.0
+offset_right = 308.0
+offset_bottom = 1068.0
+
+[node name="Margin" type="MarginContainer" parent="UILayer/PalettePanel"]
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 10
+
+[node name="PaletteScroll" type="ScrollContainer" parent="UILayer/PalettePanel/Margin"]
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="PaletteList" type="VBoxContainer" parent="UILayer/PalettePanel/Margin/PaletteScroll"]
+size_flags_horizontal = 3
+
+[node name="TopBar" type="PanelContainer" parent="UILayer"]
+offset_left = 324.0
+offset_top = 12.0
+offset_right = 1520.0
+offset_bottom = 84.0
+
+[node name="Margin" type="MarginContainer" parent="UILayer/TopBar"]
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 12
+
+[node name="TopRow" type="HBoxContainer" parent="UILayer/TopBar/Margin"]
+size_flags_horizontal = 3
+
+[node name="LayoutNameEdit" type="LineEdit" parent="UILayer/TopBar/Margin/TopRow"]
+custom_minimum_size = Vector2(260, 0)
+size_flags_horizontal = 3
+text = "black_site_relay_3d"
+
+[node name="SaveButton" type="Button" parent="UILayer/TopBar/Margin/TopRow"]
+text = "Save Layout"
+
+[node name="LoadButton" type="Button" parent="UILayer/TopBar/Margin/TopRow"]
+text = "Load Layout"
+
+[node name="ClearButton" type="Button" parent="UILayer/TopBar/Margin/TopRow"]
+text = "Clear"
+
+[node name="SelectedTileLabel" type="Label" parent="UILayer/TopBar/Margin/TopRow"]
+size_flags_horizontal = 3
+horizontal_alignment = 2
+text = "Palette: None"
+
+[node name="BottomBar" type="PanelContainer" parent="UILayer"]
+offset_left = 324.0
+offset_top = 996.0
+offset_right = 1520.0
+offset_bottom = 1068.0
+
+[node name="Margin" type="MarginContainer" parent="UILayer/BottomBar"]
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 12
+
+[node name="StatusLabel" type="Label" parent="UILayer/BottomBar/Margin"]
+size_flags_horizontal = 3
+text = "Ready."
+
+[node name="ControlsPanel" type="PanelContainer" parent="UILayer"]
+offset_left = 1540.0
+offset_top = 12.0
+offset_right = 1908.0
+offset_bottom = 348.0
+
+[node name="Margin" type="MarginContainer" parent="UILayer/ControlsPanel"]
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 12
+
+[node name="Legend" type="VBoxContainer" parent="UILayer/ControlsPanel/Margin"]
+size_flags_horizontal = 3
+
+[node name="Title" type="Label" parent="UILayer/ControlsPanel/Margin/Legend"]
+theme_override_font_sizes/font_size = 20
+text = "3D BUILDER CONTROLS"
+
+[node name="Line1" type="Label" parent="UILayer/ControlsPanel/Margin/Legend"]
+autowrap_mode = 3
+text = "Left Click: place tile or select/drag an existing one"
+
+[node name="Line2" type="Label" parent="UILayer/ControlsPanel/Margin/Legend"]
+autowrap_mode = 3
+text = "Right Click: delete tile under cursor"
+
+[node name="Line3" type="Label" parent="UILayer/ControlsPanel/Margin/Legend"]
+autowrap_mode = 3
+text = "Mouse Wheel or +/-: zoom"
+
+[node name="Line4" type="Label" parent="UILayer/ControlsPanel/Margin/Legend"]
+autowrap_mode = 3
+text = "Middle Mouse Drag or WASD: move camera"
+
+[node name="Line5" type="Label" parent="UILayer/ControlsPanel/Margin/Legend"]
+autowrap_mode = 3
+text = "Arrow Keys: nudge selected tile on X/Z"
+
+[node name="Line6" type="Label" parent="UILayer/ControlsPanel/Margin/Legend"]
+autowrap_mode = 3
+text = "Q / E: rotate selected tile"
+
+[node name="Line7" type="Label" parent="UILayer/ControlsPanel/Margin/Legend"]
+autowrap_mode = 3
+text = "Home: reset selected tile offset and rotation"

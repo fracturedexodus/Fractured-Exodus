@@ -547,6 +547,15 @@ public class CampaignSaveData
 	public int SelectedFleetCapacity { get; set; }
 	public Dictionary<string, OfficerStateSaveData> ShipOfficers { get; set; } = new Dictionary<string, OfficerStateSaveData>();
 	public List<string> PendingDowntimeEvents { get; set; } = new List<string>();
+	public string CurrentMissionID { get; set; } = string.Empty;
+	public string CurrentMissionTitle { get; set; } = string.Empty;
+	public string MissionReturnScenePath { get; set; } = string.Empty;
+	public string MissionSourceEncounterName { get; set; } = string.Empty;
+	public List<string> SelectedMissionOfficerShipNames { get; set; } = new List<string>();
+	public List<string> SelectedMissionOfficerIDs { get; set; } = new List<string>();
+	public List<string> CompletedMissionIDs { get; set; } = new List<string>();
+	public Dictionary<string, string> MissionOutcomes { get; set; } = new Dictionary<string, string>();
+	public List<string> StoryFlags { get; set; } = new List<string>();
 	public Dictionary<string, SystemSaveData> ExploredSystems { get; set; } = new Dictionary<string, SystemSaveData>();
 	public List<StarMapSaveData> CurrentSectorStars { get; set; } = new List<StarMapSaveData>();
 
@@ -568,6 +577,15 @@ public class CampaignSaveData
 			SelectedFleetCapacity = globalData.SelectedFleetCapacity,
 			ShipOfficers = (globalData.ShipOfficers ?? new Dictionary<string, OfficerState>()).ToDictionary(kvp => kvp.Key, kvp => OfficerStateSaveData.FromRuntime(kvp.Value)),
 			PendingDowntimeEvents = (globalData.PendingDowntimeEvents ?? new List<string>()).ToList(),
+			CurrentMissionID = globalData.CurrentMissionID,
+			CurrentMissionTitle = globalData.CurrentMissionTitle,
+			MissionReturnScenePath = globalData.MissionReturnScenePath,
+			MissionSourceEncounterName = globalData.MissionSourceEncounterName,
+			SelectedMissionOfficerShipNames = (globalData.SelectedMissionOfficerShipNames ?? new List<string>()).ToList(),
+			SelectedMissionOfficerIDs = (globalData.SelectedMissionOfficerIDs ?? new List<string>()).ToList(),
+			CompletedMissionIDs = (globalData.CompletedMissionIDs ?? new List<string>()).ToList(),
+			MissionOutcomes = (globalData.MissionOutcomes ?? new Dictionary<string, string>()).ToDictionary(kvp => kvp.Key, kvp => kvp.Value),
+			StoryFlags = (globalData.StoryFlags ?? new List<string>()).ToList(),
 			ExploredSystems = (globalData.ExploredSystems ?? new Dictionary<string, SystemData>()).ToDictionary(kvp => kvp.Key, kvp => SystemSaveData.FromRuntime(kvp.Value)),
 			CurrentSectorStars = (globalData.CurrentSectorStars ?? new List<StarMapData>()).Select(StarMapSaveData.FromRuntime).ToList()
 		};
@@ -594,6 +612,15 @@ public class CampaignSaveData
 		globalData.SelectedFleetCapacity = SelectedFleetCapacity;
 		globalData.ShipOfficers = ShipOfficers.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.ToRuntime());
 		globalData.PendingDowntimeEvents = PendingDowntimeEvents.ToList();
+		globalData.CurrentMissionID = CurrentMissionID;
+		globalData.CurrentMissionTitle = CurrentMissionTitle;
+		globalData.MissionReturnScenePath = MissionReturnScenePath;
+		globalData.MissionSourceEncounterName = MissionSourceEncounterName;
+		globalData.SelectedMissionOfficerShipNames = SelectedMissionOfficerShipNames.ToList();
+		globalData.SelectedMissionOfficerIDs = SelectedMissionOfficerIDs.ToList();
+		globalData.CompletedMissionIDs = CompletedMissionIDs.ToList();
+		globalData.MissionOutcomes = MissionOutcomes.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+		globalData.StoryFlags = StoryFlags.ToList();
 		globalData.ExploredSystems = ExploredSystems.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.ToRuntime());
 		globalData.CurrentSectorStars = CurrentSectorStars.Select(s => s.ToRuntime()).ToList();
 	}
@@ -618,6 +645,12 @@ public class CampaignSaveData
 			officerDict[kvp.Key] = kvp.Value.ToVariantDictionary();
 		}
 
+		var missionOutcomeDict = new Godot.Collections.Dictionary<string, Variant>();
+		foreach (KeyValuePair<string, string> kvp in MissionOutcomes)
+		{
+			missionOutcomeDict[kvp.Key] = kvp.Value;
+		}
+
 		var fleetResources = new Godot.Collections.Dictionary<string, Variant>();
 		foreach (KeyValuePair<string, float> kvp in FleetResources)
 		{
@@ -640,6 +673,15 @@ public class CampaignSaveData
 			{ "SelectedFleetCapacity", SelectedFleetCapacity },
 			{ "ShipOfficers", officerDict },
 			{ "PendingDowntimeEvents", ToVariantArray(PendingDowntimeEvents) },
+			{ "CurrentMissionID", CurrentMissionID },
+			{ "CurrentMissionTitle", CurrentMissionTitle },
+			{ "MissionReturnScenePath", MissionReturnScenePath },
+			{ "MissionSourceEncounterName", MissionSourceEncounterName },
+			{ "SelectedMissionOfficerShipNames", ToVariantArray(SelectedMissionOfficerShipNames) },
+			{ "SelectedMissionOfficerIDs", ToVariantArray(SelectedMissionOfficerIDs) },
+			{ "CompletedMissionIDs", ToVariantArray(CompletedMissionIDs) },
+			{ "MissionOutcomes", missionOutcomeDict },
+			{ "StoryFlags", ToVariantArray(StoryFlags) },
 			{ "ExploredSystems", systemDict },
 			{ "CurrentSectorStars", ToVariantArray(CurrentSectorStars.Select(s => s.ToVariantDictionary())) }
 		};
@@ -663,6 +705,15 @@ public class CampaignSaveData
 			SelectedFleetCapacity = dict.ContainsKey("SelectedFleetCapacity") ? (int)dict["SelectedFleetCapacity"] : 0,
 			ShipOfficers = FromOfficerDictionary(dict.ContainsKey("ShipOfficers") ? (Godot.Collections.Dictionary)dict["ShipOfficers"] : new Godot.Collections.Dictionary()),
 			PendingDowntimeEvents = FromStringArray(dict.ContainsKey("PendingDowntimeEvents") ? (Godot.Collections.Array)dict["PendingDowntimeEvents"] : new Godot.Collections.Array()),
+			CurrentMissionID = dict.ContainsKey("CurrentMissionID") ? (string)dict["CurrentMissionID"] : string.Empty,
+			CurrentMissionTitle = dict.ContainsKey("CurrentMissionTitle") ? (string)dict["CurrentMissionTitle"] : string.Empty,
+			MissionReturnScenePath = dict.ContainsKey("MissionReturnScenePath") ? (string)dict["MissionReturnScenePath"] : string.Empty,
+			MissionSourceEncounterName = dict.ContainsKey("MissionSourceEncounterName") ? (string)dict["MissionSourceEncounterName"] : string.Empty,
+			SelectedMissionOfficerShipNames = FromStringArray(dict.ContainsKey("SelectedMissionOfficerShipNames") ? (Godot.Collections.Array)dict["SelectedMissionOfficerShipNames"] : new Godot.Collections.Array()),
+			SelectedMissionOfficerIDs = FromStringArray(dict.ContainsKey("SelectedMissionOfficerIDs") ? (Godot.Collections.Array)dict["SelectedMissionOfficerIDs"] : new Godot.Collections.Array()),
+			CompletedMissionIDs = FromStringArray(dict.ContainsKey("CompletedMissionIDs") ? (Godot.Collections.Array)dict["CompletedMissionIDs"] : new Godot.Collections.Array()),
+			MissionOutcomes = FromSimpleStringDictionary(dict.ContainsKey("MissionOutcomes") ? (Godot.Collections.Dictionary)dict["MissionOutcomes"] : new Godot.Collections.Dictionary()),
+			StoryFlags = FromStringArray(dict.ContainsKey("StoryFlags") ? (Godot.Collections.Array)dict["StoryFlags"] : new Godot.Collections.Array()),
 			ExploredSystems = FromSystemDictionary(dict.ContainsKey("ExploredSystems") ? (Godot.Collections.Dictionary)dict["ExploredSystems"] : new Godot.Collections.Dictionary()),
 			CurrentSectorStars = FromVariantObjectList(dict.ContainsKey("CurrentSectorStars") ? (Godot.Collections.Array)dict["CurrentSectorStars"] : new Godot.Collections.Array(), StarMapSaveData.FromVariantDictionary)
 		};
@@ -760,5 +811,16 @@ public class CampaignSaveData
 			officers[(string)key] = OfficerStateSaveData.FromVariantDictionary((Godot.Collections.Dictionary)dict[key]);
 		}
 		return officers;
+	}
+
+	private static Dictionary<string, string> FromSimpleStringDictionary(Godot.Collections.Dictionary dict)
+	{
+		var values = new Dictionary<string, string>();
+		foreach (Variant key in dict.Keys)
+		{
+			values[(string)key] = (string)dict[key];
+		}
+
+		return values;
 	}
 }

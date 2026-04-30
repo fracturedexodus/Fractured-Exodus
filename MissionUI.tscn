@@ -1,0 +1,86 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://MissionUI.cs" id="1_mission_ui"]
+
+[node name="MissionUI" type="CanvasLayer"]
+script = ExtResource("1_mission_ui")
+
+[node name="UIRoot" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="TopLeftPanel" type="PanelContainer" parent="UIRoot"]
+layout_mode = 0
+offset_left = 28.0
+offset_top = 28.0
+offset_right = 558.0
+offset_bottom = 220.0
+
+[node name="Margin" type="MarginContainer" parent="UIRoot/TopLeftPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 16
+
+[node name="Content" type="VBoxContainer" parent="UIRoot/TopLeftPanel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="TitleLabel" type="Label" parent="UIRoot/TopLeftPanel/Margin/Content"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 26
+text = "BLACK SITE RELAY"
+
+[node name="ObjectiveLabel" type="Label" parent="UIRoot/TopLeftPanel/Margin/Content"]
+layout_mode = 2
+autowrap_mode = 3
+text = "OBJECTIVE"
+
+[node name="SelectedOfficerLabel" type="Label" parent="UIRoot/TopLeftPanel/Margin/Content"]
+layout_mode = 2
+autowrap_mode = 3
+text = "ACTIVE OFFICER"
+
+[node name="PromptLabel" type="Label" parent="UIRoot/TopLeftPanel/Margin/Content"]
+layout_mode = 2
+autowrap_mode = 3
+text = "PROMPT"
+
+[node name="BottomRightPanel" type="PanelContainer" parent="UIRoot"]
+layout_mode = 0
+offset_left = 1480.0
+offset_top = 760.0
+offset_right = 1890.0
+offset_bottom = 1048.0
+
+[node name="Margin" type="MarginContainer" parent="UIRoot/BottomRightPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 16
+
+[node name="ButtonStack" type="VBoxContainer" parent="UIRoot/BottomRightPanel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="SaveSurvivorsButton" type="Button" parent="UIRoot/BottomRightPanel/Margin/ButtonStack"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 46)
+text = "SAVE SURVIVORS"
+
+[node name="SecureArchiveButton" type="Button" parent="UIRoot/BottomRightPanel/Margin/ButtonStack"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 46)
+text = "SECURE ARCHIVE"
+
+[node name="ReturnButton" type="Button" parent="UIRoot/BottomRightPanel/Margin/ButtonStack"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 46)
+text = "RETURN TO FLEET"

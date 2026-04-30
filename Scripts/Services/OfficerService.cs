@@ -167,6 +167,16 @@ public class OfficerService
 		return _globalData.ShipOfficers.TryGetValue(shipName, out OfficerState officer) ? officer : null;
 	}
 
+	public OfficerState GetOfficerById(string officerId)
+	{
+		if (string.IsNullOrEmpty(officerId) || _globalData?.ShipOfficers == null)
+		{
+			return null;
+		}
+
+		return _globalData.ShipOfficers.Values.FirstOrDefault(officer => officer != null && officer.OfficerID == officerId);
+	}
+
 	public List<OfficerState> GetActiveFleetOfficers()
 	{
 		List<OfficerState> officers = new List<OfficerState>();
@@ -226,6 +236,48 @@ public class OfficerService
 				OldApproval = oldApproval,
 				NewApproval = officer.Approval,
 				Reason = GetApprovalReason(eventType, context),
+				QueuedDowntimeEventId = downtimeEventId
+			});
+		}
+
+		return changes;
+	}
+
+	public List<OfficerApprovalChange> ApplyDirectApprovalChanges(Dictionary<string, int> approvalChanges)
+	{
+		List<OfficerApprovalChange> changes = new List<OfficerApprovalChange>();
+		if (approvalChanges == null)
+		{
+			return changes;
+		}
+
+		foreach (KeyValuePair<string, int> kvp in approvalChanges)
+		{
+			OfficerState officer = GetOfficerById(kvp.Key);
+			if (officer == null || kvp.Value == 0)
+			{
+				continue;
+			}
+
+			officer.Flags ??= new List<string>();
+			officer.CompletedScenes ??= new List<string>();
+
+			int oldApproval = officer.Approval;
+			officer.Approval = Mathf.Clamp(officer.Approval + kvp.Value, MinApproval, MaxApproval);
+			int delta = officer.Approval - oldApproval;
+			if (delta == 0)
+			{
+				continue;
+			}
+
+			string downtimeEventId = QueueApprovalDowntimeEvent(officer, oldApproval, officer.Approval);
+			changes.Add(new OfficerApprovalChange
+			{
+				Officer = officer,
+				Delta = delta,
+				OldApproval = oldApproval,
+				NewApproval = officer.Approval,
+				Reason = "the mission outcome",
 				QueuedDowntimeEventId = downtimeEventId
 			});
 		}

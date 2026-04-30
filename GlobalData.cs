@@ -63,6 +63,17 @@ public class QuestData
 	public bool IsComplete { get; set; } = false;
 }
 
+public class MissionRuntimeState
+{
+	public string MissionID { get; set; } = string.Empty;
+	public string MissionTitle { get; set; } = string.Empty;
+	public string ReturnScenePath { get; set; } = string.Empty;
+	public string SourceSystem { get; set; } = string.Empty;
+	public string SourceEncounterName { get; set; } = string.Empty;
+	public List<string> ParticipatingShipNames { get; set; } = new List<string>();
+	public List<string> ParticipatingOfficerIDs { get; set; } = new List<string>();
+}
+
 public class OfficerTemplate
 {
 	public string OfficerID { get; set; } = string.Empty;
@@ -163,6 +174,15 @@ public partial class GlobalData : Node
 	public Dictionary<string, ShipLoadout> FleetLoadouts { get; set; } = new Dictionary<string, ShipLoadout>();
 	public Dictionary<string, OfficerState> ShipOfficers { get; set; } = new Dictionary<string, OfficerState>();
 	public List<string> PendingDowntimeEvents { get; set; } = new List<string>();
+	public string CurrentMissionID { get; set; } = string.Empty;
+	public string CurrentMissionTitle { get; set; } = string.Empty;
+	public string MissionReturnScenePath { get; set; } = string.Empty;
+	public string MissionSourceEncounterName { get; set; } = string.Empty;
+	public List<string> SelectedMissionOfficerShipNames { get; set; } = new List<string>();
+	public List<string> SelectedMissionOfficerIDs { get; set; } = new List<string>();
+	public List<string> CompletedMissionIDs { get; set; } = new List<string>();
+	public Dictionary<string, string> MissionOutcomes { get; set; } = new Dictionary<string, string>();
+	public List<string> StoryFlags { get; set; } = new List<string>();
 
 	public List<QuestData> ActiveQuests { get; set; } = new List<QuestData>();
 	public Godot.Collections.Array CompletedQuestIDs { get; set; } = new Godot.Collections.Array();
@@ -191,6 +211,40 @@ public partial class GlobalData : Node
 		return _saveGameService.Load(this);
 	}
 
+	public MissionRuntimeState GetCurrentMissionState()
+	{
+		return new MissionRuntimeState
+		{
+			MissionID = CurrentMissionID,
+			MissionTitle = CurrentMissionTitle,
+			ReturnScenePath = MissionReturnScenePath,
+			SourceSystem = SavedSystem,
+			SourceEncounterName = MissionSourceEncounterName,
+			ParticipatingShipNames = new List<string>(SelectedMissionOfficerShipNames ?? new List<string>()),
+			ParticipatingOfficerIDs = new List<string>(SelectedMissionOfficerIDs ?? new List<string>())
+		};
+	}
+
+	public void SetCurrentMissionState(MissionRuntimeState state)
+	{
+		CurrentMissionID = state?.MissionID ?? string.Empty;
+		CurrentMissionTitle = state?.MissionTitle ?? string.Empty;
+		MissionReturnScenePath = state?.ReturnScenePath ?? string.Empty;
+		MissionSourceEncounterName = state?.SourceEncounterName ?? string.Empty;
+		SelectedMissionOfficerShipNames = state?.ParticipatingShipNames != null ? new List<string>(state.ParticipatingShipNames) : new List<string>();
+		SelectedMissionOfficerIDs = state?.ParticipatingOfficerIDs != null ? new List<string>(state.ParticipatingOfficerIDs) : new List<string>();
+	}
+
+	public void ClearCurrentMissionState()
+	{
+		CurrentMissionID = string.Empty;
+		CurrentMissionTitle = string.Empty;
+		MissionReturnScenePath = string.Empty;
+		MissionSourceEncounterName = string.Empty;
+		SelectedMissionOfficerShipNames.Clear();
+		SelectedMissionOfficerIDs.Clear();
+	}
+
 	public void ResetForNewGame()
 	{
 		SavedSystem = ""; SavedPlanet = ""; SavedType = ""; SelectedBasePlanetType = "";
@@ -198,6 +252,7 @@ public partial class GlobalData : Node
 		ExploredSystems.Clear(); CurrentSectorStars.Clear();
 		CurrentTurn = 1; InCombat = false; CurrentQueueIndex = 0; JustJumped = false; 
 		SavedFleetState.Clear(); UnequippedInventory.Clear(); FleetLoadouts.Clear(); ShipOfficers.Clear(); PendingDowntimeEvents.Clear();
+		ClearCurrentMissionState(); CompletedMissionIDs.Clear(); MissionOutcomes.Clear(); StoryFlags.Clear();
 		
 		FleetResources = new Godot.Collections.Dictionary<string, Variant> {
 			{ GameConstants.ResourceKeys.RawMaterials, 350.0f },

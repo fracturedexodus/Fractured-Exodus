@@ -1,0 +1,160 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://MissionMap.cs" id="1_mission_map"]
+[ext_resource type="PackedScene" path="res://MissionUI.tscn" id="2_mission_ui"]
+[ext_resource type="Texture2D" path="res://Assets/Missions/BlackSiteRelay/black_site_relay_tileset.png" id="3_tileset"]
+[ext_resource type="Script" path="res://MissionRoomBuilder.cs" id="4_room_builder"]
+
+[node name="BlackSiteRelay" type="Node2D"]
+script = ExtResource("1_mission_map")
+
+[node name="BackdropCanvas" type="CanvasLayer" parent="."]
+layer = -10
+
+[node name="Background" type="ColorRect" parent="BackdropCanvas"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.0313726, 0.0431373, 0.0705882, 1)
+
+[node name="Camera2D" type="Camera2D" parent="."]
+position = Vector2(0, 0)
+enabled = true
+
+[node name="IsoWorld" type="Node2D" parent="."]
+scale = Vector2(1.16, 1.16)
+
+[node name="BackdropLayer" type="Node2D" parent="IsoWorld"]
+
+[node name="RearBulkhead" type="Polygon2D" parent="IsoWorld/BackdropLayer"]
+color = Color(0.0666667, 0.0784314, 0.109804, 1)
+polygon = PackedVector2Array(-668, -286, -476, -398, 476, -398, 668, -286, 668, -54, -668, -54)
+
+[node name="MainDeckShadow" type="Polygon2D" parent="IsoWorld/BackdropLayer"]
+color = Color(0.0862745, 0.0980392, 0.133333, 1)
+polygon = PackedVector2Array(-692, -58, -392, -208, 394, -208, 694, -58, 694, 454, 394, 608, -392, 608, -692, 454)
+
+[node name="LeftBayGlow" type="Polygon2D" parent="IsoWorld/BackdropLayer"]
+color = Color(0.14902, 0.384314, 0.462745, 0.1)
+polygon = PackedVector2Array(-510, 8, -328, -104, -116, -4, -328, 122)
+
+[node name="CenterBayGlow" type="Polygon2D" parent="IsoWorld/BackdropLayer"]
+color = Color(0.694118, 0.541176, 0.188235, 0.08)
+polygon = PackedVector2Array(-152, 146, 0, 56, 156, 146, 0, 236)
+
+[node name="RightBayGlow" type="Polygon2D" parent="IsoWorld/BackdropLayer"]
+color = Color(0.14902, 0.384314, 0.462745, 0.1)
+polygon = PackedVector2Array(118, -4, 330, -104, 514, 8, 330, 122)
+
+[node name="FloorLayer" type="Node2D" parent="IsoWorld"]
+
+[node name="WallLayer" type="Node2D" parent="IsoWorld"]
+y_sort_enabled = true
+
+[node name="PropLayer" type="Node2D" parent="IsoWorld"]
+y_sort_enabled = true
+
+[node name="CharacterLayer" type="Node2D" parent="IsoWorld"]
+y_sort_enabled = true
+
+[node name="InteractableLayer" type="Node2D" parent="IsoWorld"]
+
+[node name="MarkerLayer" type="Node2D" parent="IsoWorld"]
+
+[node name="SurvivorMarker" type="Node2D" parent="IsoWorld/MarkerLayer"]
+
+[node name="Diamond" type="Polygon2D" parent="IsoWorld/MarkerLayer/SurvivorMarker"]
+color = Color(0.180392, 0.627451, 0.784314, 0.18)
+polygon = PackedVector2Array(0, -34, 42, 0, 0, 34, -42, 0)
+
+[node name="Outline" type="Line2D" parent="IsoWorld/MarkerLayer/SurvivorMarker"]
+default_color = Color(0.458824, 0.847059, 0.972549, 0.95)
+width = 2.5
+closed = true
+points = PackedVector2Array(0, -34, 42, 0, 0, 34, -42, 0)
+
+[node name="Prompt" type="Label" parent="IsoWorld/MarkerLayer/SurvivorMarker"]
+position = Vector2(-42, -64)
+size = Vector2(84, 22)
+theme_override_font_sizes/font_size = 12
+text = "INTERACT"
+horizontal_alignment = 1
+
+[node name="Zone" type="Label" parent="IsoWorld/MarkerLayer/SurvivorMarker"]
+position = Vector2(-110, 38)
+size = Vector2(220, 28)
+theme_override_font_sizes/font_size = 16
+text = "SURVIVOR SHELTER"
+horizontal_alignment = 1
+
+[node name="PowerMarker" type="Node2D" parent="IsoWorld/MarkerLayer"]
+
+[node name="Diamond" type="Polygon2D" parent="IsoWorld/MarkerLayer/PowerMarker"]
+color = Color(0.760784, 0.580392, 0.184314, 0.16)
+polygon = PackedVector2Array(0, -34, 42, 0, 0, 34, -42, 0)
+
+[node name="Outline" type="Line2D" parent="IsoWorld/MarkerLayer/PowerMarker"]
+default_color = Color(0.976471, 0.827451, 0.4, 0.95)
+width = 2.5
+closed = true
+points = PackedVector2Array(0, -34, 42, 0, 0, 34, -42, 0)
+
+[node name="Prompt" type="Label" parent="IsoWorld/MarkerLayer/PowerMarker"]
+position = Vector2(-42, -64)
+size = Vector2(84, 22)
+theme_override_font_sizes/font_size = 12
+text = "INTERACT"
+horizontal_alignment = 1
+
+[node name="Zone" type="Label" parent="IsoWorld/MarkerLayer/PowerMarker"]
+position = Vector2(-102, 38)
+size = Vector2(204, 28)
+theme_override_font_sizes/font_size = 16
+text = "POWER JUNCTION"
+horizontal_alignment = 1
+
+[node name="ArchiveMarker" type="Node2D" parent="IsoWorld/MarkerLayer"]
+
+[node name="Diamond" type="Polygon2D" parent="IsoWorld/MarkerLayer/ArchiveMarker"]
+color = Color(0.180392, 0.627451, 0.784314, 0.18)
+polygon = PackedVector2Array(0, -34, 42, 0, 0, 34, -42, 0)
+
+[node name="Outline" type="Line2D" parent="IsoWorld/MarkerLayer/ArchiveMarker"]
+default_color = Color(0.458824, 0.847059, 0.972549, 0.95)
+width = 2.5
+closed = true
+points = PackedVector2Array(0, -34, 42, 0, 0, 34, -42, 0)
+
+[node name="Prompt" type="Label" parent="IsoWorld/MarkerLayer/ArchiveMarker"]
+position = Vector2(-42, -64)
+size = Vector2(84, 22)
+theme_override_font_sizes/font_size = 12
+text = "INTERACT"
+horizontal_alignment = 1
+
+[node name="Zone" type="Label" parent="IsoWorld/MarkerLayer/ArchiveMarker"]
+position = Vector2(-96, 38)
+size = Vector2(192, 28)
+theme_override_font_sizes/font_size = 16
+text = "ARCHIVE VAULT"
+horizontal_alignment = 1
+
+[node name="SpawnPointA" type="Marker2D" parent="IsoWorld"]
+
+[node name="SpawnPointB" type="Marker2D" parent="IsoWorld"]
+
+[node name="RoomBuilder" type="Node" parent="IsoWorld"]
+script = ExtResource("4_room_builder")
+tileset_texture = ExtResource("3_tileset")
+origin = Vector2(0, -20)
+tile_step = Vector2(250, 122)
+layout_resource_path = "res://Data/MissionLayouts/black_site_relay_builder.json"
+build_in_editor = true
+floor_rows = PackedStringArray("...fgf...", "..ffhff..", ".fffffff.", ".ffvtvff.", ".fffffff.", "..ffhff..", "...fgf...")
+wall_rows = PackedStringArray("..lwxyr..", ".........", ".........", ".........", ".........", ".........", ".........")
+prop_rows = PackedStringArray(".........", "..d...D..", ".s.....a.", ".c.m.o.C.", "..jiPk...", ".........", ".........")
+
+[node name="MissionUI" parent="." instance=ExtResource("2_mission_ui")]
