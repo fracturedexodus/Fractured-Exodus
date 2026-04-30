@@ -28,19 +28,19 @@ public static class Mission3DTileCatalog
 		new Mission3DTileDefinition("floor_shattered_reach", "Shattered Reach Floor", MissionTileCategory.Floor, Vector3.Zero),
 		new Mission3DTileDefinition("floor_ember_waste", "Ember Waste Floor", MissionTileCategory.Floor, Vector3.Zero),
 		new Mission3DTileDefinition("floor_verdant_shroud", "Verdant Shroud Floor", MissionTileCategory.Floor, Vector3.Zero),
-		new Mission3DTileDefinition("wall_north", "Wall North", MissionTileCategory.Wall, new Vector3(0f, 1.5f, -1.85f)),
-		new Mission3DTileDefinition("wall_west", "Wall West", MissionTileCategory.Wall, new Vector3(-1.85f, 1.5f, 0f)),
+		new Mission3DTileDefinition("wall_north", "Wall North", MissionTileCategory.Wall, Vector3.Zero),
+		new Mission3DTileDefinition("wall_west", "Wall West", MissionTileCategory.Wall, Vector3.Zero),
 		new Mission3DTileDefinition("wall_corner_nw", "Wall Corner NW", MissionTileCategory.Wall, new Vector3(0f, 0f, 0f)),
-		new Mission3DTileDefinition("door_north", "Door North", MissionTileCategory.Wall, new Vector3(0f, 0f, -1.85f)),
-		new Mission3DTileDefinition("wall_obsidian_belt", "Obsidian Belt Bulkhead", MissionTileCategory.Wall, new Vector3(0f, 1.5f, -1.85f)),
-		new Mission3DTileDefinition("wall_crystal_verge", "Luminous Verge Wall", MissionTileCategory.Wall, new Vector3(0f, 1.35f, -1.85f)),
-		new Mission3DTileDefinition("wall_rift_barrier", "Rift Barrier", MissionTileCategory.Wall, new Vector3(0f, 1.25f, -1.85f)),
-		new Mission3DTileDefinition("console_terminal", "Console Terminal", MissionTileCategory.Prop, new Vector3(0f, 0.5f, 0f)),
-		new Mission3DTileDefinition("crate", "Crate", MissionTileCategory.Prop, new Vector3(0f, 0.7f, 0f)),
-		new Mission3DTileDefinition("medical_bed", "Medical Bed", MissionTileCategory.Prop, new Vector3(0f, 0.45f, 0f)),
+		new Mission3DTileDefinition("door_north", "Door North", MissionTileCategory.Wall, Vector3.Zero),
+		new Mission3DTileDefinition("wall_obsidian_belt", "Obsidian Belt Bulkhead", MissionTileCategory.Wall, Vector3.Zero),
+		new Mission3DTileDefinition("wall_crystal_verge", "Luminous Verge Wall", MissionTileCategory.Wall, Vector3.Zero),
+		new Mission3DTileDefinition("wall_rift_barrier", "Rift Barrier", MissionTileCategory.Wall, Vector3.Zero),
+		new Mission3DTileDefinition("console_terminal", "Console Terminal", MissionTileCategory.Prop, Vector3.Zero),
+		new Mission3DTileDefinition("crate", "Crate", MissionTileCategory.Prop, Vector3.Zero),
+		new Mission3DTileDefinition("medical_bed", "Medical Bed", MissionTileCategory.Prop, Vector3.Zero),
 		new Mission3DTileDefinition("archive_core", "Archive Core", MissionTileCategory.Prop, new Vector3(0f, 0f, 0f)),
-		new Mission3DTileDefinition("pipe_bundle", "Pipe Bundle", MissionTileCategory.Prop, new Vector3(0f, 0.2f, 0f)),
-		new Mission3DTileDefinition("debris", "Debris", MissionTileCategory.Prop, new Vector3(0f, 0.2f, 0f)),
+		new Mission3DTileDefinition("pipe_bundle", "Pipe Bundle", MissionTileCategory.Prop, Vector3.Zero),
+		new Mission3DTileDefinition("debris", "Debris", MissionTileCategory.Prop, Vector3.Zero),
 		new Mission3DTileDefinition("aetherweb_relay_pylon", "Aetherweb Relay Pylon", MissionTileCategory.Prop, new Vector3(0f, 0f, 0f)),
 		new Mission3DTileDefinition("nexus_wound_core", "Nexus Wound Core", MissionTileCategory.Prop, new Vector3(0f, 0f, 0f)),
 		new Mission3DTileDefinition("thronevault_data_shrine", "Thronevault Data Shrine", MissionTileCategory.Prop, new Vector3(0f, 0f, 0f)),
@@ -115,12 +115,12 @@ public static class Mission3DTileCatalog
 				BuildVerdantShroudFloor(visuals);
 				break;
 			case "wall_north":
-				AddMesh(visuals, CreateBox(new Vector3(4.0f, 3.0f, 0.35f), _darkSteelMaterial), Vector3.Zero);
-				AddMesh(visuals, CreateBox(new Vector3(4.0f, 0.2f, 0.4f), _accentCyanMaterial), new Vector3(0f, 0.3f, 0f), new Vector3(1f, 1f, 0.25f));
+				AddMesh(visuals, CreateBox(new Vector3(4.0f, 3.0f, 0.35f), _darkSteelMaterial), new Vector3(0f, 1.5f, 0f));
+				AddMesh(visuals, CreateBox(new Vector3(4.0f, 0.2f, 0.4f), _accentCyanMaterial), new Vector3(0f, 1.8f, 0f), new Vector3(1f, 1f, 0.25f));
 				break;
 			case "wall_west":
-				AddMesh(visuals, CreateBox(new Vector3(0.35f, 3.0f, 4.0f), _darkSteelMaterial), Vector3.Zero);
-				AddMesh(visuals, CreateBox(new Vector3(0.4f, 0.2f, 4.0f), _accentCyanMaterial), new Vector3(0f, 0.3f, 0f), new Vector3(0.25f, 1f, 1f));
+				AddMesh(visuals, CreateBox(new Vector3(0.35f, 3.0f, 4.0f), _darkSteelMaterial), new Vector3(0f, 1.5f, 0f));
+				AddMesh(visuals, CreateBox(new Vector3(0.4f, 0.2f, 4.0f), _accentCyanMaterial), new Vector3(0f, 1.8f, 0f), new Vector3(0.25f, 1f, 1f));
 				break;
 			case "wall_corner_nw":
 				AddMesh(visuals, CreateBox(new Vector3(4.0f, 3.0f, 0.35f), _darkSteelMaterial), new Vector3(0f, 1.5f, -1.85f));
@@ -315,30 +315,30 @@ public static class Mission3DTileCatalog
 
 	private static void BuildObsidianBeltWall(Node3D parent)
 	{
-		AddMesh(parent, CreateBox(new Vector3(4.0f, 3.0f, 0.38f), _obsidianMaterial), Vector3.Zero);
+		AddMesh(parent, CreateBox(new Vector3(4.0f, 3.0f, 0.38f), _obsidianMaterial), new Vector3(0f, 1.5f, 0f));
 		AddMesh(parent, CreateBox(new Vector3(3.4f, 0.14f, 0.42f), _signalRedMaterial), new Vector3(0f, 2.15f, 0f));
-		AddMesh(parent, CreateBox(new Vector3(0.22f, 2.4f, 0.44f), _goldMaterial), new Vector3(-1.45f, 0.2f, 0f));
-		AddMesh(parent, CreateBox(new Vector3(0.22f, 2.4f, 0.44f), _goldMaterial), new Vector3(1.45f, 0.2f, 0f));
+		AddMesh(parent, CreateBox(new Vector3(0.22f, 2.4f, 0.44f), _goldMaterial), new Vector3(-1.45f, 1.2f, 0f));
+		AddMesh(parent, CreateBox(new Vector3(0.22f, 2.4f, 0.44f), _goldMaterial), new Vector3(1.45f, 1.2f, 0f));
 	}
 
 	private static void BuildCrystalVergeWall(Node3D parent)
 	{
-		AddMesh(parent, CreateBox(new Vector3(4.0f, 0.55f, 0.34f), _darkSteelMaterial), new Vector3(0f, -0.95f, 0f));
+		AddMesh(parent, CreateBox(new Vector3(4.0f, 0.55f, 0.34f), _darkSteelMaterial), new Vector3(0f, 0.28f, 0f));
 		for (int i = 0; i < 5; i++)
 		{
 			float x = -1.6f + (i * 0.8f);
 			float height = 1.8f + ((i % 2) * 0.7f);
-			AddMesh(parent, CreateCylinder(0.22f, height, _crystalMaterial, 0.06f), new Vector3(x, height * 0.48f, 0f), Vector3.One, new Vector3(0f, 0f, i % 2 == 0 ? 8f : -8f));
+			AddMesh(parent, CreateCylinder(0.22f, height, _crystalMaterial, 0.06f), new Vector3(x, 0.15f + (height * 0.5f), 0f), Vector3.One, new Vector3(0f, 0f, i % 2 == 0 ? 8f : -8f));
 		}
-		AddMesh(parent, CreateBox(new Vector3(3.5f, 0.08f, 0.18f), _accentCyanMaterial), new Vector3(0f, 0.65f, 0.1f));
+		AddMesh(parent, CreateBox(new Vector3(3.5f, 0.08f, 0.18f), _accentCyanMaterial), new Vector3(0f, 1.85f, 0.1f));
 	}
 
 	private static void BuildRiftBarrier(Node3D parent)
 	{
-		AddMesh(parent, CreateBox(new Vector3(4.0f, 0.22f, 0.32f), _darkSteelMaterial), new Vector3(0f, -0.95f, 0f));
-		AddMesh(parent, CreateBox(new Vector3(0.28f, 2.8f, 0.18f), _riftMaterial), new Vector3(-0.85f, 0.45f, 0f), Vector3.One, new Vector3(0f, 0f, -18f));
-		AddMesh(parent, CreateBox(new Vector3(0.22f, 2.3f, 0.18f), _riftMaterial), new Vector3(0.15f, 0.35f, 0.05f), Vector3.One, new Vector3(0f, 0f, 12f));
-		AddMesh(parent, CreateBox(new Vector3(0.18f, 2.0f, 0.18f), _riftMaterial), new Vector3(1.1f, 0.25f, 0f), Vector3.One, new Vector3(0f, 0f, -10f));
+		AddMesh(parent, CreateBox(new Vector3(4.0f, 0.22f, 0.32f), _darkSteelMaterial), new Vector3(0f, 0.12f, 0f));
+		AddMesh(parent, CreateBox(new Vector3(0.28f, 2.8f, 0.18f), _riftMaterial), new Vector3(-0.85f, 1.48f, 0f), Vector3.One, new Vector3(0f, 0f, -18f));
+		AddMesh(parent, CreateBox(new Vector3(0.22f, 2.3f, 0.18f), _riftMaterial), new Vector3(0.15f, 1.32f, 0.05f), Vector3.One, new Vector3(0f, 0f, 12f));
+		AddMesh(parent, CreateBox(new Vector3(0.18f, 2.0f, 0.18f), _riftMaterial), new Vector3(1.1f, 1.12f, 0f), Vector3.One, new Vector3(0f, 0f, -10f));
 	}
 
 	private static void BuildAetherwebRelayPylon(Node3D parent)
