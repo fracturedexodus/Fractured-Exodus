@@ -14,7 +14,7 @@ public class MissionService
 			new MissionDefinition
 			{
 				MissionID = "black_site_relay",
-				ScenePath = "res://mission_map_3d.tscn",
+				ScenePath = "res://black_site_relay.tscn",
 				Title = "Black Site Relay",
 				Description = "Investigate a failing Custodian relay and decide whether to save the survivors or secure the archive core.",
 				DefaultReturnScenePath = "res://exploration_battle.tscn",

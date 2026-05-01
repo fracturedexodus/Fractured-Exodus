@@ -480,11 +480,9 @@ public partial class OfficerAssignmentMenu : Control
 	{
 		SaveCurrentOfficer();
 		EnsureAllShipsAssigned();
-		MissionService missionService = new MissionService(_globalData);
-		missionService.PrepareMission("black_site_relay", "res://exploration_battle.tscn", "Black Site Relay Beacon");
-		SetMessage("Officer assignments locked in. Launching 3D mission.");
+		SetMessage("Officer assignments locked in. Launching fleet.");
 		SceneTransition transitioner = GetNode<SceneTransition>("/root/SceneTransition");
-		transitioner.ChangeScene("res://mission_map_3d.tscn");
+		transitioner.ChangeScene("res://exploration_battle.tscn");
 	}
 
 	private void GoBack()
