@@ -36,11 +36,11 @@ public static class MissionTileCatalog
 	private static readonly List<MissionTileDefinition> Definitions = new List<MissionTileDefinition>
 	{
 		new MissionTileDefinition("floor_standard", "Floor Standard", MissionTileCategory.Floor, 'f', new Rect2(31, 31, 222, 129), Vector2.Zero, Vector2.One),
-		new MissionTileDefinition("floor_grate", "Floor Grate", MissionTileCategory.Floor, 'g', new Rect2(267, 31, 219, 128), Vector2.Zero, Vector2.One),
-		new MissionTileDefinition("floor_hazard", "Floor Hazard", MissionTileCategory.Floor, 'h', new Rect2(718, 32, 212, 126), Vector2.Zero, Vector2.One),
-		new MissionTileDefinition("floor_panel", "Floor Panel", MissionTileCategory.Floor, 'v', new Rect2(941, 33, 203, 124), Vector2.Zero, Vector2.One),
-		new MissionTileDefinition("floor_plating", "Floor Plating", MissionTileCategory.Floor, 'p', new Rect2(496, 31, 211, 127), Vector2.Zero, Vector2.One),
-		new MissionTileDefinition("floor_glow", "Floor Glow", MissionTileCategory.Floor, 't', new Rect2(1350, 42, 168, 108), Vector2.Zero, Vector2.One),
+		new MissionTileDefinition("floor_grate", "Floor Grate", MissionTileCategory.Floor, 'g', new Rect2(267, 31, 219, 128), Vector2.Zero, new Vector2(1.014f, 1.008f)),
+		new MissionTileDefinition("floor_hazard", "Floor Hazard", MissionTileCategory.Floor, 'h', new Rect2(718, 32, 212, 126), Vector2.Zero, new Vector2(1.047f, 1.024f)),
+		new MissionTileDefinition("floor_panel", "Floor Panel", MissionTileCategory.Floor, 'v', new Rect2(941, 33, 203, 124), Vector2.Zero, new Vector2(1.094f, 1.040f)),
+		new MissionTileDefinition("floor_plating", "Floor Plating", MissionTileCategory.Floor, 'p', new Rect2(496, 31, 211, 127), Vector2.Zero, new Vector2(1.052f, 1.016f)),
+		new MissionTileDefinition("floor_glow", "Floor Glow", MissionTileCategory.Floor, 't', new Rect2(1350, 42, 168, 108), Vector2.Zero, new Vector2(1.321f, 1.194f)),
 		new MissionTileDefinition("wall_corner_left", "Wall Corner Left", MissionTileCategory.Wall, 'l', new Rect2(54, 384, 175, 151), new Vector2(0f, -140f), Vector2.One),
 		new MissionTileDefinition("wall_straight_left", "Wall Straight Left", MissionTileCategory.Wall, 'w', new Rect2(57, 179, 166, 178), new Vector2(0f, -156f), Vector2.One),
 		new MissionTileDefinition("wall_straight_center", "Wall Straight Center", MissionTileCategory.Wall, 'x', new Rect2(769, 186, 148, 175), new Vector2(0f, -154f), Vector2.One),

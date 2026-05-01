@@ -24,7 +24,15 @@ enabled = true
 
 [node name="GridLayer" type="Node2D" parent="World"]
 
-[node name="PlacementLayer" type="Node2D" parent="World"]
+[node name="FloorPlacementLayer" type="Node2D" parent="World"]
+
+[node name="WallPlacementLayer" type="Node2D" parent="World"]
+y_sort_enabled = true
+
+[node name="PropPlacementLayer" type="Node2D" parent="World"]
+y_sort_enabled = true
+
+[node name="MarkerPlacementLayer" type="Node2D" parent="World"]
 y_sort_enabled = true
 
 [node name="HoverLayer" type="Node2D" parent="World"]
@@ -79,6 +87,9 @@ text = "Load Layout"
 [node name="ClearButton" type="Button" parent="UILayer/TopBar/Margin/TopRow"]
 text = "Clear"
 
+[node name="ExitButton" type="Button" parent="UILayer/TopBar/Margin/TopRow"]
+text = "Exit Builder"
+
 [node name="SelectedTileLabel" type="Label" parent="UILayer/TopBar/Margin/TopRow"]
 size_flags_horizontal = 3
 horizontal_alignment = 2
@@ -121,7 +132,7 @@ text = "BUILDER CONTROLS"
 
 [node name="Line1" type="Label" parent="UILayer/ControlsPanel/Margin/Legend"]
 autowrap_mode = 3
-text = "Left Click: place tile or select/drag an existing one"
+text = "Left Click: place tile/marker or select/drag an existing one"
 
 [node name="Line2" type="Label" parent="UILayer/ControlsPanel/Margin/Legend"]
 autowrap_mode = 3

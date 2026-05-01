@@ -184,11 +184,27 @@ public partial class MissionMap : Node2D
 		Node2D powerMarker = GetNodeOrNull<Node2D>("IsoWorld/MarkerLayer/PowerMarker");
 		Node2D archiveMarker = GetNodeOrNull<Node2D>("IsoWorld/MarkerLayer/ArchiveMarker");
 
-		if (spawnPointA != null) spawnPointA.Position = _roomBuilder.GetCellWorldPosition(3, 5, new Vector2(-16f, 10f));
-		if (spawnPointB != null) spawnPointB.Position = _roomBuilder.GetCellWorldPosition(4, 5, new Vector2(24f, 10f));
-		if (survivorMarker != null) survivorMarker.Position = _roomBuilder.GetCellWorldPosition(1, 3, new Vector2(-12f, -72f));
-		if (powerMarker != null) powerMarker.Position = _roomBuilder.GetCellWorldPosition(4, 4, new Vector2(0f, -70f));
-		if (archiveMarker != null) archiveMarker.Position = _roomBuilder.GetCellWorldPosition(7, 3, new Vector2(12f, -72f));
+		ApplyMarkerPosition(spawnPointA, "spawn_a", 3, 5, new Vector2(-16f, 10f));
+		ApplyMarkerPosition(spawnPointB, "spawn_b", 4, 5, new Vector2(24f, 10f));
+		ApplyMarkerPosition(survivorMarker, "objective_survivors", 1, 3, new Vector2(-12f, -72f));
+		ApplyMarkerPosition(powerMarker, "objective_power", 4, 4, new Vector2(0f, -70f));
+		ApplyMarkerPosition(archiveMarker, "objective_archive", 7, 3, new Vector2(12f, -72f));
+	}
+
+	private void ApplyMarkerPosition(Node2D marker, string markerId, int fallbackColumn, int fallbackRow, Vector2 fallbackOffset)
+	{
+		if (marker == null || _roomBuilder == null)
+		{
+			return;
+		}
+
+		if (_roomBuilder.TryGetMarkerWorldPosition(markerId, fallbackOffset, out Vector2 savedPosition))
+		{
+			marker.Position = savedPosition;
+			return;
+		}
+
+		marker.Position = _roomBuilder.GetCellWorldPosition(fallbackColumn, fallbackRow, fallbackOffset);
 	}
 
 	private void AdjustZoom(float delta)

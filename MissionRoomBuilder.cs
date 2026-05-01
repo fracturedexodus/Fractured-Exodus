@@ -16,10 +16,11 @@ public partial class MissionRoomBuilder : Node
 	}
 
 	private bool _rebuildNow;
+	private readonly Dictionary<string, Vector2> _markerPositions = new Dictionary<string, Vector2>();
 
 	[Export] public Texture2D TilesetTexture { get; set; }
 	[Export] public Vector2 Origin { get; set; } = new Vector2(0f, -18f);
-	[Export] public Vector2 TileStep { get; set; } = new Vector2(250f, 122f);
+	[Export] public Vector2 TileStep { get; set; } = new Vector2(226f, 133f);
 	[Export] public NodePath FloorLayerPath { get; set; } = "../FloorLayer";
 	[Export] public NodePath WallLayerPath { get; set; } = "../WallLayer";
 	[Export] public NodePath PropLayerPath { get; set; } = "../PropLayer";
@@ -64,6 +65,18 @@ public partial class MissionRoomBuilder : Node
 		return GetCellWorldPosition(column, row, Vector2.Zero);
 	}
 
+	public bool TryGetMarkerWorldPosition(string markerId, Vector2 extraOffset, out Vector2 position)
+	{
+		if (_markerPositions.TryGetValue(markerId, out Vector2 markerPosition))
+		{
+			position = markerPosition + extraOffset;
+			return true;
+		}
+
+		position = Vector2.Zero;
+		return false;
+	}
+
 	public void BuildRoom()
 	{
 		Node2D floorLayer = GetNodeOrNull<Node2D>(FloorLayerPath);
@@ -77,6 +90,7 @@ public partial class MissionRoomBuilder : Node
 		ClearLayer(floorLayer);
 		ClearLayer(wallLayer);
 		ClearLayer(propLayer);
+		_markerPositions.Clear();
 
 		if (!BuildFromSavedLayout(floorLayer, wallLayer, propLayer))
 		{
@@ -113,15 +127,24 @@ public partial class MissionRoomBuilder : Node
 		}
 
 		Godot.Collections.Array tiles = parsed.AsGodotArray();
+		bool placedAnyTile = false;
 		foreach (Variant tileVariant in tiles)
 		{
 			Godot.Collections.Dictionary tileDict = tileVariant.AsGodotDictionary();
+			string itemType = tileDict.TryGetValue("item_type", out Variant itemTypeVariant) ? itemTypeVariant.AsString() : "tile";
+			string markerId = tileDict.TryGetValue("marker_id", out Variant markerIdVariant) ? markerIdVariant.AsString() : "";
 			string tileId = tileDict.TryGetValue("tile_id", out Variant tileIdVariant) ? tileIdVariant.AsString() : "";
 			int column = tileDict.TryGetValue("column", out Variant columnVariant) ? columnVariant.AsInt32() : 0;
 			int row = tileDict.TryGetValue("row", out Variant rowVariant) ? rowVariant.AsInt32() : 0;
 			float offsetX = tileDict.TryGetValue("offset_x", out Variant offsetXVariant) ? offsetXVariant.AsSingle() : 0f;
 			float offsetY = tileDict.TryGetValue("offset_y", out Variant offsetYVariant) ? offsetYVariant.AsSingle() : 0f;
 			float rotationDegrees = tileDict.TryGetValue("rotation_degrees", out Variant rotationVariant) ? rotationVariant.AsSingle() : 0f;
+
+			if (itemType == "marker" || !string.IsNullOrEmpty(markerId))
+			{
+				_markerPositions[markerId] = GetCellWorldPosition(column, row, new Vector2(offsetX, offsetY));
+				continue;
+			}
 
 			if (!MissionTileCatalog.TryGetById(tileId, out MissionTileDefinition definition))
 			{
@@ -135,9 +158,10 @@ public partial class MissionRoomBuilder : Node
 				_ => propLayer
 			};
 			targetLayer.AddChild(CreateSprite(definition, column, row, $"{definition.Category}_{column}_{row}_{definition.Id}", new Vector2(offsetX, offsetY), rotationDegrees));
+			placedAnyTile = true;
 		}
 
-		return tiles.Count > 0;
+		return placedAnyTile;
 	}
 
 	private static void ClearLayer(Node layer)
@@ -174,14 +198,15 @@ public partial class MissionRoomBuilder : Node
 
 	private Sprite2D CreateSprite(MissionTileDefinition definition, int column, int row, string name, Vector2 extraOffset, float rotationDegrees)
 	{
+		bool isFloor = definition.Category == MissionTileCategory.Floor;
 		Sprite2D sprite = new Sprite2D
 		{
 			Name = name,
-			Texture = TilesetTexture,
-			RegionEnabled = true,
+			Texture = isFloor ? MissionFloorTextureFactory.GetTexture(definition.Id) : TilesetTexture,
+			RegionEnabled = !isFloor,
 			RegionRect = definition.Region,
 			Position = GetCellWorldPosition(column, row, definition.Offset + extraOffset),
-			Scale = definition.Scale,
+			Scale = isFloor ? Vector2.One : definition.Scale,
 			RotationDegrees = rotationDegrees
 		};
 		sprite.SetMeta("tile_id", definition.Id);
