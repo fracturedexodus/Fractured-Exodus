@@ -1,0 +1,12 @@
+﻿{
+    "note":  "Fully redrawn grid-aligned set. Floors are 226x133. Straight walls use 226x360 canvases and draw along the exact left-to-top floor diamond edge.",
+    "grid":  {
+                 "height":  133,
+                 "width":  226
+             },
+    "wall_canvas":  {
+                        "height":  360,
+                        "width":  226
+                    },
+    "root":  "res://Assets/Missions/BlackSiteRelay/AlignedGrid226"
+}

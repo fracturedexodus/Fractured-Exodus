@@ -9,12 +9,13 @@ public static class MissionFloorTextureFactory
 	private static readonly Dictionary<string, Texture2D> Cache = new Dictionary<string, Texture2D>();
 	private static readonly Dictionary<string, string> TexturePaths = new Dictionary<string, string>
 	{
-		{ "floor_standard", "res://Assets/Missions/BlackSiteRelay/FloorTiles/floor_standard_flat.png" },
-		{ "floor_grate", "res://Assets/Missions/BlackSiteRelay/FloorTiles/floor_grate_flat.png" },
-		{ "floor_hazard", "res://Assets/Missions/BlackSiteRelay/FloorTiles/floor_hazard_flat.png" },
-		{ "floor_panel", "res://Assets/Missions/BlackSiteRelay/FloorTiles/floor_panel_flat.png" },
-		{ "floor_plating", "res://Assets/Missions/BlackSiteRelay/FloorTiles/floor_plating_flat.png" },
-		{ "floor_glow", "res://Assets/Missions/BlackSiteRelay/FloorTiles/floor_glow_flat.png" }
+		{ "floor_standard", "res://Assets/Missions/BlackSiteRelay/RemadeOriginal226/floors/floor_standard_226.png" },
+		{ "floor_grate", "res://Assets/Missions/BlackSiteRelay/RemadeOriginal226/floors/floor_grate_226.png" },
+		{ "floor_hazard", "res://Assets/Missions/BlackSiteRelay/RemadeOriginal226/floors/floor_hazard_226.png" },
+		{ "floor_panel", "res://Assets/Missions/BlackSiteRelay/RemadeOriginal226/floors/floor_vented_226.png" },
+		{ "floor_plating", "res://Assets/Missions/BlackSiteRelay/RemadeOriginal226/floors/floor_plating_226.png" },
+		{ "floor_compact_panel", "res://Assets/Missions/BlackSiteRelay/RemadeOriginal226/floors/floor_compact_panel_226.png" },
+		{ "floor_glow", "res://Assets/Missions/BlackSiteRelay/RemadeOriginal226/floors/floor_relay_glow_226.png" }
 	};
 
 	public static Texture2D GetTexture(string tileId)

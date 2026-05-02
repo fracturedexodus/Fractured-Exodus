@@ -244,11 +244,7 @@ public partial class MissionSceneBuilder : Node2D
 		Button button = new Button
 				{
 					Text = definition.DisplayName,
-					Icon = new AtlasTexture
-					{
-						Atlas = GD.Load<Texture2D>("res://Assets/Missions/BlackSiteRelay/black_site_relay_tileset.png"),
-						Region = definition.Region
-					},
+					Icon = GetTileIconTexture(definition),
 					Alignment = HorizontalAlignment.Left,
 					ExpandIcon = true,
 					CustomMinimumSize = new Vector2(0f, 40f)
@@ -388,7 +384,7 @@ public partial class MissionSceneBuilder : Node2D
 
 	private void StartPlacementOrDrag()
 	{
-		Sprite2D existing = FindSpriteAtMouse();
+		Sprite2D existing = FindSpriteAtMouse(ShouldIncludeFloorsForSelection());
 		if (existing != null)
 		{
 			SelectPlacedSprite(existing);
@@ -462,11 +458,16 @@ public partial class MissionSceneBuilder : Node2D
 		UpdateSelectedLabel();
 	}
 
-	private Sprite2D FindSpriteAtMouse()
+	private Sprite2D FindSpriteAtMouse(bool includeFloors = true)
 	{
 		Vector2 mouseWorld = GetGlobalMousePosition();
 		foreach (Node2D layer in GetSelectableLayers())
 		{
+			if (!includeFloors && layer == _floorLayer)
+			{
+				continue;
+			}
+
 			Godot.Collections.Array<Node> children = layer.GetChildren();
 			for (int index = children.Count - 1; index >= 0; index--)
 			{
@@ -486,6 +487,16 @@ public partial class MissionSceneBuilder : Node2D
 		}
 
 		return null;
+	}
+
+	private bool ShouldIncludeFloorsForSelection()
+	{
+		if (_selectedMarker != null)
+		{
+			return false;
+		}
+
+		return _selectedTile == null || _selectedTile.Category == MissionTileCategory.Floor;
 	}
 
 	private void MoveSpriteToCell(Sprite2D sprite, int column, int row)
@@ -525,13 +536,13 @@ public partial class MissionSceneBuilder : Node2D
 
 	private Sprite2D CreateSprite(MissionTileDefinition definition, int column, int row)
 	{
-		bool isFloor = definition.Category == MissionTileCategory.Floor;
+		bool usesAtlasRegion = string.IsNullOrEmpty(definition.TexturePath) && definition.Category != MissionTileCategory.Floor;
 		Sprite2D sprite = new Sprite2D
 		{
-			Texture = isFloor ? MissionFloorTextureFactory.GetTexture(definition.Id) : GD.Load<Texture2D>("res://Assets/Missions/BlackSiteRelay/black_site_relay_tileset.png"),
-			RegionEnabled = !isFloor,
+			Texture = GetTileTexture(definition),
+			RegionEnabled = usesAtlasRegion,
 			RegionRect = definition.Region,
-			Scale = isFloor ? Vector2.One : definition.Scale,
+			Scale = definition.Scale,
 			Position = IsoGridHelper.GridToWorld(column, row, _tileStep, _gridOrigin) + definition.Offset
 		};
 		sprite.SetMeta("tile_id", definition.Id);
@@ -543,7 +554,7 @@ public partial class MissionSceneBuilder : Node2D
 		sprite.SetMeta("offset_y", 0f);
 		sprite.SetMeta("rotation_degrees", 0f);
 		sprite.SetMeta("base_modulate", Colors.White);
-		sprite.AddChild(CreateSelectionOutline(isFloor ? MissionFloorTextureFactory.TileSize : definition.Region.Size));
+		sprite.AddChild(CreateSelectionOutline(GetSpriteBoundsSize(sprite)));
 		return sprite;
 	}
 
@@ -935,6 +946,35 @@ public partial class MissionSceneBuilder : Node2D
 			Mathf.Min(color.G * 1.25f, 1f),
 			Mathf.Min(color.B * 1.25f, 1f),
 			color.A);
+	}
+
+	private Texture2D GetTileTexture(MissionTileDefinition definition)
+	{
+		if (definition.Category == MissionTileCategory.Floor)
+		{
+			return MissionFloorTextureFactory.GetTexture(definition.Id);
+		}
+
+		if (!string.IsNullOrEmpty(definition.TexturePath))
+		{
+			return GD.Load<Texture2D>(definition.TexturePath);
+		}
+
+		return GD.Load<Texture2D>("res://Assets/Missions/BlackSiteRelay/black_site_relay_tileset.png");
+	}
+
+	private Texture2D GetTileIconTexture(MissionTileDefinition definition)
+	{
+		if (!string.IsNullOrEmpty(definition.TexturePath))
+		{
+			return GD.Load<Texture2D>(definition.TexturePath);
+		}
+
+		return new AtlasTexture
+		{
+			Atlas = GD.Load<Texture2D>("res://Assets/Missions/BlackSiteRelay/black_site_relay_tileset.png"),
+			Region = definition.Region
+		};
 	}
 
 	private Texture2D GetMarkerIconTexture(MissionMarkerDefinition definition)

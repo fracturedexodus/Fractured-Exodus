@@ -1,0 +1,485 @@
+﻿{
+    "source":  "res://Assets/Missions/BlackSiteRelay/black_site_relay_tileset.png",
+    "note":  "Preview-only remade original package. Floors normalized to 226x133. Builder not wired to this package yet.",
+    "floor_tile_size":  {
+                            "height":  133,
+                            "width":  226
+                        },
+    "floors":  [
+                   {
+                       "id":  "floor_standard",
+                       "display_name":  "Floor Standard",
+                       "file":  "floors/floor_standard_226.png",
+                       "size":  {
+                                    "height":  133,
+                                    "width":  226
+                                },
+                       "source_rect":  {
+                                           "y":  31,
+                                           "width":  222,
+                                           "height":  129,
+                                           "x":  31
+                                       }
+                   },
+                   {
+                       "id":  "floor_grate",
+                       "display_name":  "Floor Grate",
+                       "file":  "floors/floor_grate_226.png",
+                       "size":  {
+                                    "height":  133,
+                                    "width":  226
+                                },
+                       "source_rect":  {
+                                           "y":  31,
+                                           "width":  219,
+                                           "height":  128,
+                                           "x":  267
+                                       }
+                   },
+                   {
+                       "id":  "floor_plating",
+                       "display_name":  "Floor Plating",
+                       "file":  "floors/floor_plating_226.png",
+                       "size":  {
+                                    "height":  133,
+                                    "width":  226
+                                },
+                       "source_rect":  {
+                                           "y":  31,
+                                           "width":  211,
+                                           "height":  127,
+                                           "x":  496
+                                       }
+                   },
+                   {
+                       "id":  "floor_hazard",
+                       "display_name":  "Floor Hazard",
+                       "file":  "floors/floor_hazard_226.png",
+                       "size":  {
+                                    "height":  133,
+                                    "width":  226
+                                },
+                       "source_rect":  {
+                                           "y":  32,
+                                           "width":  212,
+                                           "height":  126,
+                                           "x":  718
+                                       }
+                   },
+                   {
+                       "id":  "floor_vented",
+                       "display_name":  "Floor Vented",
+                       "file":  "floors/floor_vented_226.png",
+                       "size":  {
+                                    "height":  133,
+                                    "width":  226
+                                },
+                       "source_rect":  {
+                                           "y":  33,
+                                           "width":  203,
+                                           "height":  124,
+                                           "x":  941
+                                       }
+                   },
+                   {
+                       "id":  "floor_compact_panel",
+                       "display_name":  "Floor Compact Panel",
+                       "file":  "floors/floor_compact_panel_226.png",
+                       "size":  {
+                                    "height":  133,
+                                    "width":  226
+                                },
+                       "source_rect":  {
+                                           "y":  35,
+                                           "width":  187,
+                                           "height":  120,
+                                           "x":  1153
+                                       }
+                   },
+                   {
+                       "id":  "floor_relay_glow",
+                       "display_name":  "Floor Relay Glow",
+                       "file":  "floors/floor_relay_glow_226.png",
+                       "size":  {
+                                    "height":  133,
+                                    "width":  226
+                                },
+                       "source_rect":  {
+                                           "y":  42,
+                                           "width":  168,
+                                           "height":  108,
+                                           "x":  1350
+                                       }
+                   }
+               ],
+    "objects":  [
+                    {
+                        "id":  "wall_panel_left",
+                        "display_name":  "Wall Panel Left",
+                        "category":  "wall",
+                        "file":  "objects/wall_panel_left.png",
+                        "size":  {
+                                     "height":  178,
+                                     "width":  166
+                                 },
+                        "source_rect":  {
+                                            "y":  179,
+                                            "width":  166,
+                                            "height":  178,
+                                            "x":  57
+                                        }
+                    },
+                    {
+                        "id":  "wall_window_left",
+                        "display_name":  "Window Wall Left",
+                        "category":  "wall",
+                        "file":  "objects/wall_window_left.png",
+                        "size":  {
+                                     "height":  178,
+                                     "width":  161
+                                 },
+                        "source_rect":  {
+                                            "y":  181,
+                                            "width":  161,
+                                            "height":  178,
+                                            "x":  299
+                                        }
+                    },
+                    {
+                        "id":  "wall_panel_mid_a",
+                        "display_name":  "Wall Panel Mid A",
+                        "category":  "wall",
+                        "file":  "objects/wall_panel_mid_a.png",
+                        "size":  {
+                                     "height":  173,
+                                     "width":  155
+                                 },
+                        "source_rect":  {
+                                            "y":  185,
+                                            "width":  155,
+                                            "height":  173,
+                                            "x":  539
+                                        }
+                    },
+                    {
+                        "id":  "wall_panel_mid_b",
+                        "display_name":  "Wall Panel Mid B",
+                        "category":  "wall",
+                        "file":  "objects/wall_panel_mid_b.png",
+                        "size":  {
+                                     "height":  175,
+                                     "width":  148
+                                 },
+                        "source_rect":  {
+                                            "y":  186,
+                                            "width":  148,
+                                            "height":  175,
+                                            "x":  769
+                                        }
+                    },
+                    {
+                        "id":  "wall_panel_right",
+                        "display_name":  "Wall Panel Right",
+                        "category":  "wall",
+                        "file":  "objects/wall_panel_right.png",
+                        "size":  {
+                                     "height":  174,
+                                     "width":  157
+                                 },
+                        "source_rect":  {
+                                            "y":  183,
+                                            "width":  157,
+                                            "height":  174,
+                                            "x":  991
+                                        }
+                    },
+                    {
+                        "id":  "wall_corner_ne",
+                        "display_name":  "Wall Corner NE",
+                        "category":  "wall",
+                        "file":  "objects/wall_corner_ne.png",
+                        "size":  {
+                                     "height":  139,
+                                     "width":  155
+                                 },
+                        "source_rect":  {
+                                            "y":  184,
+                                            "width":  155,
+                                            "height":  139,
+                                            "x":  1240
+                                        }
+                    },
+                    {
+                        "id":  "wall_corner_left",
+                        "display_name":  "Wall Corner Left",
+                        "category":  "wall",
+                        "file":  "objects/wall_corner_left.png",
+                        "size":  {
+                                     "height":  151,
+                                     "width":  175
+                                 },
+                        "source_rect":  {
+                                            "y":  384,
+                                            "width":  175,
+                                            "height":  151,
+                                            "x":  54
+                                        }
+                    },
+                    {
+                        "id":  "wall_corner_center",
+                        "display_name":  "Wall Corner Center",
+                        "category":  "wall",
+                        "file":  "objects/wall_corner_center.png",
+                        "size":  {
+                                     "height":  156,
+                                     "width":  191
+                                 },
+                        "source_rect":  {
+                                            "y":  386,
+                                            "width":  191,
+                                            "height":  156,
+                                            "x":  278
+                                        }
+                    },
+                    {
+                        "id":  "wall_corner_right",
+                        "display_name":  "Wall Corner Right",
+                        "category":  "wall",
+                        "file":  "objects/wall_corner_right.png",
+                        "size":  {
+                                     "height":  154,
+                                     "width":  192
+                                 },
+                        "source_rect":  {
+                                            "y":  388,
+                                            "width":  192,
+                                            "height":  154,
+                                            "x":  521
+                                        }
+                    },
+                    {
+                        "id":  "door_survivors",
+                        "display_name":  "Door Survivors",
+                        "category":  "door",
+                        "file":  "objects/door_survivors.png",
+                        "size":  {
+                                     "height":  174,
+                                     "width":  281
+                                 },
+                        "source_rect":  {
+                                            "y":  391,
+                                            "width":  281,
+                                            "height":  174,
+                                            "x":  812
+                                        }
+                    },
+                    {
+                        "id":  "door_archive",
+                        "display_name":  "Door Archive",
+                        "category":  "door",
+                        "file":  "objects/door_archive.png",
+                        "size":  {
+                                     "height":  174,
+                                     "width":  280
+                                 },
+                        "source_rect":  {
+                                            "y":  391,
+                                            "width":  280,
+                                            "height":  174,
+                                            "x":  1165
+                                        }
+                    },
+                    {
+                        "id":  "console_single",
+                        "display_name":  "Console Single",
+                        "category":  "prop",
+                        "file":  "objects/console_single.png",
+                        "size":  {
+                                     "height":  167,
+                                     "width":  171
+                                 },
+                        "source_rect":  {
+                                            "y":  588,
+                                            "width":  171,
+                                            "height":  167,
+                                            "x":  30
+                                        }
+                    },
+                    {
+                        "id":  "console_triple",
+                        "display_name":  "Console Triple",
+                        "category":  "prop",
+                        "file":  "objects/console_triple.png",
+                        "size":  {
+                                     "height":  169,
+                                     "width":  208
+                                 },
+                        "source_rect":  {
+                                            "y":  587,
+                                            "width":  208,
+                                            "height":  169,
+                                            "x":  263
+                                        }
+                    },
+                    {
+                        "id":  "console_power",
+                        "display_name":  "Console Power",
+                        "category":  "prop",
+                        "file":  "objects/console_power.png",
+                        "size":  {
+                                     "height":  161,
+                                     "width":  128
+                                 },
+                        "source_rect":  {
+                                            "y":  584,
+                                            "width":  128,
+                                            "height":  161,
+                                            "x":  543
+                                        }
+                    },
+                    {
+                        "id":  "crate_small",
+                        "display_name":  "Crate Small",
+                        "category":  "prop",
+                        "file":  "objects/crate_small.png",
+                        "size":  {
+                                     "height":  130,
+                                     "width":  135
+                                 },
+                        "source_rect":  {
+                                            "y":  612,
+                                            "width":  135,
+                                            "height":  130,
+                                            "x":  785
+                                        }
+                    },
+                    {
+                        "id":  "crate_medium",
+                        "display_name":  "Crate Medium",
+                        "category":  "prop",
+                        "file":  "objects/crate_medium.png",
+                        "size":  {
+                                     "height":  134,
+                                     "width":  145
+                                 },
+                        "source_rect":  {
+                                            "y":  610,
+                                            "width":  145,
+                                            "height":  134,
+                                            "x":  1002
+                                        }
+                    },
+                    {
+                        "id":  "crate_grate",
+                        "display_name":  "Crate Grate",
+                        "category":  "prop",
+                        "file":  "objects/crate_grate.png",
+                        "size":  {
+                                     "height":  139,
+                                     "width":  147
+                                 },
+                        "source_rect":  {
+                                            "y":  611,
+                                            "width":  147,
+                                            "height":  139,
+                                            "x":  1236
+                                        }
+                    },
+                    {
+                        "id":  "pipe_elbow",
+                        "display_name":  "Pipe Elbow",
+                        "category":  "prop",
+                        "file":  "objects/pipe_elbow.png",
+                        "size":  {
+                                     "height":  145,
+                                     "width":  159
+                                 },
+                        "source_rect":  {
+                                            "y":  795,
+                                            "width":  159,
+                                            "height":  145,
+                                            "x":  52
+                                        }
+                    },
+                    {
+                        "id":  "pipe_tank",
+                        "display_name":  "Pipe Tank",
+                        "category":  "prop",
+                        "file":  "objects/pipe_tank.png",
+                        "size":  {
+                                     "height":  124,
+                                     "width":  162
+                                 },
+                        "source_rect":  {
+                                            "y":  826,
+                                            "width":  162,
+                                            "height":  124,
+                                            "x":  256
+                                        }
+                    },
+                    {
+                        "id":  "debris_slab",
+                        "display_name":  "Debris Slab",
+                        "category":  "prop",
+                        "file":  "objects/debris_slab.png",
+                        "size":  {
+                                     "height":  165,
+                                     "width":  151
+                                 },
+                        "source_rect":  {
+                                            "y":  790,
+                                            "width":  151,
+                                            "height":  165,
+                                            "x":  478
+                                        }
+                    },
+                    {
+                        "id":  "debris_wreck",
+                        "display_name":  "Debris Wreck",
+                        "category":  "prop",
+                        "file":  "objects/debris_wreck.png",
+                        "size":  {
+                                     "height":  148,
+                                     "width":  215
+                                 },
+                        "source_rect":  {
+                                            "y":  799,
+                                            "width":  215,
+                                            "height":  148,
+                                            "x":  669
+                                        }
+                    },
+                    {
+                        "id":  "medical_bed",
+                        "display_name":  "Medical Bed",
+                        "category":  "prop",
+                        "file":  "objects/medical_bed.png",
+                        "size":  {
+                                     "height":  188,
+                                     "width":  205
+                                 },
+                        "source_rect":  {
+                                            "y":  776,
+                                            "width":  205,
+                                            "height":  188,
+                                            "x":  935
+                                        }
+                    },
+                    {
+                        "id":  "archive_core",
+                        "display_name":  "Archive Core",
+                        "category":  "prop",
+                        "file":  "objects/archive_core.png",
+                        "size":  {
+                                     "height":  206,
+                                     "width":  185
+                                 },
+                        "source_rect":  {
+                                            "y":  771,
+                                            "width":  185,
+                                            "height":  206,
+                                            "x":  1214
+                                        }
+                    }
+                ]
+}

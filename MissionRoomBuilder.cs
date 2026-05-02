@@ -198,15 +198,15 @@ public partial class MissionRoomBuilder : Node
 
 	private Sprite2D CreateSprite(MissionTileDefinition definition, int column, int row, string name, Vector2 extraOffset, float rotationDegrees)
 	{
-		bool isFloor = definition.Category == MissionTileCategory.Floor;
+		bool usesAtlasRegion = string.IsNullOrEmpty(definition.TexturePath) && definition.Category != MissionTileCategory.Floor;
 		Sprite2D sprite = new Sprite2D
 		{
 			Name = name,
-			Texture = isFloor ? MissionFloorTextureFactory.GetTexture(definition.Id) : TilesetTexture,
-			RegionEnabled = !isFloor,
+			Texture = GetTileTexture(definition),
+			RegionEnabled = usesAtlasRegion,
 			RegionRect = definition.Region,
 			Position = GetCellWorldPosition(column, row, definition.Offset + extraOffset),
-			Scale = isFloor ? Vector2.One : definition.Scale,
+			Scale = definition.Scale,
 			RotationDegrees = rotationDegrees
 		};
 		sprite.SetMeta("tile_id", definition.Id);
@@ -216,5 +216,20 @@ public partial class MissionRoomBuilder : Node
 		sprite.SetMeta("offset_y", extraOffset.Y);
 		sprite.SetMeta("rotation_degrees", rotationDegrees);
 		return sprite;
+	}
+
+	private Texture2D GetTileTexture(MissionTileDefinition definition)
+	{
+		if (definition.Category == MissionTileCategory.Floor)
+		{
+			return MissionFloorTextureFactory.GetTexture(definition.Id);
+		}
+
+		if (!string.IsNullOrEmpty(definition.TexturePath))
+		{
+			return GD.Load<Texture2D>(definition.TexturePath);
+		}
+
+		return TilesetTexture;
 	}
 }
