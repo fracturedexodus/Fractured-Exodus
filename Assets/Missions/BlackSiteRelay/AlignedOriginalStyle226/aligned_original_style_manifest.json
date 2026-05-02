@@ -1,0 +1,17 @@
+﻿{
+    "note":  "Redrawn original-style tiles aligned to builder grid. Floors 226x133. Walls are 226x360 transparent canvases centered on the clicked cell and drawn along exact diamond edges.",
+    "grid":  {
+                 "height":  133,
+                 "width":  226
+             },
+    "wall_canvas":  {
+                        "height":  360,
+                        "width":  226
+                    },
+    "sides":  [
+                  "NW",
+                  "NE",
+                  "SE",
+                  "SW"
+              ]
+}
