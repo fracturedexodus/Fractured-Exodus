@@ -7,9 +7,9 @@
 [ext_resource path="res://addons/quaternius-modular-scifi-pack/map/bodies/roof_tile_light.tscn" type="PackedScene" id=5]
 [ext_resource path="res://addons/quaternius-modular-scifi-pack/doors/door_double.tscn" type="PackedScene" id=6]
 
-[node name="Hall" type="Spatial"]
+[node name="Hall" type="Node3D"]
 
-[node name="Floor" type="Spatial" parent="."]
+[node name="Floor" type="Node3D" parent="."]
 
 [node name="FloorTileDouble" parent="Floor" instance=ExtResource( 3 )]
 transform = Transform( -4.37114e-08, 0, -1, 0, 1, 0, 1, 0, -4.37114e-08, -1, 0, -1 )
@@ -41,7 +41,7 @@ transform = Transform( -4.37114e-08, 0, -1, 0, 1, 0, 1, 0, -4.37114e-08, 3, 0, -
 [node name="FloorTileDouble12" parent="Floor" instance=ExtResource( 3 )]
 transform = Transform( -4.37114e-08, 0, -1, 0, 1, 0, 1, 0, -4.37114e-08, 1, 0, -1 )
 
-[node name="Walls" type="Spatial" parent="."]
+[node name="Walls" type="Node3D" parent="."]
 
 [node name="DoorDoubleLongWallSideAMesh" parent="Walls" instance=ExtResource( 1 )]
 transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 8.74228e-08, 0, -2 )
@@ -73,7 +73,7 @@ transform = Transform( -1, 0, -8.74228e-08, 0, 1, 0, 8.74228e-08, 0, -1, -4, 0, 
 [node name="WallEmpty8" parent="Walls" instance=ExtResource( 2 )]
 transform = Transform( -1, 0, -8.74228e-08, 0, 1, 0, 8.74228e-08, 0, -1, -8, 0, 2 )
 
-[node name="Ceiling" type="Spatial" parent="."]
+[node name="Ceiling" type="Node3D" parent="."]
 
 [node name="RoofTileLight" parent="Ceiling" instance=ExtResource( 5 )]
 transform = Transform( 1, 0, 0, 0, -1, 8.74228e-08, 0, -8.74228e-08, -1, 1, 4, 1 )
@@ -135,7 +135,7 @@ transform = Transform( 1, 0, 0, 0, -1, 8.74228e-08, 0, -8.74228e-08, -1, 9, 4, 1
 [node name="RoofTileEmpty8" parent="Ceiling" instance=ExtResource( 4 )]
 transform = Transform( 1, 0, 0, 0, -1, 8.74228e-08, 0, -8.74228e-08, -1, 9, 4, -1 )
 
-[node name="Doors" type="Spatial" parent="."]
+[node name="Doors" type="Node3D" parent="."]
 
 [node name="DoorDouble1" parent="Doors" instance=ExtResource( 6 )]
 transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 3 )

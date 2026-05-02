@@ -6,7 +6,7 @@
 [ext_resource path="res://addons/quaternius-modular-scifi-pack/doors/scripts/door_body.gd" type="Script" id=4]
 [ext_resource path="res://addons/quaternius-modular-scifi-pack/doors/sounds/door_sound.ogg" type="AudioStream" id=5]
 
-[node name="DoorDouble" type="Spatial"]
+[node name="DoorDouble" type="Node3D"]
 script = ExtResource( 3 )
 
 [node name="DoorDoubleL" parent="." groups=["door"] instance=ExtResource( 1 )]

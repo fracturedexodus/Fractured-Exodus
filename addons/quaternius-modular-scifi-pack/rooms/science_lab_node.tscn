@@ -22,9 +22,9 @@
 [ext_resource path="res://addons/quaternius-modular-scifi-pack/doors/door_single.tscn" type="PackedScene" id=20]
 [ext_resource path="res://addons/quaternius-modular-scifi-pack/props/bodies/props_pod.tscn" type="PackedScene" id=21]
 
-[node name="ScienceLab" type="Spatial"]
+[node name="ScienceLab" type="Node3D"]
 
-[node name="Floor" type="Spatial" parent="."]
+[node name="Floor" type="Node3D" parent="."]
 
 [node name="FloorTileSide" parent="Floor" instance=ExtResource( 1 )]
 transform = Transform( -4.37114e-08, 0, 1, 0, 1, 0, -1, 0, -4.37114e-08, -1, 0, 10 )
@@ -242,7 +242,7 @@ transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, -5 )
 [node name="FloorTileEmpty24" parent="Floor" instance=ExtResource( 2 )]
 transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, -1, 0, -5 )
 
-[node name="Wall" type="Spatial" parent="."]
+[node name="Wall" type="Node3D" parent="."]
 
 [node name="WindowWallSideA" parent="Wall" instance=ExtResource( 8 )]
 transform = Transform( 1, 0, 1.74846e-07, 0, 1, 0, -1.74846e-07, 0, 1, 4, 0, -1 )
@@ -358,7 +358,7 @@ transform = Transform( -1, 0, -8.74228e-08, 0, 1, 0, 8.74228e-08, 0, -1, -6, 0, 
 [node name="DoorDoubleWallSideB" parent="Wall" instance=ExtResource( 18 )]
 transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -14 )
 
-[node name="Roof" type="Spatial" parent="."]
+[node name="Roof" type="Node3D" parent="."]
 
 [node name="RoofTileEmpty" parent="Roof" instance=ExtResource( 16 )]
 transform = Transform( -1, 7.64274e-15, 8.74228e-08, 0, -1, 8.74228e-08, 8.74228e-08, 8.74228e-08, 1, 5, 4, -4.76837e-07 )
@@ -576,7 +576,7 @@ transform = Transform( -1, 7.64274e-15, 8.74228e-08, 0, -1, 8.74228e-08, 8.74228
 [node name="RoofTileLight14" parent="Roof" instance=ExtResource( 14 )]
 transform = Transform( -1, 7.64274e-15, 8.74228e-08, 0, -1, 8.74228e-08, 8.74228e-08, 8.74228e-08, 1, 1, 4, 2 )
 
-[node name="Objects" type="Spatial" parent="."]
+[node name="Objects" type="Node3D" parent="."]
 
 [node name="PropsShelfTall" parent="Objects" instance=ExtResource( 19 )]
 transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 10 )
@@ -587,7 +587,7 @@ transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 0, 10 )
 [node name="PropsPod" parent="Objects" instance=ExtResource( 21 )]
 transform = Transform( -1, 0, -8.74228e-08, 0, 1, 0, 8.74228e-08, 0, -1, 0, 0, 5 )
 
-[node name="Doors" type="Spatial" parent="."]
+[node name="Doors" type="Node3D" parent="."]
 
 [node name="DoorSingle" parent="Doors" instance=ExtResource( 20 )]
 transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -1.5 )

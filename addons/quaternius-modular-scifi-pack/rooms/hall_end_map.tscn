@@ -3,7 +3,7 @@
 [ext_resource path="res://addons/quaternius-modular-scifi-pack/doors/door_double.tscn" type="PackedScene" id=1]
 [ext_resource path="res://addons/quaternius-modular-scifi-pack/map/meshlibrary/modular_scifi.meshlib" type="MeshLibrary" id=2]
 
-[node name="HallEnd" type="Spatial"]
+[node name="HallEnd" type="Node3D"]
 
 [node name="GridMap" type="GridMap" parent="."]
 mesh_library = ExtResource( 2 )

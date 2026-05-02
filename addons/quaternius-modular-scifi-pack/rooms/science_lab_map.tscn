@@ -5,7 +5,7 @@
 [ext_resource path="res://addons/quaternius-modular-scifi-pack/props/bodies/props_shelf_tall.tscn" type="PackedScene" id=3]
 [ext_resource path="res://addons/quaternius-modular-scifi-pack/map/meshlibrary/modular_scifi.meshlib" type="MeshLibrary" id=4]
 
-[node name="ScienceLab" type="Spatial"]
+[node name="ScienceLab" type="Node3D"]
 
 [node name="GridMap" type="GridMap" parent="."]
 mesh_library = ExtResource( 4 )
@@ -21,7 +21,7 @@ __meta__ = {
 "_editor_floor_": Vector3( 0, 0, 0 )
 }
 
-[node name="Props" type="Spatial" parent="."]
+[node name="Props" type="Node3D" parent="."]
 
 [node name="PropsPod" parent="Props" instance=ExtResource( 1 )]
 transform = Transform( -1, 0, -8.74228e-08, 0, 1, 0, 8.74228e-08, 0, -1, 0, 0, 5 )
@@ -32,7 +32,7 @@ transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 10 )
 [node name="PropsShelfTall2" parent="Props" instance=ExtResource( 3 )]
 transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 0, 10 )
 
-[node name="Doors" type="Spatial" parent="."]
+[node name="Doors" type="Node3D" parent="."]
 
 [node name="DoorSingle" parent="Doors" instance=ExtResource( 2 )]
 transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -1.5 )

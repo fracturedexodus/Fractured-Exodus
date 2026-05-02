@@ -1,5 +1,5 @@
 class_name QuaterniusDoorBody
-extends KinematicBody
+extends AnimatableBody3D
 
 
 ## Quaternius Door Body
@@ -12,8 +12,8 @@ extends KinematicBody
 
 
 ## Door move distance
-export var distance : Vector3 = Vector3(1.0, 0.0, 0.0)
+@export var distance : Vector3 = Vector3(1.0, 0.0, 0.0)
 
 
 ## Parent door
-onready var door : QuaterniusDoor = get_parent()
+@onready var door : QuaterniusDoor = get_parent()

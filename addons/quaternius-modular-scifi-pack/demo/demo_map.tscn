@@ -6,7 +6,7 @@
 [ext_resource path="res://addons/quaternius-modular-scifi-pack/rooms/hall_end_map.tscn" type="PackedScene" id=4]
 [ext_resource path="res://addons/quaternius-modular-scifi-pack/rooms/storage_room_map.tscn" type="PackedScene" id=5]
 
-[node name="Spatial" type="Spatial"]
+[node name="Spatial" type="Node3D"]
 
 [node name="Player" parent="." instance=ExtResource( 2 )]
 
