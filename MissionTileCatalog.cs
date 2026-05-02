@@ -19,8 +19,9 @@ public sealed class MissionTileDefinition
 	public Vector2 Offset { get; }
 	public Vector2 Scale { get; }
 	public string TexturePath { get; }
+	public bool VisibleInPalette { get; }
 
-	public MissionTileDefinition(string id, string displayName, MissionTileCategory category, char symbol, Rect2 region, Vector2 offset, Vector2 scale, string texturePath = "")
+	public MissionTileDefinition(string id, string displayName, MissionTileCategory category, char symbol, Rect2 region, Vector2 offset, Vector2 scale, string texturePath = "", bool visibleInPalette = true)
 	{
 		Id = id;
 		DisplayName = displayName;
@@ -30,6 +31,7 @@ public sealed class MissionTileDefinition
 		Offset = offset;
 		Scale = scale;
 		TexturePath = texturePath;
+		VisibleInPalette = visibleInPalette;
 	}
 }
 
@@ -53,28 +55,29 @@ public static class MissionTileCatalog
 		new MissionTileDefinition("wall_ne_panel", "Wall NE Panel", MissionTileCategory.Wall, 'e', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_NE_panel_a.png"),
 		new MissionTileDefinition("wall_se_panel", "Wall SE Panel", MissionTileCategory.Wall, 's', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_SE_panel_a.png"),
 		new MissionTileDefinition("wall_sw_panel", "Wall SW Panel", MissionTileCategory.Wall, 'z', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_SW_panel_a.png"),
+
 		new MissionTileDefinition("wall_nw_window", "Window NW Wall", MissionTileCategory.Wall, 'n', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_NW_window.png"),
 		new MissionTileDefinition("wall_ne_window", "Window NE Wall", MissionTileCategory.Wall, 'N', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_NE_window.png"),
 		new MissionTileDefinition("wall_se_window", "Window SE Wall", MissionTileCategory.Wall, 'A', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_SE_window.png"),
 		new MissionTileDefinition("wall_sw_window", "Window SW Wall", MissionTileCategory.Wall, 'G', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_SW_window.png"),
-		new MissionTileDefinition("wall_nw_hazard", "Hazard NW Wall", MissionTileCategory.Wall, 'u', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_NW_hazard.png"),
-		new MissionTileDefinition("wall_ne_hazard", "Hazard NE Wall", MissionTileCategory.Wall, 'U', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_NE_hazard.png"),
-		new MissionTileDefinition("wall_se_hazard", "Hazard SE Wall", MissionTileCategory.Wall, 'H', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_SE_hazard.png"),
-		new MissionTileDefinition("wall_sw_hazard", "Hazard SW Wall", MissionTileCategory.Wall, 'J', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_SW_hazard.png"),
-		new MissionTileDefinition("wall_corner_north", "Wall Corner North", MissionTileCategory.Wall, 'b', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_corner_north.png"),
-		new MissionTileDefinition("wall_corner_east", "Wall Corner East", MissionTileCategory.Wall, 'r', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_corner_east.png"),
-		new MissionTileDefinition("wall_corner_south", "Wall Corner South", MissionTileCategory.Wall, 'l', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_corner_south.png"),
-		new MissionTileDefinition("wall_corner_west", "Wall Corner West", MissionTileCategory.Wall, 'o', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_corner_west.png"),
+		new MissionTileDefinition("wall_nw_hazard", "Hazard NW Wall", MissionTileCategory.Wall, 'u', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_NW_panel_a.png", false),
+		new MissionTileDefinition("wall_ne_hazard", "Hazard NE Wall", MissionTileCategory.Wall, 'U', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_NE_panel_a.png", false),
+		new MissionTileDefinition("wall_se_hazard", "Hazard SE Wall", MissionTileCategory.Wall, 'H', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_SE_panel_a.png", false),
+		new MissionTileDefinition("wall_sw_hazard", "Hazard SW Wall", MissionTileCategory.Wall, 'J', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_SW_panel_a.png", false),
+		new MissionTileDefinition("wall_corner_north", "Wall Corner North", MissionTileCategory.Wall, 'b', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_NE_panel_a.png", false),
+		new MissionTileDefinition("wall_corner_east", "Wall Corner East", MissionTileCategory.Wall, 'r', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_SE_panel_a.png", false),
+		new MissionTileDefinition("wall_corner_south", "Wall Corner South", MissionTileCategory.Wall, 'l', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_SW_panel_a.png", false),
+		new MissionTileDefinition("wall_corner_west", "Wall Corner West", MissionTileCategory.Wall, 'o', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_NW_panel_a.png", false),
 
-		new MissionTileDefinition("wall_corner_left", "Wall Corner Left", MissionTileCategory.Wall, 'L', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_corner_west.png"),
-		new MissionTileDefinition("wall_straight_left", "Wall Panel Left", MissionTileCategory.Wall, 'W', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_NW_panel_a.png"),
-		new MissionTileDefinition("wall_window_left", "Window Wall Left", MissionTileCategory.Wall, 'V', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_NW_window.png"),
-		new MissionTileDefinition("wall_panel_mid_a", "Wall Panel Mid A", MissionTileCategory.Wall, 'X', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_NW_hazard.png"),
-		new MissionTileDefinition("wall_straight_center", "Wall Panel Mid B", MissionTileCategory.Wall, 'Y', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_NE_panel_a.png"),
-		new MissionTileDefinition("wall_straight_right", "Wall Panel Right", MissionTileCategory.Wall, 'Z', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_NE_window.png"),
-		new MissionTileDefinition("wall_corner_ne", "Wall Corner NE", MissionTileCategory.Wall, 'E', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_corner_north.png"),
-		new MissionTileDefinition("wall_corner_center", "Wall Corner Center", MissionTileCategory.Wall, 'B', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_corner_east.png"),
-		new MissionTileDefinition("wall_corner_right", "Wall Corner Right", MissionTileCategory.Wall, 'R', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_corner_south.png"),
+		new MissionTileDefinition("wall_corner_left", "Wall Corner Left", MissionTileCategory.Wall, 'L', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_NW_panel_a.png", false),
+		new MissionTileDefinition("wall_straight_left", "Wall Panel Left", MissionTileCategory.Wall, 'W', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_NW_panel_a.png", false),
+		new MissionTileDefinition("wall_window_left", "Window Wall Left", MissionTileCategory.Wall, 'V', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_NW_panel_a.png", false),
+		new MissionTileDefinition("wall_panel_mid_a", "Wall Panel Mid A", MissionTileCategory.Wall, 'X', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_NW_panel_a.png", false),
+		new MissionTileDefinition("wall_straight_center", "Wall Panel Mid B", MissionTileCategory.Wall, 'Y', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_NE_panel_a.png", false),
+		new MissionTileDefinition("wall_straight_right", "Wall Panel Right", MissionTileCategory.Wall, 'Z', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_NE_panel_a.png", false),
+		new MissionTileDefinition("wall_corner_ne", "Wall Corner NE", MissionTileCategory.Wall, 'E', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_NE_panel_a.png", false),
+		new MissionTileDefinition("wall_corner_center", "Wall Corner Center", MissionTileCategory.Wall, 'B', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_SE_panel_a.png", false),
+		new MissionTileDefinition("wall_corner_right", "Wall Corner Right", MissionTileCategory.Wall, 'R', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_SW_panel_a.png", false),
 
 		new MissionTileDefinition("door_survivors", "Door Survivors", MissionTileCategory.Prop, 'd', new Rect2(0, 0, 532, 302), AnchorBottomCenter(532f, 302f, DoorScale.X), DoorScale, AlignedRoot + "props/door_survivors.png"),
 		new MissionTileDefinition("door_archive", "Door Archive", MissionTileCategory.Prop, 'D', new Rect2(0, 0, 516, 302), AnchorBottomCenter(516f, 302f, DoorScale.X), DoorScale, AlignedRoot + "props/door_archive.png"),

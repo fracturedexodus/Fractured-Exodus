@@ -239,7 +239,7 @@ public partial class MissionSceneBuilder : Node2D
 			};
 			_paletteContainer.AddChild(categoryLabel);
 
-			foreach (MissionTileDefinition definition in MissionTileCatalog.All.Where(def => def.Category == category))
+			foreach (MissionTileDefinition definition in MissionTileCatalog.All.Where(def => def.Category == category && def.VisibleInPalette))
 			{
 		Button button = new Button
 				{
@@ -385,18 +385,32 @@ public partial class MissionSceneBuilder : Node2D
 	private void StartPlacementOrDrag()
 	{
 		Vector2I cell = GetMouseCell();
-		Sprite2D existing = FindInteractableSpriteForCurrentTool(cell);
-		if (existing != null)
+		bool wantsDirectEdit = Input.IsKeyPressed(Key.Ctrl) || Input.IsKeyPressed(Key.Meta);
+		if (wantsDirectEdit)
 		{
-			SelectPlacedSprite(existing);
-			_draggedSprite = existing;
-			_draggedCell = cell;
-			SetStatus($"Dragging {existing.GetMeta("tile_id", "").AsString()}");
-			return;
+			Sprite2D existing = FindInteractableSpriteForCurrentTool(cell);
+			if (existing != null)
+			{
+				SelectPlacedSprite(existing);
+				_draggedSprite = existing;
+				_draggedCell = cell;
+				SetStatus($"Dragging {GetItemDisplayId(existing)}");
+				return;
+			}
 		}
 
 		if (_selectedTile == null)
 		{
+			Sprite2D existing = FindInteractableSpriteForCurrentTool(cell);
+			if (existing != null)
+			{
+				SelectPlacedSprite(existing);
+				_draggedSprite = existing;
+				_draggedCell = cell;
+				SetStatus($"Dragging {GetItemDisplayId(existing)}");
+				return;
+			}
+
 			if (_selectedMarker == null)
 			{
 				return;
@@ -407,6 +421,19 @@ public partial class MissionSceneBuilder : Node2D
 			SelectPlacedSprite(marker);
 			SetStatus($"Placed {_selectedMarker.DisplayName} at {cell.X},{cell.Y}");
 			return;
+		}
+
+		if (!AllowsStackingAtCell(_selectedTile))
+		{
+			Sprite2D existing = FindInteractableSpriteForCurrentTool(cell);
+			if (existing != null)
+			{
+				SelectPlacedSprite(existing);
+				_draggedSprite = existing;
+				_draggedCell = cell;
+				SetStatus($"Dragging {GetItemDisplayId(existing)}");
+				return;
+			}
 		}
 
 		Sprite2D sprite = CreateSprite(_selectedTile, cell.X, cell.Y);
@@ -502,6 +529,11 @@ public partial class MissionSceneBuilder : Node2D
 
 		Node2D targetLayer = GetPlacementLayer(GetLayerForTile(_selectedTile));
 		return FindSpriteAtCell(targetLayer, cell.X, cell.Y);
+	}
+
+	private bool AllowsStackingAtCell(MissionTileDefinition definition)
+	{
+		return definition.Category == MissionTileCategory.Wall || definition.Category == MissionTileCategory.Prop;
 	}
 
 	private Sprite2D FindSpriteAtCell(Node2D layer, int column, int row)
