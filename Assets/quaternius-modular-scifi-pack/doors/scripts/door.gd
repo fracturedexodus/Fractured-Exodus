@@ -1,6 +1,5 @@
-tool
-class_name QuaterniusDoor
-extends Spatial
+@tool
+extends Node3D
 
 
 ## Door opened signal
@@ -11,20 +10,25 @@ signal door_closed
 
 
 ## Time taken to open or close the door
-export var open_time : float = 1.0
+@export var open_time: float = 1.0
 
 ## Door opened state
-export var opened : bool = false setget _set_opened
+var _opened := false
+@export var opened: bool:
+	get:
+		return _opened
+	set(value):
+		_set_opened(value)
 
 ## Generic user game data (e.g for locked or key-name)
-export var user_data = {}
+@export var user_data: Dictionary = {}
 
 
 # Tween for moving door
-var _tween : SceneTreeTween
+var _tween: Tween
 
 # Current door position [0 = closed, 1 = open]
-var _position : float
+var _position := 0.0
 
 # Array of doors
 var _doors := []
@@ -33,8 +37,9 @@ var _doors := []
 # Called when the node enters the scene tree for the first time.
 func _ready():
 	# Get all child doors
+	_doors.clear()
 	for child in get_children():
-		if child.is_in_group("door"):
+		if child.is_in_group('door'):
 			_doors.append(child)
 
 	# Perform initial updates
@@ -42,17 +47,17 @@ func _ready():
 
 
 # Called when the opened property is changed
-func _set_opened(new_value : bool) -> void:
+func _set_opened(new_value: bool) -> void:
 	# Save and update the value
-	var old_opened := opened
-	opened = new_value
+	var old_opened := _opened
+	_opened = new_value
 
 	# Fire the changed event
-	if opened and not old_opened:
-		emit_signal("door_opened")
+	if _opened and not old_opened:
+		emit_signal('door_opened')
 		$DoorSound.play()
-	elif not opened and old_opened:
-		emit_signal("door_closed")
+	elif not _opened and old_opened:
+		emit_signal('door_closed')
 		$DoorSound.play()
 
 	# Update the state
@@ -61,9 +66,9 @@ func _set_opened(new_value : bool) -> void:
 
 
 # Called to update the opened state
-func _update_opened(initial : bool = false) -> void:
+func _update_opened(initial: bool = false) -> void:
 	# Get the target
-	var target : float = 1.0 if opened else 0.0
+	var target: float = 1.0 if _opened else 0.0
 
 	# Handle initial update
 	if initial:
@@ -79,11 +84,11 @@ func _update_opened(initial : bool = false) -> void:
 	_tween.set_ease(Tween.EASE_IN_OUT)
 	_tween.set_trans(Tween.TRANS_QUAD)
 	_tween.set_process_mode(Tween.TWEEN_PROCESS_PHYSICS)
-	_tween.tween_method(self, "_move_doors", _position, target, open_time)
+	_tween.tween_method(Callable(self, '_move_doors'), _position, target, open_time)
 
 
 # Called to move the door
-func _move_doors(position : float) -> void:
+func _move_doors(position: float) -> void:
 	_position = position
 	for door in _doors:
-		door.translation = door.distance * position
+		door.position = door.get('distance') * position
