@@ -35,7 +35,9 @@ public sealed class MissionTileDefinition
 
 public static class MissionTileCatalog
 {
-	private const string AlignedRoot = "res://Assets/Missions/BlackSiteRelay/AlignedOriginalStyle226/";
+	private const string AlignedRoot = "res://Assets/Missions/BlackSiteRelay/GeminiSheetSet/";
+	private static readonly Vector2 PropScale = new Vector2(0.54f, 0.54f);
+	private static readonly Vector2 DoorScale = new Vector2(0.46f, 0.46f);
 
 	private static readonly List<MissionTileDefinition> Definitions = new List<MissionTileDefinition>
 	{
@@ -74,20 +76,20 @@ public static class MissionTileCatalog
 		new MissionTileDefinition("wall_corner_center", "Wall Corner Center", MissionTileCategory.Wall, 'B', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_corner_east.png"),
 		new MissionTileDefinition("wall_corner_right", "Wall Corner Right", MissionTileCategory.Wall, 'R', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_corner_south.png"),
 
-		new MissionTileDefinition("door_survivors", "Door Survivors", MissionTileCategory.Prop, 'd', new Rect2(0, 0, 281, 174), AnchorLocalToCell(281f, 174f, 140f, 173f, 0f, 0f, 0.86f), new Vector2(0.86f, 0.86f), AlignedRoot + "props/door_survivors.png"),
-		new MissionTileDefinition("door_archive", "Door Archive", MissionTileCategory.Prop, 'D', new Rect2(0, 0, 280, 174), AnchorLocalToCell(280f, 174f, 140f, 173f, 0f, 0f, 0.86f), new Vector2(0.86f, 0.86f), AlignedRoot + "props/door_archive.png"),
-		new MissionTileDefinition("console_survivor", "Console Single", MissionTileCategory.Prop, 'S', new Rect2(0, 0, 171, 167), new Vector2(-24f, -28f), Vector2.One, AlignedRoot + "props/console_single.png"),
-		new MissionTileDefinition("medical_station", "Medical Bed", MissionTileCategory.Prop, 'm', new Rect2(0, 0, 205, 188), new Vector2(34f, -8f), Vector2.One, AlignedRoot + "props/medical_bed.png"),
-		new MissionTileDefinition("crate_survivor", "Crate Small", MissionTileCategory.Prop, 'c', new Rect2(0, 0, 135, 130), new Vector2(-48f, -8f), Vector2.One, AlignedRoot + "props/crate_small.png"),
-		new MissionTileDefinition("crate_medium", "Crate Medium", MissionTileCategory.Prop, 'M', new Rect2(0, 0, 145, 134), new Vector2(0f, -8f), Vector2.One, AlignedRoot + "props/crate_medium.png"),
-		new MissionTileDefinition("console_archive", "Console Triple", MissionTileCategory.Prop, 'a', new Rect2(0, 0, 208, 169), new Vector2(24f, -28f), Vector2.One, AlignedRoot + "props/console_triple.png"),
-		new MissionTileDefinition("archive_core", "Archive Core", MissionTileCategory.Prop, 'O', new Rect2(0, 0, 185, 206), new Vector2(0f, -24f), Vector2.One, AlignedRoot + "props/archive_core.png"),
-		new MissionTileDefinition("crate_archive", "Crate Grate", MissionTileCategory.Prop, 'C', new Rect2(0, 0, 147, 139), new Vector2(52f, -8f), Vector2.One, AlignedRoot + "props/crate_grate.png"),
-		new MissionTileDefinition("pipe_bundle", "Pipe Elbow", MissionTileCategory.Prop, 'i', new Rect2(0, 0, 159, 145), new Vector2(-18f, 22f), Vector2.One, AlignedRoot + "props/pipe_elbow.png"),
-		new MissionTileDefinition("pipe_tank", "Pipe Tank", MissionTileCategory.Prop, 'I', new Rect2(0, 0, 162, 124), new Vector2(-18f, 22f), Vector2.One, AlignedRoot + "props/pipe_tank.png"),
-		new MissionTileDefinition("console_power", "Console Power", MissionTileCategory.Prop, 'P', new Rect2(0, 0, 128, 161), new Vector2(54f, 18f), Vector2.One, AlignedRoot + "props/console_power.png"),
-		new MissionTileDefinition("debris_left", "Debris Slab", MissionTileCategory.Prop, 'j', new Rect2(0, 0, 151, 165), new Vector2(-72f, 18f), Vector2.One, AlignedRoot + "props/debris_slab.png"),
-		new MissionTileDefinition("debris_right", "Debris Wreck", MissionTileCategory.Prop, 'k', new Rect2(0, 0, 215, 148), new Vector2(86f, 18f), Vector2.One, AlignedRoot + "props/debris_wreck.png")
+		new MissionTileDefinition("door_survivors", "Door Survivors", MissionTileCategory.Prop, 'd', new Rect2(0, 0, 532, 302), AnchorBottomCenter(532f, 302f, DoorScale.X), DoorScale, AlignedRoot + "props/door_survivors.png"),
+		new MissionTileDefinition("door_archive", "Door Archive", MissionTileCategory.Prop, 'D', new Rect2(0, 0, 516, 302), AnchorBottomCenter(516f, 302f, DoorScale.X), DoorScale, AlignedRoot + "props/door_archive.png"),
+		new MissionTileDefinition("console_survivor", "Console Single", MissionTileCategory.Prop, 'S', new Rect2(0, 0, 318, 311), AnchorBottomCenter(318f, 311f, PropScale.X), PropScale, AlignedRoot + "props/console_single.png"),
+		new MissionTileDefinition("medical_station", "Medical Bed", MissionTileCategory.Prop, 'm', new Rect2(0, 0, 378, 346), AnchorBottomCenter(378f, 346f, PropScale.X), PropScale, AlignedRoot + "props/medical_bed.png"),
+		new MissionTileDefinition("crate_survivor", "Crate Small", MissionTileCategory.Prop, 'c', new Rect2(0, 0, 251, 241), AnchorBottomCenter(251f, 241f, PropScale.X), PropScale, AlignedRoot + "props/crate_small.png"),
+		new MissionTileDefinition("crate_medium", "Crate Medium", MissionTileCategory.Prop, 'M', new Rect2(0, 0, 269, 246), AnchorBottomCenter(269f, 246f, PropScale.X), PropScale, AlignedRoot + "props/crate_medium.png"),
+		new MissionTileDefinition("console_archive", "Console Triple", MissionTileCategory.Prop, 'a', new Rect2(0, 0, 389, 309), AnchorBottomCenter(389f, 309f, PropScale.X), PropScale, AlignedRoot + "props/console_triple.png"),
+		new MissionTileDefinition("archive_core", "Archive Core", MissionTileCategory.Prop, 'O', new Rect2(0, 0, 319, 358), AnchorBottomCenter(319f, 358f, PropScale.X), PropScale, AlignedRoot + "props/archive_core.png"),
+		new MissionTileDefinition("crate_archive", "Crate Grate", MissionTileCategory.Prop, 'C', new Rect2(0, 0, 271, 250), AnchorBottomCenter(271f, 250f, PropScale.X), PropScale, AlignedRoot + "props/crate_grate.png"),
+		new MissionTileDefinition("pipe_bundle", "Pipe Elbow", MissionTileCategory.Prop, 'i', new Rect2(0, 0, 291, 264), AnchorBottomCenter(291f, 264f, PropScale.X), PropScale, AlignedRoot + "props/pipe_elbow.png"),
+		new MissionTileDefinition("pipe_tank", "Pipe Tank", MissionTileCategory.Prop, 'I', new Rect2(0, 0, 296, 227), AnchorBottomCenter(296f, 227f, PropScale.X), PropScale, AlignedRoot + "props/pipe_tank.png"),
+		new MissionTileDefinition("console_power", "Console Power", MissionTileCategory.Prop, 'P', new Rect2(0, 0, 239, 299), AnchorBottomCenter(239f, 299f, PropScale.X), PropScale, AlignedRoot + "props/console_power.png"),
+		new MissionTileDefinition("debris_left", "Debris Slab", MissionTileCategory.Prop, 'j', new Rect2(0, 0, 288, 300), AnchorBottomCenter(288f, 300f, PropScale.X), PropScale, AlignedRoot + "props/debris_slab.png"),
+		new MissionTileDefinition("debris_right", "Debris Wreck", MissionTileCategory.Prop, 'k', new Rect2(0, 0, 390, 273), AnchorBottomCenter(390f, 273f, PropScale.X), PropScale, AlignedRoot + "props/debris_wreck.png")
 	};
 
 	public static IReadOnlyList<MissionTileDefinition> All => Definitions;
@@ -100,6 +102,11 @@ public static class MissionTileCatalog
 		return new Vector2(
 			targetX - ((localX - (textureWidth * 0.5f)) * scale),
 			targetY - ((localY - (textureHeight * 0.5f)) * scale));
+	}
+
+	private static Vector2 AnchorBottomCenter(float textureWidth, float textureHeight, float scale = 1f)
+	{
+		return AnchorLocalToCell(textureWidth, textureHeight, textureWidth * 0.5f, textureHeight - 1f, 0f, 0f, scale);
 	}
 
 	public static bool TryGetById(string id, out MissionTileDefinition definition)

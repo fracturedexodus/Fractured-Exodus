@@ -9,13 +9,13 @@ public static class MissionFloorTextureFactory
 	private static readonly Dictionary<string, Texture2D> Cache = new Dictionary<string, Texture2D>();
 	private static readonly Dictionary<string, string> TexturePaths = new Dictionary<string, string>
 	{
-		{ "floor_standard", "res://Assets/Missions/BlackSiteRelay/AlignedOriginalStyle226/floors/floor_standard_226.png" },
-		{ "floor_grate", "res://Assets/Missions/BlackSiteRelay/AlignedOriginalStyle226/floors/floor_grate_226.png" },
-		{ "floor_hazard", "res://Assets/Missions/BlackSiteRelay/AlignedOriginalStyle226/floors/floor_hazard_226.png" },
-		{ "floor_panel", "res://Assets/Missions/BlackSiteRelay/AlignedOriginalStyle226/floors/floor_vented_226.png" },
-		{ "floor_plating", "res://Assets/Missions/BlackSiteRelay/AlignedOriginalStyle226/floors/floor_plating_226.png" },
-		{ "floor_compact_panel", "res://Assets/Missions/BlackSiteRelay/AlignedOriginalStyle226/floors/floor_compact_panel_226.png" },
-		{ "floor_glow", "res://Assets/Missions/BlackSiteRelay/AlignedOriginalStyle226/floors/floor_relay_glow_226.png" }
+		{ "floor_standard", "res://Assets/Missions/BlackSiteRelay/GeminiSheetSet/floors/floor_standard_226.png" },
+		{ "floor_grate", "res://Assets/Missions/BlackSiteRelay/GeminiSheetSet/floors/floor_grate_226.png" },
+		{ "floor_hazard", "res://Assets/Missions/BlackSiteRelay/GeminiSheetSet/floors/floor_hazard_226.png" },
+		{ "floor_panel", "res://Assets/Missions/BlackSiteRelay/GeminiSheetSet/floors/floor_vented_226.png" },
+		{ "floor_plating", "res://Assets/Missions/BlackSiteRelay/GeminiSheetSet/floors/floor_plating_226.png" },
+		{ "floor_compact_panel", "res://Assets/Missions/BlackSiteRelay/GeminiSheetSet/floors/floor_compact_panel_226.png" },
+		{ "floor_glow", "res://Assets/Missions/BlackSiteRelay/GeminiSheetSet/floors/floor_relay_glow_226.png" }
 	};
 
 	public static Texture2D GetTexture(string tileId)
