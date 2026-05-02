@@ -384,12 +384,13 @@ public partial class MissionSceneBuilder : Node2D
 
 	private void StartPlacementOrDrag()
 	{
-		Sprite2D existing = FindSpriteAtMouse(ShouldIncludeFloorsForSelection());
+		Vector2I cell = GetMouseCell();
+		Sprite2D existing = FindInteractableSpriteForCurrentTool(cell);
 		if (existing != null)
 		{
 			SelectPlacedSprite(existing);
 			_draggedSprite = existing;
-			_draggedCell = GetMouseCell();
+			_draggedCell = cell;
 			SetStatus($"Dragging {existing.GetMeta("tile_id", "").AsString()}");
 			return;
 		}
@@ -401,15 +402,13 @@ public partial class MissionSceneBuilder : Node2D
 				return;
 			}
 
-			Vector2I markerCell = GetMouseCell();
-			Sprite2D marker = CreateMarker(_selectedMarker, markerCell.X, markerCell.Y);
+			Sprite2D marker = CreateMarker(_selectedMarker, cell.X, cell.Y);
 			GetPlacementLayer(BuilderLayer.Marker).AddChild(marker);
 			SelectPlacedSprite(marker);
-			SetStatus($"Placed {_selectedMarker.DisplayName} at {markerCell.X},{markerCell.Y}");
+			SetStatus($"Placed {_selectedMarker.DisplayName} at {cell.X},{cell.Y}");
 			return;
 		}
 
-		Vector2I cell = GetMouseCell();
 		Sprite2D sprite = CreateSprite(_selectedTile, cell.X, cell.Y);
 		GetPlacementLayer(GetLayerForTile(_selectedTile)).AddChild(sprite);
 		SelectPlacedSprite(sprite);
@@ -484,6 +483,48 @@ public partial class MissionSceneBuilder : Node2D
 					return sprite;
 				}
 			}
+		}
+
+		return null;
+	}
+
+	private Sprite2D FindInteractableSpriteForCurrentTool(Vector2I cell)
+	{
+		if (_selectedMarker != null)
+		{
+			return FindSpriteAtCell(_markerLayer, cell.X, cell.Y);
+		}
+
+		if (_selectedTile == null)
+		{
+			return FindSpriteAtMouse();
+		}
+
+		Node2D targetLayer = GetPlacementLayer(GetLayerForTile(_selectedTile));
+		return FindSpriteAtCell(targetLayer, cell.X, cell.Y);
+	}
+
+	private Sprite2D FindSpriteAtCell(Node2D layer, int column, int row)
+	{
+		Godot.Collections.Array<Node> children = layer.GetChildren();
+		for (int index = children.Count - 1; index >= 0; index--)
+		{
+			if (children[index] is not Sprite2D sprite)
+			{
+				continue;
+			}
+
+			if (sprite.GetMeta("column", int.MinValue).AsInt32() != column)
+			{
+				continue;
+			}
+
+			if (sprite.GetMeta("row", int.MinValue).AsInt32() != row)
+			{
+				continue;
+			}
+
+			return sprite;
 		}
 
 		return null;
