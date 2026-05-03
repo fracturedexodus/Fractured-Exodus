@@ -78,6 +78,12 @@ public partial class BattleMap : Node2D
 	private Button _btnEquip;
 	private CenterContainer _equipMenuWrapper;
 	private VBoxContainer _equipItemList;
+	private Button _btnMission;
+	private CenterContainer _missionPromptWrapper;
+	private Label _missionPromptTitle;
+	private RichTextLabel _missionPromptDescription;
+	private MapEntity _pendingMissionShip;
+	private MapEntity _pendingMissionPlanet;
 	private FleetInventoryService _inventoryService;
 	private OfficerService _officerService;
 	private ShipContextService _shipContextService;
@@ -98,12 +104,14 @@ public partial class BattleMap : Node2D
 	private AudioPlaybackService _audioPlaybackService;
 	private MovementExecutionService _movementExecutionService;
 	private OfficerPanelPresenterService _officerPanelPresenterService;
+	private MissionService _missionService;
 	private PanelContainer _officerMenuPanel;
 	private Label _officerMenuTitle;
 	private TextureRect _officerPortraitDisplay;
 	private Label _officerDetailsLabel;
 	private const string ExplorationMusicPath = "res://Sounds/battle_theme.mp3";
 	private const string CombatMusicPath = "res://Sounds/fractured_combat_theme.wav";
+	private const string BlackSiteMissionId = "black_site_relay";
 
 	public override void _Ready()
 	{
@@ -115,6 +123,7 @@ public partial class BattleMap : Node2D
 		if (_globalData != null) _distressSignalService = new DistressSignalService(_globalData);
 		if (_globalData != null) _jumpService = new JumpService(_globalData);
 		if (_globalData != null) _longRangeScanService = new LongRangeScanService(_globalData);
+		if (_globalData != null) _missionService = new MissionService(_globalData);
 		_explorationTurnService = new ExplorationTurnService();
 		_shipMenuPresenterService = new ShipMenuPresenterService();
 		_terminalMenuPresenterService = new TerminalMenuPresenterService();
@@ -200,6 +209,7 @@ public partial class BattleMap : Node2D
 		BuildStrandedMenu(); 
 		BuildShopUI(); 
 		BuildEquipUI(); // --- NEW: BUILD THE EQUIP UI ---
+		BuildMissionPromptUI();
 		BuildOfficerPanel();
 		
 		_btnTrade = new Button();
@@ -235,6 +245,23 @@ public partial class BattleMap : Node2D
 		else
 		{
 			AddChild(_btnEquip); 
+		}
+
+		_btnMission = new Button();
+		_btnMission.Text = "BLACK SITE MISSION";
+		_btnMission.Visible = false;
+		_btnMission.CustomMinimumSize = new Vector2(0, 40);
+		_btnMission.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+		_btnMission.AddThemeColorOverride("font_color", new Color(0.4f, 0.95f, 1f));
+		_btnMission.Pressed += OnMissionPressed;
+
+		if (UI != null && UI.BtnSalvage != null)
+		{
+			UI.BtnSalvage.GetParent().AddChild(_btnMission);
+		}
+		else
+		{
+			AddChild(_btnMission);
 		}
 		
 		MapSpawner.SetupSpaceBackground(_bgLayer, GetViewportRect().Size);
@@ -377,6 +404,70 @@ public partial class BattleMap : Node2D
 		UI.TurnLabel.Text = $"TURN {CurrentTurn}";
 		
 		if (UI.BtnLongRange != null) UI.BtnLongRange.Pressed += OnLongRangePressed;
+	}
+
+	private void BuildMissionPromptUI()
+	{
+		CanvasLayer missionLayer = new CanvasLayer { Layer = 170 };
+		AddChild(missionLayer);
+
+		_missionPromptWrapper = new CenterContainer();
+		_missionPromptWrapper.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+		_missionPromptWrapper.MouseFilter = Control.MouseFilterEnum.Stop;
+		_missionPromptWrapper.Visible = false;
+		missionLayer.AddChild(_missionPromptWrapper);
+
+		PanelContainer missionPanel = new PanelContainer();
+		StyleBoxFlat style = new StyleBoxFlat();
+		style.BgColor = new Color(0.04f, 0.06f, 0.1f, 0.96f);
+		style.BorderWidthTop = 2;
+		style.BorderWidthBottom = 2;
+		style.BorderWidthLeft = 2;
+		style.BorderWidthRight = 2;
+		style.BorderColor = new Color(0.3f, 0.95f, 1f, 0.85f);
+		style.ContentMarginLeft = 24;
+		style.ContentMarginRight = 24;
+		style.ContentMarginTop = 20;
+		style.ContentMarginBottom = 20;
+		missionPanel.AddThemeStyleboxOverride("panel", style);
+		_missionPromptWrapper.AddChild(missionPanel);
+
+		VBoxContainer content = new VBoxContainer();
+		content.CustomMinimumSize = new Vector2(560, 0);
+		content.AddThemeConstantOverride("separation", 14);
+		missionPanel.AddChild(content);
+
+		_missionPromptTitle = new Label();
+		_missionPromptTitle.Text = "BLACK SITE RELAY";
+		_missionPromptTitle.HorizontalAlignment = HorizontalAlignment.Center;
+		_missionPromptTitle.AddThemeColorOverride("font_color", new Color(0.4f, 0.95f, 1f));
+		_missionPromptTitle.AddThemeFontSizeOverride("font_size", 22);
+		content.AddChild(_missionPromptTitle);
+
+		_missionPromptDescription = new RichTextLabel();
+		_missionPromptDescription.CustomMinimumSize = new Vector2(560, 180);
+		_missionPromptDescription.BbcodeEnabled = true;
+		_missionPromptDescription.FitContent = true;
+		_missionPromptDescription.ScrollActive = false;
+		content.AddChild(_missionPromptDescription);
+
+		HBoxContainer buttonRow = new HBoxContainer();
+		buttonRow.Alignment = BoxContainer.AlignmentMode.Center;
+		buttonRow.AddThemeConstantOverride("separation", 12);
+		content.AddChild(buttonRow);
+
+		Button launchButton = new Button();
+		launchButton.Text = "LAUNCH MISSION";
+		launchButton.CustomMinimumSize = new Vector2(220, 42);
+		launchButton.AddThemeColorOverride("font_color", new Color(0.4f, 1f, 0.75f));
+		launchButton.Pressed += LaunchBlackSiteMission;
+		buttonRow.AddChild(launchButton);
+
+		Button declineButton = new Button();
+		declineButton.Text = "NOT YET";
+		declineButton.CustomMinimumSize = new Vector2(160, 42);
+		declineButton.Pressed += HideMissionPrompt;
+		buttonRow.AddChild(declineButton);
 	}
 
 	// ==========================================
@@ -1147,6 +1238,7 @@ public partial class BattleMap : Node2D
 		
 		if (_btnTrade != null) _btnTrade.Visible = false;
 		if (_btnEquip != null) _btnEquip.Visible = false; // --- NEW: Hide equip by default ---
+		if (_btnMission != null) _btnMission.Visible = false;
 
 		if (expand && ship != null)
 		{
@@ -1168,6 +1260,12 @@ public partial class BattleMap : Node2D
 			if (menuState.ShowTrade && _btnTrade != null)
 			{
 				_btnTrade.Visible = true;
+			}
+
+			if (menuState.ShowMission && _btnMission != null)
+			{
+				_btnMission.Text = string.IsNullOrEmpty(menuState.MissionText) ? "BLACK SITE MISSION" : menuState.MissionText;
+				_btnMission.Visible = true;
 			}
 		}
 	}
@@ -1403,6 +1501,143 @@ public partial class BattleMap : Node2D
 		LogCombatMessage($"[color=green]- {result.EnergyYield} Energy Cores[/color]");
 		LogCombatMessage($"[color=green]- {result.TechYield} Ancient Tech[/color]");
 		ToggleShipMenu(true, CurrentlyViewedShip); 
+	}
+
+	private void OnMissionPressed()
+	{
+		if (IsFleetMoving || Combat.InCombat || CurrentlyViewedShip == null || _shipContextService == null)
+		{
+			return;
+		}
+
+		MapEntity planet = _shipContextService.GetAdjacentBlackSitePlanet(CurrentlyViewedShip, HexContents);
+		if (planet == null)
+		{
+			return;
+		}
+
+		ShowBlackSiteMissionPrompt(CurrentlyViewedShip, planet, false);
+	}
+
+	private void ShowBlackSiteMissionPrompt(MapEntity ship, MapEntity planet, bool reopenShipMenu)
+	{
+		if (_missionPromptWrapper == null || _shipContextService == null || _missionService == null || ship == null || planet == null)
+		{
+			return;
+		}
+
+		PlanetData planetData = GetPlanetDataByName(planet.Name);
+		if (planetData == null || !planetData.IsBlackSiteRelaySite || IsBlackSiteMissionComplete())
+		{
+			return;
+		}
+
+		MissionDefinition definition = _missionService.GetDefinition(BlackSiteMissionId);
+		if (definition == null)
+		{
+			return;
+		}
+
+		_pendingMissionShip = ship;
+		_pendingMissionPlanet = planet;
+		_missionPromptTitle.Text = "BLACK SITE RELAY";
+		_missionPromptDescription.Text = BuildBlackSiteMissionDescription(definition, planet.Name);
+		_missionPromptWrapper.Visible = true;
+
+		if (reopenShipMenu)
+		{
+			ToggleShipMenu(true, ship);
+		}
+	}
+
+	private string BuildBlackSiteMissionDescription(MissionDefinition definition, string planetName)
+	{
+		return "[color=#66f0ff]A concealed relay signature is bleeding through the crust of "
+			+ planetName
+			+ ".[/color]\n\n"
+			+ definition.Description
+			+ "\n\nDo you want to dispatch an away team and begin the operation now?";
+	}
+
+	private void HideMissionPrompt()
+	{
+		if (_missionPromptWrapper != null)
+		{
+			_missionPromptWrapper.Visible = false;
+		}
+
+		_pendingMissionShip = null;
+		_pendingMissionPlanet = null;
+	}
+
+	private void LaunchBlackSiteMission()
+	{
+		if (_missionService == null || _pendingMissionPlanet == null)
+		{
+			return;
+		}
+
+		MissionDefinition definition = _missionService.GetDefinition(BlackSiteMissionId);
+		if (definition == null)
+		{
+			return;
+		}
+
+		_missionService.PrepareMission(BlackSiteMissionId, "res://exploration_battle.tscn", _pendingMissionPlanet.Name);
+		OnSaveGamePressed();
+		HideMissionPrompt();
+
+		SceneTransition transitioner = GetNodeOrNull<SceneTransition>("/root/SceneTransition");
+		if (transitioner != null)
+		{
+			transitioner.ChangeScene(definition.ScenePath);
+		}
+		else
+		{
+			GetTree().ChangeSceneToFile(definition.ScenePath);
+		}
+	}
+
+	private void TryPromptBlackSiteMissionForShip(MapEntity ship)
+	{
+		if (_shipContextService == null || Combat.InCombat || IsFleetMoving || IsBlackSiteMissionComplete())
+		{
+			return;
+		}
+
+		if (_missionPromptWrapper != null && _missionPromptWrapper.Visible)
+		{
+			return;
+		}
+
+		if (ship?.Type != GameConstants.EntityTypes.PlayerFleet)
+		{
+			return;
+		}
+
+		MapEntity planet = _shipContextService.GetAdjacentBlackSitePlanet(ship, HexContents);
+		if (planet != null)
+		{
+			ShowBlackSiteMissionPrompt(ship, planet, true);
+		}
+	}
+
+	private bool IsBlackSiteMissionComplete()
+	{
+		return _globalData?.CompletedMissionIDs?.Contains(BlackSiteMissionId) == true;
+	}
+
+	private PlanetData GetPlanetDataByName(string planetName)
+	{
+		if (_globalData == null
+			|| string.IsNullOrEmpty(_globalData.SavedSystem)
+			|| !_globalData.ExploredSystems.ContainsKey(_globalData.SavedSystem))
+		{
+			return null;
+		}
+
+		SystemData currentSystem = _globalData.ExploredSystems[_globalData.SavedSystem];
+		return currentSystem.Planets.FirstOrDefault(planet => planet != null && planet.Name == planetName);
 	}
 
 	private void OnCodexPressed() 
@@ -1663,6 +1898,7 @@ public partial class BattleMap : Node2D
 			if (ActiveMovementTweens <= 0) 
 			{
 				Fog.UpdateVisibility(); 
+				TryPromptBlackSiteMissionForShip(ship);
 				FlushMovementCallbacks();
 			}
 		}));

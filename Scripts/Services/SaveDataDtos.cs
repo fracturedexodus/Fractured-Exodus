@@ -265,6 +265,7 @@ public class PlanetSaveData
 	public float StartingAngle { get; set; }
 	public bool HasBeenScanned { get; set; }
 	public bool HasBeenSalvaged { get; set; }
+	public bool IsBlackSiteRelaySite { get; set; }
 
 	public static PlanetSaveData FromRuntime(PlanetData planet)
 	{
@@ -278,7 +279,8 @@ public class PlanetSaveData
 			Speed = planet.Speed,
 			StartingAngle = planet.StartingAngle,
 			HasBeenScanned = planet.HasBeenScanned,
-			HasBeenSalvaged = planet.HasBeenSalvaged
+			HasBeenSalvaged = planet.HasBeenSalvaged,
+			IsBlackSiteRelaySite = planet.IsBlackSiteRelaySite
 		};
 	}
 
@@ -294,7 +296,8 @@ public class PlanetSaveData
 			Speed = Speed,
 			StartingAngle = StartingAngle,
 			HasBeenScanned = HasBeenScanned,
-			HasBeenSalvaged = HasBeenSalvaged
+			HasBeenSalvaged = HasBeenSalvaged,
+			IsBlackSiteRelaySite = IsBlackSiteRelaySite
 		};
 	}
 
@@ -310,7 +313,8 @@ public class PlanetSaveData
 			Speed = dict.ContainsKey("Speed") ? (float)dict["Speed"] : 0f,
 			StartingAngle = dict.ContainsKey("StartingAngle") ? (float)dict["StartingAngle"] : 0f,
 			HasBeenScanned = dict.ContainsKey("HasBeenScanned") && (bool)dict["HasBeenScanned"],
-			HasBeenSalvaged = dict.ContainsKey("HasBeenSalvaged") && (bool)dict["HasBeenSalvaged"]
+			HasBeenSalvaged = dict.ContainsKey("HasBeenSalvaged") && (bool)dict["HasBeenSalvaged"],
+			IsBlackSiteRelaySite = dict.ContainsKey("IsBlackSiteRelaySite") && (bool)dict["IsBlackSiteRelaySite"]
 		};
 	}
 
@@ -326,7 +330,8 @@ public class PlanetSaveData
 			{ "Speed", Speed },
 			{ "StartingAngle", StartingAngle },
 			{ "HasBeenScanned", HasBeenScanned },
-			{ "HasBeenSalvaged", HasBeenSalvaged }
+			{ "HasBeenSalvaged", HasBeenSalvaged },
+			{ "IsBlackSiteRelaySite", IsBlackSiteRelaySite }
 		};
 	}
 }

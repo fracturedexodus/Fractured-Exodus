@@ -19,6 +19,8 @@ public class ShipMenuState
 	public bool ShowSalvage { get; set; }
 	public bool DisableSalvage { get; set; }
 	public string SalvageText { get; set; }
+	public bool ShowMission { get; set; }
+	public string MissionText { get; set; }
 }
 
 public class ShipContextService
@@ -39,6 +41,9 @@ public class ShipContextService
 
 		bool isPlayer = ship.Type == GameConstants.EntityTypes.PlayerFleet;
 		PlanetData adjacentPlanetData = GetAdjacentPlanetData(ship, hexContents);
+		bool hasAdjacentBlackSiteMission = adjacentPlanetData != null
+			&& adjacentPlanetData.IsBlackSiteRelaySite
+			&& (_globalData?.CompletedMissionIDs?.Contains("black_site_relay") != true);
 		bool hasAdjacentOutpost = HasAdjacentOutpost(ship, hexContents);
 
 		return new ShipMenuState
@@ -58,8 +63,27 @@ public class ShipContextService
 			ScanText = adjacentPlanetData != null && adjacentPlanetData.HasBeenScanned ? "SCANNED" : "SCAN",
 			ShowSalvage = isPlayer && !inCombat && adjacentPlanetData != null && (ship.Name == "The Relic Harvester" || ship.Name == "The Neptune Forge"),
 			DisableSalvage = adjacentPlanetData == null || adjacentPlanetData.HasBeenSalvaged || ship.CurrentActions < 1,
-			SalvageText = adjacentPlanetData != null && adjacentPlanetData.HasBeenSalvaged ? "SALVAGED" : "SALVAGE"
+			SalvageText = adjacentPlanetData != null && adjacentPlanetData.HasBeenSalvaged ? "SALVAGED" : "SALVAGE",
+			ShowMission = isPlayer && !inCombat && hasAdjacentBlackSiteMission,
+			MissionText = "BLACK SITE MISSION"
 		};
+	}
+
+	public MapEntity GetAdjacentBlackSitePlanet(MapEntity ship, Dictionary<Vector2I, MapEntity> hexContents)
+	{
+		MapEntity planet = GetAdjacentPlanet(ship, hexContents);
+		PlanetData planetData = planet == null ? null : GetPlanetData(planet.Name);
+		if (planet == null || planetData == null || !planetData.IsBlackSiteRelaySite)
+		{
+			return null;
+		}
+
+		if (_globalData?.CompletedMissionIDs?.Contains("black_site_relay") == true)
+		{
+			return null;
+		}
+
+		return planet;
 	}
 
 	public MapEntity GetAdjacentPlanet(MapEntity ship, Dictionary<Vector2I, MapEntity> hexContents)

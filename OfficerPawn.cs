@@ -1,4 +1,5 @@
 using Godot;
+using System.Collections.Generic;
 
 public partial class OfficerPawn : Node2D
 {
@@ -8,12 +9,14 @@ public partial class OfficerPawn : Node2D
 	public string ShipName { get; private set; } = string.Empty;
 	public string OfficerName { get; private set; } = "Officer";
 	public string Specialty { get; private set; } = string.Empty;
+	public Vector2I CurrentCell { get; private set; } = Vector2I.Zero;
 
 	private Polygon2D _selectionRing;
 	private Polygon2D _body;
 	private Label _nameLabel;
 	private Vector2 _targetPosition;
 	private bool _isMoving;
+	private readonly Queue<Vector2> _pathPoints = new Queue<Vector2>();
 
 	public override void _Ready()
 	{
@@ -32,7 +35,14 @@ public partial class OfficerPawn : Node2D
 		if (GlobalPosition.DistanceTo(_targetPosition) <= 2f)
 		{
 			GlobalPosition = _targetPosition;
-			_isMoving = false;
+			if (_pathPoints.Count > 0)
+			{
+				_targetPosition = _pathPoints.Dequeue();
+			}
+			else
+			{
+				_isMoving = false;
+			}
 		}
 	}
 
@@ -69,7 +79,35 @@ public partial class OfficerPawn : Node2D
 
 	public void MoveTo(Vector2 targetPosition)
 	{
+		_pathPoints.Clear();
 		_targetPosition = targetPosition;
+		_isMoving = true;
+	}
+
+	public void SetGridCell(Vector2I cell, Vector2 globalPosition)
+	{
+		CurrentCell = cell;
+		_pathPoints.Clear();
+		_targetPosition = globalPosition;
+		GlobalPosition = globalPosition;
+		_isMoving = false;
+	}
+
+	public void MoveAlongPath(IReadOnlyList<Vector2> globalPathPoints, Vector2I destinationCell)
+	{
+		if (globalPathPoints == null || globalPathPoints.Count == 0)
+		{
+			return;
+		}
+
+		_pathPoints.Clear();
+		for (int i = 1; i < globalPathPoints.Count; i++)
+		{
+			_pathPoints.Enqueue(globalPathPoints[i]);
+		}
+
+		CurrentCell = destinationCell;
+		_targetPosition = globalPathPoints[0];
 		_isMoving = true;
 	}
 

@@ -9,11 +9,13 @@ public partial class MissionMap : Node2D
 	private const float MinZoom = 0.34f;
 	private const float MaxZoom = 1.00f;
 	private const float ZoomStep = 0.08f;
+	private const float CameraPanSpeed = 720f;
 
 	private GlobalData _globalData;
 	private MissionService _missionService;
 	private MissionRuntimeState _missionState;
 	private MissionUI _missionUi;
+	private Node2D _isoWorld;
 	private Node2D _characterLayer;
 	private Camera2D _camera;
 	private MissionRoomBuilder _roomBuilder;
@@ -22,12 +24,15 @@ public partial class MissionMap : Node2D
 	private readonly List<OfficerPawn> _officerPawns = new List<OfficerPawn>();
 	private int _selectedOfficerIndex;
 	private float _markerPulseTime;
+	private bool _isPanning;
+	private Vector2 _lastMouseScreenPosition;
 
 	public override void _Ready()
 	{
 		_globalData = GetNodeOrNull<GlobalData>("/root/GlobalData");
 		_missionService = new MissionService(_globalData);
 		_missionState = _missionService.GetCurrentMissionState();
+		_isoWorld = GetNode<Node2D>("IsoWorld");
 		_characterLayer = GetNode<Node2D>("IsoWorld/CharacterLayer");
 		_camera = GetNode<Camera2D>("Camera2D");
 		_roomBuilder = GetNode<MissionRoomBuilder>("IsoWorld/RoomBuilder");
@@ -38,6 +43,7 @@ public partial class MissionMap : Node2D
 			_missionState = _missionService.PrepareMission(MissionId, "res://exploration_battle.tscn", "Black Site Relay Beacon");
 		}
 
+		_roomBuilder?.BuildRoom();
 		ConfigureMissionView();
 		ConfigureMissionAnchors();
 		CacheZoneMarkers();
@@ -48,6 +54,7 @@ public partial class MissionMap : Node2D
 
 	public override void _Process(double delta)
 	{
+		UpdateCameraPan((float)delta);
 		_markerPulseTime += (float)delta;
 		for (int i = 0; i < _zoneMarkers.Count; i++)
 		{
@@ -109,6 +116,14 @@ public partial class MissionMap : Node2D
 
 		if (@event is InputEventMouseButton zoomButton && zoomButton.Pressed)
 		{
+			if (zoomButton.ButtonIndex == MouseButton.Middle)
+			{
+				_isPanning = true;
+				_lastMouseScreenPosition = zoomButton.Position;
+				GetViewport().SetInputAsHandled();
+				return;
+			}
+
 			if (zoomButton.ButtonIndex == MouseButton.WheelUp)
 			{
 				AdjustZoom(-ZoomStep);
@@ -126,13 +141,32 @@ public partial class MissionMap : Node2D
 
 		if (@event is InputEventMouseButton mouseButton && mouseButton.Pressed && mouseButton.ButtonIndex == MouseButton.Left)
 		{
+			if (TrySelectOfficerAtMouse())
+			{
+				GetViewport().SetInputAsHandled();
+				return;
+			}
+
 			OfficerPawn activeOfficer = GetSelectedOfficer();
 			if (activeOfficer == null)
 			{
 				return;
 			}
 
-			activeOfficer.MoveTo(GetGlobalMousePosition());
+			TryMoveSelectedOfficer();
+			GetViewport().SetInputAsHandled();
+		}
+
+		if (@event is InputEventMouseButton middleRelease && !middleRelease.Pressed && middleRelease.ButtonIndex == MouseButton.Middle)
+		{
+			_isPanning = false;
+		}
+
+		if (@event is InputEventMouseMotion motion && _isPanning && _camera != null)
+		{
+			Vector2 deltaScreen = motion.Position - _lastMouseScreenPosition;
+			_camera.Position -= deltaScreen * _camera.Zoom;
+			_lastMouseScreenPosition = motion.Position;
 			GetViewport().SetInputAsHandled();
 		}
 	}
@@ -141,7 +175,10 @@ public partial class MissionMap : Node2D
 	{
 		if (_camera != null)
 		{
-			_camera.Position = new Vector2(0f, 58f);
+			Vector2 roomCenter = _roomBuilder != null
+				? _isoWorld.ToGlobal(_roomBuilder.GetRoomCenterWorldPosition())
+				: Vector2.Zero;
+			_camera.Position = roomCenter;
 			ApplyZoom(DefaultZoom);
 		}
 	}
@@ -231,15 +268,10 @@ public partial class MissionMap : Node2D
 	private void SpawnMissionOfficers()
 	{
 		_officerPawns.Clear();
-		List<Marker2D> spawnPoints = new List<Marker2D>
-		{
-			GetNode<Marker2D>("IsoWorld/SpawnPointA"),
-			GetNode<Marker2D>("IsoWorld/SpawnPointB")
-		};
 
 		PackedScene pawnScene = GD.Load<PackedScene>("res://officer_pawn.tscn");
 		List<string> shipNames = _missionState?.ParticipatingShipNames ?? new List<string>();
-		for (int i = 0; i < shipNames.Count && i < spawnPoints.Count; i++)
+		for (int i = 0; i < shipNames.Count && i < 2; i++)
 		{
 			OfficerState officer = _globalData?.ShipOfficers != null && _globalData.ShipOfficers.TryGetValue(shipNames[i], out OfficerState state)
 				? state
@@ -250,9 +282,9 @@ public partial class MissionMap : Node2D
 			}
 
 			OfficerPawn pawn = pawnScene.Instantiate<OfficerPawn>();
-			pawn.GlobalPosition = spawnPoints[i].GlobalPosition;
 			pawn.SetOfficer(officer);
 			_characterLayer.AddChild(pawn);
+			PlaceOfficerAtSpawn(pawn, i);
 			_officerPawns.Add(pawn);
 		}
 
@@ -270,7 +302,7 @@ public partial class MissionMap : Node2D
 		_missionUi.SetMissionText(
 			title.ToUpper(),
 			"OBJECTIVE: Investigate the relay, assess the survivors, and decide what to save.",
-			"Controls: left click to move, TAB or 1-2 to switch officers, mouse wheel or +/- to zoom, ESC to return.");
+			"Controls: left click an officer to select, left click a floor tile to move, TAB or 1-2 to switch officers, middle mouse drag or WASD to pan, mouse wheel or +/- to zoom, ESC to return.");
 
 		_missionUi.SaveSurvivorsButton.Pressed += () => CompleteMission(BuildOutcome("survivors_saved"));
 		_missionUi.SecureArchiveButton.Pressed += () => CompleteMission(BuildOutcome("archive_secured"));
@@ -383,5 +415,113 @@ public partial class MissionMap : Node2D
 	{
 		_globalData?.ClearCurrentMissionState();
 		_missionService?.ReturnToMissionSource(this);
+	}
+
+	private void UpdateCameraPan(float delta)
+	{
+		if (_camera == null || _isPanning)
+		{
+			return;
+		}
+
+		Vector2 input = Vector2.Zero;
+		if (Input.IsKeyPressed(Key.W) || Input.IsKeyPressed(Key.Up))
+		{
+			input.Y -= 1f;
+		}
+		if (Input.IsKeyPressed(Key.S) || Input.IsKeyPressed(Key.Down))
+		{
+			input.Y += 1f;
+		}
+		if (Input.IsKeyPressed(Key.A) || Input.IsKeyPressed(Key.Left))
+		{
+			input.X -= 1f;
+		}
+		if (Input.IsKeyPressed(Key.D) || Input.IsKeyPressed(Key.Right))
+		{
+			input.X += 1f;
+		}
+
+		if (input == Vector2.Zero)
+		{
+			return;
+		}
+
+		_camera.Position += input.Normalized() * CameraPanSpeed * delta * _camera.Zoom.X;
+	}
+
+	private void TryMoveSelectedOfficer()
+	{
+		OfficerPawn activeOfficer = GetSelectedOfficer();
+		if (activeOfficer == null || _roomBuilder == null || _isoWorld == null)
+		{
+			return;
+		}
+
+		Vector2 localMousePosition = _isoWorld.ToLocal(GetGlobalMousePosition());
+		Vector2I targetCell = _roomBuilder.GetNearestCell(localMousePosition);
+		if (!_roomBuilder.TryGetPath(activeOfficer.CurrentCell, targetCell, out List<Vector2I> pathCells))
+		{
+			return;
+		}
+
+		if (pathCells.Count <= 1)
+		{
+			return;
+		}
+
+		List<Vector2> pathPoints = pathCells
+			.Skip(1)
+			.Select(GetCellGlobalPosition)
+			.ToList();
+		activeOfficer.MoveAlongPath(pathPoints, targetCell);
+	}
+
+	private void PlaceOfficerAtSpawn(OfficerPawn pawn, int spawnIndex)
+	{
+		if (pawn == null || _roomBuilder == null)
+		{
+			return;
+		}
+
+		string markerId = spawnIndex == 0 ? "spawn_a" : "spawn_b";
+		Vector2I fallbackCell = spawnIndex == 0 ? new Vector2I(3, 5) : new Vector2I(4, 5);
+		Vector2I spawnCell = fallbackCell;
+		if (_roomBuilder.TryGetMarkerCell(markerId, out Vector2I markerCell) && _roomBuilder.IsWalkableCell(markerCell))
+		{
+			spawnCell = markerCell;
+		}
+
+		pawn.SetGridCell(spawnCell, GetCellGlobalPosition(spawnCell));
+	}
+
+	private Vector2 GetCellGlobalPosition(Vector2I cell)
+	{
+		Vector2 localPosition = _roomBuilder.GetCellWorldPosition(cell.X, cell.Y);
+		return _isoWorld.ToGlobal(localPosition);
+	}
+
+	private bool TrySelectOfficerAtMouse()
+	{
+		Vector2 mousePosition = GetGlobalMousePosition();
+		for (int i = 0; i < _officerPawns.Count; i++)
+		{
+			OfficerPawn pawn = _officerPawns[i];
+			if (pawn == null)
+			{
+				continue;
+			}
+
+			Rect2 bounds = new Rect2(pawn.GlobalPosition + new Vector2(-52f, -72f), new Vector2(104f, 120f));
+			if (!bounds.HasPoint(mousePosition))
+			{
+				continue;
+			}
+
+			SelectOfficer(i);
+			return true;
+		}
+
+		return false;
 	}
 }

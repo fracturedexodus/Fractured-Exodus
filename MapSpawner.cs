@@ -124,6 +124,7 @@ public static class MapSpawner
 		}
 
 		SystemData currentSystem = globalData.ExploredSystems[globalData.SavedSystem];
+		EnsureBlackSiteRelayAssigned(globalData, currentSystem);
 		Vector2I basePlanetLocation = new Vector2I(2, -1); 
 		
 		int currentOrbitRing = 2; 
@@ -477,6 +478,28 @@ public static class MapSpawner
 			case "FROZEN": return "res://Planets/frozen_planet.png";
 			case "LAVA": return "res://Planets/lava_planet.png";
 			default: return "res://Planets/terra_planet.png"; 
+		}
+	}
+
+	private static void EnsureBlackSiteRelayAssigned(GlobalData globalData, SystemData currentSystem)
+	{
+		if (globalData == null || currentSystem?.Planets == null || currentSystem.Planets.Count == 0)
+		{
+			return;
+		}
+
+		bool alreadyAssigned = globalData.ExploredSystems.Values.Any(system =>
+			system?.Planets != null && system.Planets.Any(planet => planet != null && planet.IsBlackSiteRelaySite));
+		if (alreadyAssigned)
+		{
+			return;
+		}
+
+		PlanetData targetPlanet = currentSystem.Planets.FirstOrDefault(planet => planet != null && planet.Name != globalData.SavedPlanet)
+			?? currentSystem.Planets.FirstOrDefault();
+		if (targetPlanet != null)
+		{
+			targetPlanet.IsBlackSiteRelaySite = true;
 		}
 	}
 }

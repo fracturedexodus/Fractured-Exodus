@@ -18,6 +18,7 @@ public class PlanetData
 	
 	public bool HasBeenScanned { get; set; } = false;
 	public bool HasBeenSalvaged { get; set; } = false;
+	public bool IsBlackSiteRelaySite { get; set; } = false;
 }
 
 public class OutpostData

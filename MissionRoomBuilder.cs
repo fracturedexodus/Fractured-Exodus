@@ -5,6 +5,8 @@ using System.Linq;
 [Tool]
 public partial class MissionRoomBuilder : Node
 {
+	private const string DefaultLayoutPath = "res://Data/MissionLayouts/black_site_relay_builder.json";
+
 	private sealed class PlacedTile
 	{
 		public string TileId { get; set; }
@@ -17,6 +19,9 @@ public partial class MissionRoomBuilder : Node
 
 	private bool _rebuildNow;
 	private readonly Dictionary<string, Vector2> _markerPositions = new Dictionary<string, Vector2>();
+	private readonly Dictionary<string, Vector2I> _markerCells = new Dictionary<string, Vector2I>();
+	private readonly HashSet<Vector2I> _floorCells = new HashSet<Vector2I>();
+	private readonly HashSet<string> _blockedTransitions = new HashSet<string>();
 
 	[Export] public Texture2D TilesetTexture { get; set; }
 	[Export] public Vector2 Origin { get; set; } = new Vector2(0f, -18f);
@@ -77,12 +82,103 @@ public partial class MissionRoomBuilder : Node
 		return false;
 	}
 
+	public bool TryGetMarkerCell(string markerId, out Vector2I cell)
+	{
+		return _markerCells.TryGetValue(markerId, out cell);
+	}
+
+	public bool IsWalkableCell(Vector2I cell)
+	{
+		return _floorCells.Contains(cell);
+	}
+
+	public Vector2I GetNearestCell(Vector2 localPosition)
+	{
+		return IsoGridHelper.WorldToGrid(localPosition, TileStep, Origin);
+	}
+
+	public Vector2 GetRoomCenterWorldPosition()
+	{
+		if (_floorCells.Count == 0)
+		{
+			return Origin;
+		}
+
+		float minX = float.MaxValue;
+		float maxX = float.MinValue;
+		float minY = float.MaxValue;
+		float maxY = float.MinValue;
+
+		foreach (Vector2I cell in _floorCells)
+		{
+			Vector2 position = GetCellWorldPosition(cell.X, cell.Y);
+			minX = Mathf.Min(minX, position.X);
+			maxX = Mathf.Max(maxX, position.X);
+			minY = Mathf.Min(minY, position.Y);
+			maxY = Mathf.Max(maxY, position.Y);
+		}
+
+		return new Vector2((minX + maxX) * 0.5f, (minY + maxY) * 0.5f);
+	}
+
+	public bool TryGetPath(Vector2I startCell, Vector2I targetCell, out List<Vector2I> path)
+	{
+		path = new List<Vector2I>();
+		if (!IsWalkableCell(startCell) || !IsWalkableCell(targetCell))
+		{
+			return false;
+		}
+
+		if (startCell == targetCell)
+		{
+			path.Add(startCell);
+			return true;
+		}
+
+		Queue<Vector2I> frontier = new Queue<Vector2I>();
+		Dictionary<Vector2I, Vector2I> cameFrom = new Dictionary<Vector2I, Vector2I>();
+		frontier.Enqueue(startCell);
+		cameFrom[startCell] = startCell;
+
+		Vector2I[] directions =
+		{
+			new Vector2I(1, 0),
+			new Vector2I(-1, 0),
+			new Vector2I(0, 1),
+			new Vector2I(0, -1)
+		};
+
+		while (frontier.Count > 0)
+		{
+			Vector2I current = frontier.Dequeue();
+			foreach (Vector2I direction in directions)
+			{
+				Vector2I next = current + direction;
+				if (cameFrom.ContainsKey(next) || !IsWalkableCell(next) || IsTransitionBlocked(current, next))
+				{
+					continue;
+				}
+
+				cameFrom[next] = current;
+				if (next == targetCell)
+				{
+					path = ReconstructPath(cameFrom, startCell, targetCell);
+					return true;
+				}
+
+				frontier.Enqueue(next);
+			}
+		}
+
+		return false;
+	}
+
 	public void BuildRoom()
 	{
 		Node2D floorLayer = GetNodeOrNull<Node2D>(FloorLayerPath);
 		Node2D wallLayer = GetNodeOrNull<Node2D>(WallLayerPath);
 		Node2D propLayer = GetNodeOrNull<Node2D>(PropLayerPath);
-		if (TilesetTexture == null || floorLayer == null || wallLayer == null || propLayer == null)
+		if (floorLayer == null || wallLayer == null || propLayer == null)
 		{
 			return;
 		}
@@ -91,6 +187,9 @@ public partial class MissionRoomBuilder : Node
 		ClearLayer(wallLayer);
 		ClearLayer(propLayer);
 		_markerPositions.Clear();
+		_markerCells.Clear();
+		_floorCells.Clear();
+		_blockedTransitions.Clear();
 
 		if (!BuildFromSavedLayout(floorLayer, wallLayer, propLayer))
 		{
@@ -102,7 +201,7 @@ public partial class MissionRoomBuilder : Node
 
 	private bool BuildFromSavedLayout(Node2D floorLayer, Node2D wallLayer, Node2D propLayer)
 	{
-		string resourcePath = LayoutResourcePath?.Trim();
+		string resourcePath = GetEffectiveLayoutResourcePath();
 		if (string.IsNullOrEmpty(resourcePath))
 		{
 			return false;
@@ -143,6 +242,7 @@ public partial class MissionRoomBuilder : Node
 			if (itemType == "marker" || !string.IsNullOrEmpty(markerId))
 			{
 				_markerPositions[markerId] = GetCellWorldPosition(column, row, new Vector2(offsetX, offsetY));
+				_markerCells[markerId] = new Vector2I(column, row);
 				continue;
 			}
 
@@ -157,11 +257,23 @@ public partial class MissionRoomBuilder : Node
 				MissionTileCategory.Wall => wallLayer,
 				_ => propLayer
 			};
+			RegisterTileCell(definition, column, row);
 			targetLayer.AddChild(CreateSprite(definition, column, row, $"{definition.Category}_{column}_{row}_{definition.Id}", new Vector2(offsetX, offsetY), rotationDegrees));
 			placedAnyTile = true;
 		}
 
 		return placedAnyTile;
+	}
+
+	private string GetEffectiveLayoutResourcePath()
+	{
+		string resourcePath = LayoutResourcePath?.Trim();
+		if (!string.IsNullOrEmpty(resourcePath))
+		{
+			return resourcePath;
+		}
+
+		return DefaultLayoutPath;
 	}
 
 	private static void ClearLayer(Node layer)
@@ -191,9 +303,74 @@ public partial class MissionRoomBuilder : Node
 					continue;
 				}
 
+				RegisterTileCell(definition, column, row);
 				targetLayer.AddChild(CreateSprite(definition, column, row, $"{prefix}_{column}_{row}_{symbol}", Vector2.Zero, 0f));
 			}
 		}
+	}
+
+	private void RegisterTileCell(MissionTileDefinition definition, int column, int row)
+	{
+		Vector2I cell = new Vector2I(column, row);
+		if (definition.Category == MissionTileCategory.Floor)
+		{
+			_floorCells.Add(cell);
+			return;
+		}
+
+		if (definition.Category == MissionTileCategory.Wall)
+		{
+			RegisterBlockedTransition(definition.Id, cell);
+		}
+	}
+
+	private void RegisterBlockedTransition(string tileId, Vector2I cell)
+	{
+		Vector2I neighbor = tileId switch
+		{
+			"wall_nw_panel" or "wall_nw_window" => cell + new Vector2I(-1, 0),
+			"wall_ne_panel" or "wall_ne_window" => cell + new Vector2I(0, -1),
+			"wall_se_panel" or "wall_se_window" => cell + new Vector2I(1, 0),
+			"wall_sw_panel" or "wall_sw_window" => cell + new Vector2I(0, 1),
+			_ => new Vector2I(int.MinValue, int.MinValue)
+		};
+
+		if (neighbor.X == int.MinValue)
+		{
+			return;
+		}
+
+		_blockedTransitions.Add(GetTransitionKey(cell, neighbor));
+	}
+
+	private bool IsTransitionBlocked(Vector2I fromCell, Vector2I toCell)
+	{
+		return _blockedTransitions.Contains(GetTransitionKey(fromCell, toCell));
+	}
+
+	private static string GetTransitionKey(Vector2I a, Vector2I b)
+	{
+		if (a.X < b.X || (a.X == b.X && a.Y <= b.Y))
+		{
+			return $"{a.X},{a.Y}|{b.X},{b.Y}";
+		}
+
+		return $"{b.X},{b.Y}|{a.X},{a.Y}";
+	}
+
+	private static List<Vector2I> ReconstructPath(Dictionary<Vector2I, Vector2I> cameFrom, Vector2I startCell, Vector2I targetCell)
+	{
+		List<Vector2I> path = new List<Vector2I>();
+		Vector2I current = targetCell;
+		path.Add(current);
+		while (current != startCell)
+		{
+			current = cameFrom[current];
+			path.Add(current);
+		}
+
+		path.Reverse();
+		return path;
 	}
 
 	private Sprite2D CreateSprite(MissionTileDefinition definition, int column, int row, string name, Vector2 extraOffset, float rotationDegrees)
