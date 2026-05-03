@@ -30,12 +30,23 @@ public partial class MissionSceneBuilder : Node2D
 	private LineEdit _layoutNameEdit;
 	private Node2D _hoverLayer;
 	private Label _selectedLabel;
+	private Label _logicSelectionLabel;
+	private Label _logicHintLabel;
+	private LineEdit _logicLabelEdit;
+	private LineEdit _logicTargetIdEdit;
+	private LineEdit _logicRequiredFlagEdit;
+	private LineEdit _logicSetFlagEdit;
+	private OptionButton _logicTriggerModeOption;
+	private CheckBox _logicOneShotCheck;
+	private TextEdit _logicNotesEdit;
+	private RichTextLabel _validationReport;
 	private MissionTileDefinition _selectedTile;
 	private MissionMarkerDefinition _selectedMarker;
 	private Sprite2D _draggedSprite;
 	private Sprite2D _selectedPlacedSprite;
 	private Vector2I _draggedCell;
 	private bool _isPanning;
+	private bool _isUpdatingLogicUi;
 	private Vector2 _lastMouseScreenPosition;
 	private readonly List<Line2D> _gridLines = new List<Line2D>();
 	private Polygon2D _hoverDiamond;
@@ -58,6 +69,7 @@ public partial class MissionSceneBuilder : Node2D
 		BuildPalette();
 		BuildGrid();
 		BuildHoverDiamond();
+		BuildLogicPanel();
 		WireUi();
 		ApplyZoom(DefaultZoom);
 		UpdateSelectedLabel();
@@ -220,8 +232,102 @@ public partial class MissionSceneBuilder : Node2D
 	{
 		GetNode<Button>("UILayer/TopBar/Margin/TopRow/SaveButton").Pressed += SaveLayout;
 		GetNode<Button>("UILayer/TopBar/Margin/TopRow/LoadButton").Pressed += LoadLayout;
+		Button validateButton = new Button { Text = "Validate" };
+		validateButton.Pressed += ValidateLayout;
+		GetNode<HBoxContainer>("UILayer/TopBar/Margin/TopRow").AddChild(validateButton);
 		GetNode<Button>("UILayer/TopBar/Margin/TopRow/ClearButton").Pressed += ClearLayout;
 		GetNode<Button>("UILayer/TopBar/Margin/TopRow/ExitButton").Pressed += ExitBuilder;
+	}
+
+	private void BuildLogicPanel()
+	{
+		CanvasLayer uiLayer = GetNode<CanvasLayer>("UILayer");
+		PanelContainer panel = new PanelContainer();
+		panel.Name = "LogicPanel";
+		panel.Position = new Vector2(1540f, 332f);
+		panel.Size = new Vector2(368f, 736f);
+		uiLayer.AddChild(panel);
+
+		MarginContainer margin = new MarginContainer();
+		margin.AddThemeConstantOverride("margin_left", 12);
+		margin.AddThemeConstantOverride("margin_top", 12);
+		margin.AddThemeConstantOverride("margin_right", 12);
+		margin.AddThemeConstantOverride("margin_bottom", 12);
+		panel.AddChild(margin);
+
+		VBoxContainer root = new VBoxContainer();
+		root.AddThemeConstantOverride("separation", 10);
+		margin.AddChild(root);
+
+		Label title = new Label { Text = "MISSION LOGIC" };
+		title.AddThemeFontSizeOverride("font_size", 20);
+		root.AddChild(title);
+
+		_logicSelectionLabel = new Label
+		{
+			Text = "Select a marker to edit mission logic.",
+			AutowrapMode = TextServer.AutowrapMode.WordSmart
+		};
+		root.AddChild(_logicSelectionLabel);
+
+		_logicHintLabel = new Label
+		{
+			Text = "Marker properties are where we hook up spawns, triggers, and future dialogue/events.",
+			AutowrapMode = TextServer.AutowrapMode.WordSmart
+		};
+		root.AddChild(_logicHintLabel);
+
+		_logicLabelEdit = AddInspectorField(root, "Marker Label");
+		_logicTargetIdEdit = AddInspectorField(root, "Target ID");
+		_logicRequiredFlagEdit = AddInspectorField(root, "Required Flag");
+		_logicSetFlagEdit = AddInspectorField(root, "Set Flag");
+
+		root.AddChild(new Label { Text = "Trigger Mode" });
+		_logicTriggerModeOption = new OptionButton();
+		_logicTriggerModeOption.AddItem("None", 0);
+		_logicTriggerModeOption.AddItem("Enter", 1);
+		_logicTriggerModeOption.AddItem("Interact", 2);
+		_logicTriggerModeOption.ItemSelected += _ => ApplyLogicFieldChanges();
+		root.AddChild(_logicTriggerModeOption);
+
+		_logicOneShotCheck = new CheckBox { Text = "One Shot Trigger" };
+		_logicOneShotCheck.Toggled += _ => ApplyLogicFieldChanges();
+		root.AddChild(_logicOneShotCheck);
+
+		root.AddChild(new Label { Text = "Notes" });
+		_logicNotesEdit = new TextEdit
+		{
+			CustomMinimumSize = new Vector2(0f, 150f),
+			WrapMode = TextEdit.LineWrappingMode.Boundary
+		};
+		_logicNotesEdit.TextChanged += ApplyLogicFieldChanges;
+		root.AddChild(_logicNotesEdit);
+
+		root.AddChild(new HSeparator());
+		Label validationTitle = new Label { Text = "Validation" };
+		validationTitle.AddThemeFontSizeOverride("font_size", 18);
+		root.AddChild(validationTitle);
+
+		_validationReport = new RichTextLabel
+		{
+			CustomMinimumSize = new Vector2(0f, 220f),
+			ScrollActive = true,
+			FitContent = false,
+			BbcodeEnabled = true,
+			AutowrapMode = TextServer.AutowrapMode.WordSmart
+		};
+		root.AddChild(_validationReport);
+
+		UpdateLogicInspector();
+	}
+
+	private LineEdit AddInspectorField(VBoxContainer root, string label)
+	{
+		root.AddChild(new Label { Text = label });
+		LineEdit lineEdit = new LineEdit();
+		lineEdit.TextChanged += _ => ApplyLogicFieldChanges();
+		root.AddChild(lineEdit);
+		return lineEdit;
 	}
 
 	private void BuildPalette()
@@ -255,6 +361,7 @@ public partial class MissionSceneBuilder : Node2D
 					_selectedMarker = null;
 					ClearPlacedSelection();
 					UpdateSelectedLabel();
+					UpdateLogicInspector();
 				};
 				_paletteContainer.AddChild(button);
 			}
@@ -280,6 +387,7 @@ public partial class MissionSceneBuilder : Node2D
 					_selectedMarker = definition;
 					ClearPlacedSelection();
 					UpdateSelectedLabel();
+					UpdateLogicInspector();
 				};
 				_paletteContainer.AddChild(button);
 			}
@@ -456,6 +564,7 @@ public partial class MissionSceneBuilder : Node2D
 			ClearPlacedSelection();
 		}
 		sprite.QueueFree();
+		RefreshValidationReport();
 	}
 
 	private void SelectPlacedSprite(Sprite2D sprite)
@@ -470,6 +579,7 @@ public partial class MissionSceneBuilder : Node2D
 		_selectedPlacedSprite.Modulate = Brighten(GetBaseModulate(_selectedPlacedSprite));
 		ToggleSelectionOutline(_selectedPlacedSprite, true);
 		UpdateSelectedLabel();
+		UpdateLogicInspector();
 	}
 
 	private void ClearPlacedSelection()
@@ -482,6 +592,7 @@ public partial class MissionSceneBuilder : Node2D
 		}
 
 		UpdateSelectedLabel();
+		UpdateLogicInspector();
 	}
 
 	private Sprite2D FindSpriteAtMouse(bool includeFloors = true)
@@ -607,6 +718,89 @@ public partial class MissionSceneBuilder : Node2D
 		UpdateSelectedLabel();
 	}
 
+	private void UpdateLogicInspector()
+	{
+		if (_logicSelectionLabel == null)
+		{
+			return;
+		}
+
+		bool isMarker = _selectedPlacedSprite != null && !string.IsNullOrEmpty(_selectedPlacedSprite.GetMeta("marker_id", "").AsString());
+		SetLogicEditorEnabled(isMarker);
+		_isUpdatingLogicUi = true;
+
+		if (!isMarker)
+		{
+			_logicSelectionLabel.Text = _selectedPlacedSprite == null
+				? "Select a marker to edit mission logic."
+				: "Selected item is not a logic marker.";
+			_logicHintLabel.Text = "Marker properties are where we hook up spawns, triggers, and future dialogue/events.";
+			_logicLabelEdit.Text = string.Empty;
+			_logicTargetIdEdit.Text = string.Empty;
+			_logicRequiredFlagEdit.Text = string.Empty;
+			_logicSetFlagEdit.Text = string.Empty;
+			_logicTriggerModeOption.Select(0);
+			_logicOneShotCheck.ButtonPressed = false;
+			_logicNotesEdit.Text = string.Empty;
+			_isUpdatingLogicUi = false;
+			RefreshValidationReport();
+			return;
+		}
+
+		Sprite2D marker = _selectedPlacedSprite;
+		string markerId = marker.GetMeta("marker_id", "").AsString();
+		string markerLabel = marker.GetMeta("logic_label", markerId).AsString();
+		int column = marker.GetMeta("column", 0).AsInt32();
+		int row = marker.GetMeta("row", 0).AsInt32();
+
+		_logicSelectionLabel.Text = $"Editing {markerId} @ {column},{row}";
+		_logicHintLabel.Text = "These fields save into the layout file and define how the mission should react to this marker.";
+		_logicLabelEdit.Text = markerLabel;
+		_logicTargetIdEdit.Text = marker.GetMeta("logic_target_id", string.Empty).AsString();
+		_logicRequiredFlagEdit.Text = marker.GetMeta("logic_required_flag", string.Empty).AsString();
+		_logicSetFlagEdit.Text = marker.GetMeta("logic_set_flag", string.Empty).AsString();
+		_logicTriggerModeOption.Select(GetTriggerModeIndex(marker.GetMeta("logic_trigger_mode", "none").AsString()));
+		_logicOneShotCheck.ButtonPressed = marker.GetMeta("logic_once", false).AsBool();
+		_logicNotesEdit.Text = marker.GetMeta("logic_notes", string.Empty).AsString();
+		_isUpdatingLogicUi = false;
+		RefreshValidationReport();
+	}
+
+	private void SetLogicEditorEnabled(bool enabled)
+	{
+		_logicLabelEdit.Editable = enabled;
+		_logicTargetIdEdit.Editable = enabled;
+		_logicRequiredFlagEdit.Editable = enabled;
+		_logicSetFlagEdit.Editable = enabled;
+		_logicTriggerModeOption.Disabled = !enabled;
+		_logicOneShotCheck.Disabled = !enabled;
+		_logicNotesEdit.Editable = enabled;
+	}
+
+	private void ApplyLogicFieldChanges()
+	{
+		if (_isUpdatingLogicUi || _selectedPlacedSprite == null)
+		{
+			return;
+		}
+
+		string markerId = _selectedPlacedSprite.GetMeta("marker_id", "").AsString();
+		if (string.IsNullOrEmpty(markerId))
+		{
+			return;
+		}
+
+		_selectedPlacedSprite.SetMeta("logic_label", _logicLabelEdit.Text.StripEdges());
+		_selectedPlacedSprite.SetMeta("logic_target_id", _logicTargetIdEdit.Text.StripEdges());
+		_selectedPlacedSprite.SetMeta("logic_required_flag", _logicRequiredFlagEdit.Text.StripEdges());
+		_selectedPlacedSprite.SetMeta("logic_set_flag", _logicSetFlagEdit.Text.StripEdges());
+		_selectedPlacedSprite.SetMeta("logic_trigger_mode", GetTriggerModeValue(_logicTriggerModeOption.Selected));
+		_selectedPlacedSprite.SetMeta("logic_once", _logicOneShotCheck.ButtonPressed);
+		_selectedPlacedSprite.SetMeta("logic_notes", _logicNotesEdit.Text.StripEdges());
+		UpdateMarkerCaption(_selectedPlacedSprite);
+		RefreshValidationReport();
+	}
+
 	private Sprite2D CreateSprite(MissionTileDefinition definition, int column, int row)
 	{
 		bool usesAtlasRegion = string.IsNullOrEmpty(definition.TexturePath) && definition.Category != MissionTileCategory.Floor;
@@ -649,10 +843,12 @@ public partial class MissionSceneBuilder : Node2D
 		sprite.SetMeta("offset_y", 0f);
 		sprite.SetMeta("rotation_degrees", 0f);
 		sprite.SetMeta("base_modulate", definition.Color);
+		ApplyDefaultMarkerLogic(sprite, definition);
 		sprite.AddChild(CreateSelectionOutline(GetSpriteBoundsSize(sprite)));
 
 		Label label = new Label
 		{
+			Name = "MarkerCaption",
 			Text = definition.DisplayName,
 			Position = new Vector2(-70f, 38f),
 			Size = new Vector2(140f, 22f),
@@ -661,7 +857,31 @@ public partial class MissionSceneBuilder : Node2D
 		};
 		label.AddThemeFontSizeOverride("font_size", 11);
 		sprite.AddChild(label);
+		UpdateMarkerCaption(sprite);
 		return sprite;
+	}
+
+	private void ApplyDefaultMarkerLogic(Sprite2D sprite, MissionMarkerDefinition definition)
+	{
+		sprite.SetMeta("logic_label", definition.DisplayName);
+		sprite.SetMeta("logic_target_id", definition.Id);
+		sprite.SetMeta("logic_required_flag", string.Empty);
+		sprite.SetMeta("logic_set_flag", string.Empty);
+		sprite.SetMeta("logic_trigger_mode", definition.Category == MissionMarkerCategory.Trigger ? "enter" : "none");
+		sprite.SetMeta("logic_once", definition.Category == MissionMarkerCategory.Trigger);
+		sprite.SetMeta("logic_notes", string.Empty);
+	}
+
+	private void UpdateMarkerCaption(Sprite2D sprite)
+	{
+		Label label = sprite?.GetNodeOrNull<Label>("MarkerCaption");
+		if (label == null)
+		{
+			return;
+		}
+
+		string caption = sprite.GetMeta("logic_label", sprite.GetMeta("marker_id", "Marker").AsString()).AsString();
+		label.Text = string.IsNullOrEmpty(caption) ? "Marker" : caption;
 	}
 
 	private Node2D CreateSelectionOutline(Vector2 size)
@@ -793,6 +1013,13 @@ public partial class MissionSceneBuilder : Node2D
 				if (!string.IsNullOrEmpty(markerId))
 				{
 					item["marker_id"] = markerId;
+					item["logic_label"] = sprite.GetMeta("logic_label", string.Empty).AsString();
+					item["logic_target_id"] = sprite.GetMeta("logic_target_id", string.Empty).AsString();
+					item["logic_required_flag"] = sprite.GetMeta("logic_required_flag", string.Empty).AsString();
+					item["logic_set_flag"] = sprite.GetMeta("logic_set_flag", string.Empty).AsString();
+					item["logic_trigger_mode"] = sprite.GetMeta("logic_trigger_mode", "none").AsString();
+					item["logic_once"] = sprite.GetMeta("logic_once", false).AsBool();
+					item["logic_notes"] = sprite.GetMeta("logic_notes", string.Empty).AsString();
 				}
 				else
 				{
@@ -805,6 +1032,7 @@ public partial class MissionSceneBuilder : Node2D
 
 		file.StoreString(Json.Stringify(items, "\t"));
 		SetStatus($"Saved layout to {ProjectSettings.LocalizePath(path)}");
+		RefreshValidationReport();
 	}
 
 	private void LoadLayout()
@@ -854,8 +1082,16 @@ public partial class MissionSceneBuilder : Node2D
 				marker.SetMeta("offset_x", offsetX);
 				marker.SetMeta("offset_y", offsetY);
 				marker.SetMeta("rotation_degrees", rotationDegrees);
+				marker.SetMeta("logic_label", tile.TryGetValue("logic_label", out Variant logicLabelVariant) ? logicLabelVariant.AsString() : marker.GetMeta("logic_label", markerDefinition.DisplayName).AsString());
+				marker.SetMeta("logic_target_id", tile.TryGetValue("logic_target_id", out Variant logicTargetVariant) ? logicTargetVariant.AsString() : marker.GetMeta("logic_target_id", markerDefinition.Id).AsString());
+				marker.SetMeta("logic_required_flag", tile.TryGetValue("logic_required_flag", out Variant logicRequiredVariant) ? logicRequiredVariant.AsString() : string.Empty);
+				marker.SetMeta("logic_set_flag", tile.TryGetValue("logic_set_flag", out Variant logicSetVariant) ? logicSetVariant.AsString() : string.Empty);
+				marker.SetMeta("logic_trigger_mode", tile.TryGetValue("logic_trigger_mode", out Variant logicTriggerVariant) ? logicTriggerVariant.AsString() : marker.GetMeta("logic_trigger_mode", "none").AsString());
+				marker.SetMeta("logic_once", tile.TryGetValue("logic_once", out Variant logicOnceVariant) ? logicOnceVariant.AsBool() : marker.GetMeta("logic_once", false).AsBool());
+				marker.SetMeta("logic_notes", tile.TryGetValue("logic_notes", out Variant logicNotesVariant) ? logicNotesVariant.AsString() : string.Empty);
 				marker.RotationDegrees = rotationDegrees;
 				MoveSpriteToCell(marker, column, row);
+				UpdateMarkerCaption(marker);
 				GetPlacementLayer(BuilderLayer.Marker).AddChild(marker);
 				continue;
 			}
@@ -875,12 +1111,14 @@ public partial class MissionSceneBuilder : Node2D
 		}
 
 		SetStatus($"Loaded layout from {ProjectSettings.LocalizePath(path)}");
+		RefreshValidationReport();
 	}
 
 	private void ClearLayout()
 	{
 		ClearLayoutInternal();
 		SetStatus("Cleared placed tiles.");
+		RefreshValidationReport();
 	}
 
 	private void ClearLayoutInternal()
@@ -893,6 +1131,7 @@ public partial class MissionSceneBuilder : Node2D
 				child.QueueFree();
 			}
 		}
+		RefreshValidationReport();
 	}
 
 	private void ExitBuilder()
@@ -947,6 +1186,130 @@ public partial class MissionSceneBuilder : Node2D
 	private void SetStatus(string text)
 	{
 		_statusLabel.Text = text;
+	}
+
+	private void ValidateLayout()
+	{
+		List<string> issues = CollectValidationIssues();
+		RefreshValidationReport(issues);
+		if (issues.Count == 0)
+		{
+			SetStatus("Validation passed. Mission logic markers look healthy.");
+			return;
+		}
+
+		SetStatus($"Validation found {issues.Count} issue(s). Review the mission logic panel.");
+	}
+
+	private void RefreshValidationReport()
+	{
+		RefreshValidationReport(CollectValidationIssues());
+	}
+
+	private void RefreshValidationReport(List<string> issues)
+	{
+		if (_validationReport == null)
+		{
+			return;
+		}
+
+		if (issues == null || issues.Count == 0)
+		{
+			_validationReport.Text = "[color=lime]No validation issues. The mission layout has the core logic markers it needs.[/color]";
+			return;
+		}
+
+		_validationReport.Text = string.Join("\n", issues.Select(issue => $"[color=#ffb86b]- {issue}[/color]"));
+	}
+
+	private List<string> CollectValidationIssues()
+	{
+		List<string> issues = new List<string>();
+		List<Sprite2D> markers = _markerLayer.GetChildren().OfType<Sprite2D>().ToList();
+		Dictionary<string, List<Sprite2D>> markersById = markers
+			.GroupBy(marker => marker.GetMeta("marker_id", string.Empty).AsString())
+			.ToDictionary(group => group.Key, group => group.ToList());
+
+		ValidateRequiredUniqueMarker(markersById, "spawn_a", "Officer Spawn A", issues);
+		ValidateRequiredUniqueMarker(markersById, "spawn_b", "Officer Spawn B", issues);
+
+		int objectiveCount = MissionMarkerCatalog.All
+			.Where(def => def.Category == MissionMarkerCategory.Objective)
+			.Sum(def => markersById.TryGetValue(def.Id, out List<Sprite2D> found) ? found.Count : 0);
+		if (objectiveCount == 0)
+		{
+			issues.Add("No objective markers are placed. Add at least one mission objective.");
+		}
+
+		foreach (MissionMarkerDefinition definition in MissionMarkerCatalog.All.Where(def => def.Category == MissionMarkerCategory.Objective))
+		{
+			ValidateUniqueMarker(markersById, definition.Id, definition.DisplayName, issues);
+		}
+
+		foreach (Sprite2D marker in markers)
+		{
+			string markerId = marker.GetMeta("marker_id", string.Empty).AsString();
+			string triggerMode = marker.GetMeta("logic_trigger_mode", "none").AsString();
+			string targetId = marker.GetMeta("logic_target_id", string.Empty).AsString();
+			string markerLabel = marker.GetMeta("logic_label", markerId).AsString();
+
+			if (markerId.StartsWith("trigger_"))
+			{
+				if (string.IsNullOrEmpty(targetId))
+				{
+					issues.Add($"{markerLabel} is missing a Target ID.");
+				}
+
+				if (triggerMode == "none")
+				{
+					issues.Add($"{markerLabel} should use Enter or Interact trigger mode.");
+				}
+			}
+		}
+
+		return issues;
+	}
+
+	private static void ValidateRequiredUniqueMarker(Dictionary<string, List<Sprite2D>> markersById, string markerId, string displayName, List<string> issues)
+	{
+		if (!markersById.TryGetValue(markerId, out List<Sprite2D> markers) || markers.Count == 0)
+		{
+			issues.Add($"Missing required marker: {displayName}.");
+			return;
+		}
+
+		if (markers.Count > 1)
+		{
+			issues.Add($"{displayName} appears {markers.Count} times. Keep it to one.");
+		}
+	}
+
+	private static void ValidateUniqueMarker(Dictionary<string, List<Sprite2D>> markersById, string markerId, string displayName, List<string> issues)
+	{
+		if (markersById.TryGetValue(markerId, out List<Sprite2D> markers) && markers.Count > 1)
+		{
+			issues.Add($"{displayName} appears {markers.Count} times. Keep objective markers unique.");
+		}
+	}
+
+	private static int GetTriggerModeIndex(string triggerMode)
+	{
+		return triggerMode switch
+		{
+			"enter" => 1,
+			"interact" => 2,
+			_ => 0
+		};
+	}
+
+	private static string GetTriggerModeValue(int selectedIndex)
+	{
+		return selectedIndex switch
+		{
+			1 => "enter",
+			2 => "interact",
+			_ => "none"
+		};
 	}
 
 	private BuilderLayer GetLayerForTile(MissionTileDefinition definition)
