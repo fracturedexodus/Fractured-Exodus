@@ -1,14 +1,14 @@
-[gd_scene format=3]
+[gd_scene format=3 uid="uid://ckfwghiu5kwrk"]
 
-[ext_resource type="Script" path="res://MissionSceneBuilder.cs" id="1_builder"]
+[ext_resource type="Script" uid="uid://dlyiro2sfaw8p" path="res://MissionSceneBuilder.cs" id="1_builder"]
 
-[node name="MissionSceneBuilder" type="Node2D"]
+[node name="MissionSceneBuilder" type="Node2D" unique_id=708045910]
 script = ExtResource("1_builder")
 
-[node name="BackdropCanvas" type="CanvasLayer" parent="."]
+[node name="BackdropCanvas" type="CanvasLayer" parent="." unique_id=979269313]
 layer = -10
 
-[node name="Background" type="ColorRect" parent="BackdropCanvas"]
+[node name="Background" type="ColorRect" parent="BackdropCanvas" unique_id=523608279]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -17,143 +17,165 @@ grow_vertical = 2
 mouse_filter = 2
 color = Color(0.0313726, 0.0431373, 0.0705882, 1)
 
-[node name="Camera2D" type="Camera2D" parent="."]
-enabled = true
+[node name="Camera2D" type="Camera2D" parent="." unique_id=710428182]
 
-[node name="World" type="Node2D" parent="."]
+[node name="World" type="Node2D" parent="." unique_id=264972471]
 
-[node name="GridLayer" type="Node2D" parent="World"]
+[node name="GridLayer" type="Node2D" parent="World" unique_id=484791435]
 
-[node name="FloorPlacementLayer" type="Node2D" parent="World"]
+[node name="FloorPlacementLayer" type="Node2D" parent="World" unique_id=597020201]
 
-[node name="WallPlacementLayer" type="Node2D" parent="World"]
+[node name="WallPlacementLayer" type="Node2D" parent="World" unique_id=1351168089]
 y_sort_enabled = true
 
-[node name="PropPlacementLayer" type="Node2D" parent="World"]
+[node name="PropPlacementLayer" type="Node2D" parent="World" unique_id=1081643820]
 y_sort_enabled = true
 
-[node name="MarkerPlacementLayer" type="Node2D" parent="World"]
+[node name="MarkerPlacementLayer" type="Node2D" parent="World" unique_id=253026981]
 y_sort_enabled = true
 
-[node name="HoverLayer" type="Node2D" parent="World"]
+[node name="HoverLayer" type="Node2D" parent="World" unique_id=1060789161]
 
-[node name="UILayer" type="CanvasLayer" parent="."]
+[node name="UILayer" type="CanvasLayer" parent="." unique_id=973761658]
 
-[node name="PalettePanel" type="PanelContainer" parent="UILayer"]
+[node name="PalettePanel" type="PanelContainer" parent="UILayer" unique_id=1818720898]
 offset_left = 12.0
 offset_top = 12.0
 offset_right = 308.0
 offset_bottom = 1068.0
 
-[node name="Margin" type="MarginContainer" parent="UILayer/PalettePanel"]
+[node name="Margin" type="MarginContainer" parent="UILayer/PalettePanel" unique_id=1472675612]
+layout_mode = 2
 theme_override_constants/margin_left = 10
 theme_override_constants/margin_top = 10
 theme_override_constants/margin_right = 10
 theme_override_constants/margin_bottom = 10
 
-[node name="PaletteScroll" type="ScrollContainer" parent="UILayer/PalettePanel/Margin"]
+[node name="PaletteScroll" type="ScrollContainer" parent="UILayer/PalettePanel/Margin" unique_id=1678762794]
+layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
 
-[node name="PaletteList" type="VBoxContainer" parent="UILayer/PalettePanel/Margin/PaletteScroll"]
+[node name="PaletteList" type="VBoxContainer" parent="UILayer/PalettePanel/Margin/PaletteScroll" unique_id=737370136]
+layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="TopBar" type="PanelContainer" parent="UILayer"]
+[node name="TopBar" type="PanelContainer" parent="UILayer" unique_id=952981215]
 offset_left = 324.0
 offset_top = 12.0
 offset_right = 1520.0
 offset_bottom = 84.0
 
-[node name="Margin" type="MarginContainer" parent="UILayer/TopBar"]
+[node name="Margin" type="MarginContainer" parent="UILayer/TopBar" unique_id=1199053218]
+layout_mode = 2
 theme_override_constants/margin_left = 12
 theme_override_constants/margin_top = 12
 theme_override_constants/margin_right = 12
 theme_override_constants/margin_bottom = 12
 
-[node name="TopRow" type="HBoxContainer" parent="UILayer/TopBar/Margin"]
+[node name="TopRow" type="HBoxContainer" parent="UILayer/TopBar/Margin" unique_id=1794606160]
+layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="LayoutNameEdit" type="LineEdit" parent="UILayer/TopBar/Margin/TopRow"]
+[node name="LayoutNameEdit" type="LineEdit" parent="UILayer/TopBar/Margin/TopRow" unique_id=1151156751]
 custom_minimum_size = Vector2(260, 0)
+layout_mode = 2
 size_flags_horizontal = 3
 text = "black_site_relay_builder"
 
-[node name="SaveButton" type="Button" parent="UILayer/TopBar/Margin/TopRow"]
+[node name="SaveButton" type="Button" parent="UILayer/TopBar/Margin/TopRow" unique_id=1092572079]
+layout_mode = 2
 text = "Save Layout"
 
-[node name="LoadButton" type="Button" parent="UILayer/TopBar/Margin/TopRow"]
+[node name="LoadButton" type="Button" parent="UILayer/TopBar/Margin/TopRow" unique_id=1621727418]
+layout_mode = 2
 text = "Load Layout"
 
-[node name="ClearButton" type="Button" parent="UILayer/TopBar/Margin/TopRow"]
+[node name="ClearButton" type="Button" parent="UILayer/TopBar/Margin/TopRow" unique_id=216099019]
+layout_mode = 2
 text = "Clear"
 
-[node name="ExitButton" type="Button" parent="UILayer/TopBar/Margin/TopRow"]
+[node name="ExitButton" type="Button" parent="UILayer/TopBar/Margin/TopRow" unique_id=938505981]
+layout_mode = 2
 text = "Exit Builder"
 
-[node name="SelectedTileLabel" type="Label" parent="UILayer/TopBar/Margin/TopRow"]
+[node name="SelectedTileLabel" type="Label" parent="UILayer/TopBar/Margin/TopRow" unique_id=1128800226]
+layout_mode = 2
 size_flags_horizontal = 3
-horizontal_alignment = 2
 text = "Selected: None"
+horizontal_alignment = 2
 
-[node name="BottomBar" type="PanelContainer" parent="UILayer"]
+[node name="BottomBar" type="PanelContainer" parent="UILayer" unique_id=1861629941]
 offset_left = 324.0
 offset_top = 996.0
 offset_right = 1520.0
 offset_bottom = 1068.0
 
-[node name="Margin" type="MarginContainer" parent="UILayer/BottomBar"]
+[node name="Margin" type="MarginContainer" parent="UILayer/BottomBar" unique_id=1026553640]
+layout_mode = 2
 theme_override_constants/margin_left = 12
 theme_override_constants/margin_top = 12
 theme_override_constants/margin_right = 12
 theme_override_constants/margin_bottom = 12
 
-[node name="StatusLabel" type="Label" parent="UILayer/BottomBar/Margin"]
+[node name="StatusLabel" type="Label" parent="UILayer/BottomBar/Margin" unique_id=1847766280]
+layout_mode = 2
 size_flags_horizontal = 3
 text = "Ready."
 
-[node name="ControlsPanel" type="PanelContainer" parent="UILayer"]
+[node name="ControlsPanel" type="PanelContainer" parent="UILayer" unique_id=863328515]
 offset_left = 1540.0
 offset_top = 12.0
 offset_right = 1908.0
 offset_bottom = 316.0
 
-[node name="Margin" type="MarginContainer" parent="UILayer/ControlsPanel"]
+[node name="Margin" type="MarginContainer" parent="UILayer/ControlsPanel" unique_id=1289895032]
+layout_mode = 2
 theme_override_constants/margin_left = 12
 theme_override_constants/margin_top = 12
 theme_override_constants/margin_right = 12
 theme_override_constants/margin_bottom = 12
 
-[node name="Legend" type="VBoxContainer" parent="UILayer/ControlsPanel/Margin"]
+[node name="Legend" type="VBoxContainer" parent="UILayer/ControlsPanel/Margin" unique_id=213197963]
+layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="Title" type="Label" parent="UILayer/ControlsPanel/Margin/Legend"]
+[node name="Title" type="Label" parent="UILayer/ControlsPanel/Margin/Legend" unique_id=639832637]
+layout_mode = 2
 theme_override_font_sizes/font_size = 20
 text = "BUILDER CONTROLS"
 
-[node name="Line1" type="Label" parent="UILayer/ControlsPanel/Margin/Legend"]
-autowrap_mode = 3
+[node name="Line1" type="Label" parent="UILayer/ControlsPanel/Margin/Legend" unique_id=917736855]
+layout_mode = 2
 text = "Left Click: place tile/marker or select/drag an existing one"
-
-[node name="Line2" type="Label" parent="UILayer/ControlsPanel/Margin/Legend"]
 autowrap_mode = 3
+
+[node name="Line2" type="Label" parent="UILayer/ControlsPanel/Margin/Legend" unique_id=421864697]
+layout_mode = 2
 text = "Right Click: delete tile under cursor"
-
-[node name="Line3" type="Label" parent="UILayer/ControlsPanel/Margin/Legend"]
 autowrap_mode = 3
+
+[node name="Line3" type="Label" parent="UILayer/ControlsPanel/Margin/Legend" unique_id=1804306036]
+layout_mode = 2
 text = "Mouse Wheel or +/-: zoom"
-
-[node name="Line4" type="Label" parent="UILayer/ControlsPanel/Margin/Legend"]
 autowrap_mode = 3
+
+[node name="Line4" type="Label" parent="UILayer/ControlsPanel/Margin/Legend" unique_id=1572770935]
+layout_mode = 2
 text = "Middle Mouse Drag or WASD: move camera"
-
-[node name="Line5" type="Label" parent="UILayer/ControlsPanel/Margin/Legend"]
 autowrap_mode = 3
+
+[node name="Line5" type="Label" parent="UILayer/ControlsPanel/Margin/Legend" unique_id=705996738]
+layout_mode = 2
 text = "Arrow Keys: nudge selected tile"
-
-[node name="Line6" type="Label" parent="UILayer/ControlsPanel/Margin/Legend"]
 autowrap_mode = 3
+
+[node name="Line6" type="Label" parent="UILayer/ControlsPanel/Margin/Legend" unique_id=1922541522]
+layout_mode = 2
 text = "Q / E: rotate selected tile"
-
-[node name="Line7" type="Label" parent="UILayer/ControlsPanel/Margin/Legend"]
 autowrap_mode = 3
+
+[node name="Line7" type="Label" parent="UILayer/ControlsPanel/Margin/Legend" unique_id=1478145037]
+layout_mode = 2
 text = "Home: reset selected tile offset and rotation"
+autowrap_mode = 3

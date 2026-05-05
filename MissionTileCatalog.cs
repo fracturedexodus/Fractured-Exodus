@@ -38,8 +38,8 @@ public sealed class MissionTileDefinition
 public static class MissionTileCatalog
 {
 	private const string AlignedRoot = "res://Assets/Missions/BlackSiteRelay/GeminiSheetSet/";
-	private static readonly Vector2 PropScale = new Vector2(0.54f, 0.54f);
-	private static readonly Vector2 DoorScale = new Vector2(0.46f, 0.46f);
+	private static readonly Vector2 PropScale = new Vector2(0.27f, 0.27f);
+	private static readonly Vector2 DoorScale = new Vector2(0.23f, 0.23f);
 
 	private static readonly List<MissionTileDefinition> Definitions = new List<MissionTileDefinition>
 	{

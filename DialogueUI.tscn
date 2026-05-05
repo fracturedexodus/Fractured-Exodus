@@ -2,11 +2,15 @@
 
 [ext_resource type="Script" uid="uid://bni0trptq2nkw" path="res://DialogueUI.cs" id="1_obd5m"]
 
-[node name="DialogueUI" type="CanvasLayer" unique_id=1101612214 node_paths=PackedStringArray("SpeakerNameLabel", "DialogueTextDisplay", "OptionsContainer")]
+[node name="DialogueUI" type="CanvasLayer" unique_id=1101612214 node_paths=PackedStringArray("SpeakerNameLabel", "DialogueTextDisplay", "OptionsContainer", "OfficerPortraitRect", "OfficerNameLabel", "NpcPortraitRect", "NpcNameLabel")]
 script = ExtResource("1_obd5m")
-SpeakerNameLabel = NodePath("UIRoot/DialoguePanel/VBoxContainer/SpeakerNameLabel")
-DialogueTextDisplay = NodePath("UIRoot/DialoguePanel/VBoxContainer/DialogueTextDisplay")
-OptionsContainer = NodePath("UIRoot/DialoguePanel/VBoxContainer/OptionsContainer")
+SpeakerNameLabel = NodePath("UIRoot/DialoguePanel/Margin/MainColumn/CenterColumn/SpeakerNameLabel")
+DialogueTextDisplay = NodePath("UIRoot/DialoguePanel/Margin/MainColumn/CenterColumn/DialogueTextDisplay")
+OptionsContainer = NodePath("UIRoot/DialoguePanel/Margin/MainColumn/CenterColumn/OptionsContainer")
+OfficerPortraitRect = NodePath("UIRoot/DialoguePanel/Margin/MainColumn/PortraitRow/OfficerColumn/OfficerPortraitFrame/OfficerPortrait")
+OfficerNameLabel = NodePath("UIRoot/DialoguePanel/Margin/MainColumn/PortraitRow/OfficerColumn/OfficerNameLabel")
+NpcPortraitRect = NodePath("UIRoot/DialoguePanel/Margin/MainColumn/PortraitRow/NpcColumn/NpcPortraitFrame/NpcPortrait")
+NpcNameLabel = NodePath("UIRoot/DialoguePanel/Margin/MainColumn/PortraitRow/NpcColumn/NpcNameLabel")
 
 [node name="UIRoot" type="Control" parent="." unique_id=1757174280]
 layout_mode = 3
@@ -23,26 +27,103 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-color = Color(0, 0, 0, 0.27450982)
+color = Color(0, 0, 0, 0.42)
 
 [node name="DialoguePanel" type="PanelContainer" parent="UIRoot" unique_id=1800160392]
 layout_mode = 1
-anchors_preset = 14
+anchors_preset = 8
+anchor_left = 0.5
 anchor_top = 0.5
-anchor_right = 1.0
+anchor_right = 0.5
 anchor_bottom = 0.5
+offset_left = -620.0
+offset_top = -260.0
+offset_right = 620.0
+offset_bottom = 260.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="VBoxContainer" type="VBoxContainer" parent="UIRoot/DialoguePanel" unique_id=1179777737]
+[node name="Margin" type="MarginContainer" parent="UIRoot/DialoguePanel"]
 layout_mode = 2
+theme_override_constants/margin_left = 18
+theme_override_constants/margin_top = 18
+theme_override_constants/margin_right = 18
+theme_override_constants/margin_bottom = 18
 
-[node name="SpeakerNameLabel" type="Label" parent="UIRoot/DialoguePanel/VBoxContainer" unique_id=1858304658]
+[node name="MainColumn" type="VBoxContainer" parent="UIRoot/DialoguePanel/Margin"]
 layout_mode = 2
+theme_override_constants/separation = 14
 
-[node name="DialogueTextDisplay" type="RichTextLabel" parent="UIRoot/DialoguePanel/VBoxContainer" unique_id=1272450359]
+[node name="PortraitRow" type="HBoxContainer" parent="UIRoot/DialoguePanel/Margin/MainColumn"]
 layout_mode = 2
+theme_override_constants/separation = 18
+alignment = 1
+
+[node name="OfficerColumn" type="VBoxContainer" parent="UIRoot/DialoguePanel/Margin/MainColumn/PortraitRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+alignment = 1
+
+[node name="OfficerPortraitFrame" type="PanelContainer" parent="UIRoot/DialoguePanel/Margin/MainColumn/PortraitRow/OfficerColumn"]
+layout_mode = 2
+custom_minimum_size = Vector2(240, 240)
+
+[node name="OfficerPortrait" type="TextureRect" parent="UIRoot/DialoguePanel/Margin/MainColumn/PortraitRow/OfficerColumn/OfficerPortraitFrame"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+expand_mode = 1
+stretch_mode = 5
+
+[node name="OfficerNameLabel" type="Label" parent="UIRoot/DialoguePanel/Margin/MainColumn/PortraitRow/OfficerColumn"]
+layout_mode = 2
+horizontal_alignment = 1
+text = "Officer"
+
+[node name="CenterColumn" type="VBoxContainer" parent="UIRoot/DialoguePanel/Margin/MainColumn"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 12
+
+[node name="SpeakerNameLabel" type="Label" parent="UIRoot/DialoguePanel/Margin/MainColumn/CenterColumn"]
+layout_mode = 2
+horizontal_alignment = 1
+
+[node name="DialogueTextDisplay" type="RichTextLabel" parent="UIRoot/DialoguePanel/Margin/MainColumn/CenterColumn"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 120)
+size_flags_vertical = 3
 bbcode_enabled = true
+fit_content = false
+scroll_active = true
 
-[node name="OptionsContainer" type="VBoxContainer" parent="UIRoot/DialoguePanel/VBoxContainer" unique_id=13667358]
+[node name="OptionsContainer" type="VBoxContainer" parent="UIRoot/DialoguePanel/Margin/MainColumn/CenterColumn"]
 layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="NpcColumn" type="VBoxContainer" parent="UIRoot/DialoguePanel/Margin/MainColumn/PortraitRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+alignment = 1
+
+[node name="NpcPortraitFrame" type="PanelContainer" parent="UIRoot/DialoguePanel/Margin/MainColumn/PortraitRow/NpcColumn"]
+layout_mode = 2
+custom_minimum_size = Vector2(240, 240)
+
+[node name="NpcPortrait" type="TextureRect" parent="UIRoot/DialoguePanel/Margin/MainColumn/PortraitRow/NpcColumn/NpcPortraitFrame"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+expand_mode = 1
+stretch_mode = 5
+
+[node name="NpcNameLabel" type="Label" parent="UIRoot/DialoguePanel/Margin/MainColumn/PortraitRow/NpcColumn"]
+layout_mode = 2
+horizontal_alignment = 1
+text = "Contact"

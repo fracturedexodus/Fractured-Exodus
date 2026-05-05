@@ -7,6 +7,20 @@ public partial class MissionRoomBuilder : Node
 {
 	private const string DefaultLayoutPath = "res://Data/MissionLayouts/black_site_relay_builder.json";
 
+	public sealed class MarkerPlacement
+	{
+		public string MarkerId { get; init; } = string.Empty;
+		public string Label { get; init; } = string.Empty;
+		public string TargetId { get; init; } = string.Empty;
+		public string NpcPortraitPath { get; init; } = string.Empty;
+		public string RequiredFlag { get; init; } = string.Empty;
+		public string SetFlag { get; init; } = string.Empty;
+		public string TriggerMode { get; init; } = "none";
+		public bool OneShot { get; init; }
+		public string Notes { get; init; } = string.Empty;
+		public Vector2I Cell { get; init; } = Vector2I.Zero;
+	}
+
 	private sealed class PlacedTile
 	{
 		public string TileId { get; set; }
@@ -20,8 +34,10 @@ public partial class MissionRoomBuilder : Node
 	private bool _rebuildNow;
 	private readonly Dictionary<string, Vector2> _markerPositions = new Dictionary<string, Vector2>();
 	private readonly Dictionary<string, Vector2I> _markerCells = new Dictionary<string, Vector2I>();
+	private readonly List<MarkerPlacement> _markerPlacements = new List<MarkerPlacement>();
 	private readonly HashSet<Vector2I> _floorCells = new HashSet<Vector2I>();
 	private readonly HashSet<string> _blockedTransitions = new HashSet<string>();
+	private string _selectedBackgroundId = MissionBackgroundCatalog.DefaultId;
 
 	[Export] public Texture2D TilesetTexture { get; set; }
 	[Export] public Vector2 Origin { get; set; } = new Vector2(0f, -18f);
@@ -85,6 +101,21 @@ public partial class MissionRoomBuilder : Node
 	public bool TryGetMarkerCell(string markerId, out Vector2I cell)
 	{
 		return _markerCells.TryGetValue(markerId, out cell);
+	}
+
+	public IReadOnlyList<MarkerPlacement> GetMarkerPlacements()
+	{
+		return _markerPlacements;
+	}
+
+	public string GetSelectedBackgroundId()
+	{
+		return _selectedBackgroundId;
+	}
+
+	public IReadOnlyCollection<Vector2I> GetFloorCells()
+	{
+		return _floorCells;
 	}
 
 	public bool IsWalkableCell(Vector2I cell)
@@ -173,6 +204,50 @@ public partial class MissionRoomBuilder : Node
 		return false;
 	}
 
+	public HashSet<Vector2I> GetReachableCells(Vector2I startCell, int maxSteps)
+	{
+		HashSet<Vector2I> reachable = new HashSet<Vector2I>();
+		if (!IsWalkableCell(startCell) || maxSteps < 0)
+		{
+			return reachable;
+		}
+
+		Queue<(Vector2I Cell, int Steps)> frontier = new Queue<(Vector2I Cell, int Steps)>();
+		frontier.Enqueue((startCell, 0));
+		reachable.Add(startCell);
+
+		Vector2I[] directions =
+		{
+			new Vector2I(1, 0),
+			new Vector2I(-1, 0),
+			new Vector2I(0, 1),
+			new Vector2I(0, -1)
+		};
+
+		while (frontier.Count > 0)
+		{
+			(Vector2I current, int steps) = frontier.Dequeue();
+			if (steps >= maxSteps)
+			{
+				continue;
+			}
+
+			foreach (Vector2I direction in directions)
+			{
+				Vector2I next = current + direction;
+				if (reachable.Contains(next) || !IsWalkableCell(next) || IsTransitionBlocked(current, next))
+				{
+					continue;
+				}
+
+				reachable.Add(next);
+				frontier.Enqueue((next, steps + 1));
+			}
+		}
+
+		return reachable;
+	}
+
 	public void BuildRoom()
 	{
 		Node2D floorLayer = GetNodeOrNull<Node2D>(FloorLayerPath);
@@ -188,8 +263,10 @@ public partial class MissionRoomBuilder : Node
 		ClearLayer(propLayer);
 		_markerPositions.Clear();
 		_markerCells.Clear();
+		_markerPlacements.Clear();
 		_floorCells.Clear();
 		_blockedTransitions.Clear();
+		_selectedBackgroundId = MissionBackgroundCatalog.DefaultId;
 
 		if (!BuildFromSavedLayout(floorLayer, wallLayer, propLayer))
 		{
@@ -239,10 +316,35 @@ public partial class MissionRoomBuilder : Node
 			float offsetY = tileDict.TryGetValue("offset_y", out Variant offsetYVariant) ? offsetYVariant.AsSingle() : 0f;
 			float rotationDegrees = tileDict.TryGetValue("rotation_degrees", out Variant rotationVariant) ? rotationVariant.AsSingle() : 0f;
 
+			if (itemType == "background")
+			{
+				_selectedBackgroundId = tileDict.TryGetValue("background_id", out Variant backgroundVariant)
+					? backgroundVariant.AsString()
+					: MissionBackgroundCatalog.DefaultId;
+				continue;
+			}
+
 			if (itemType == "marker" || !string.IsNullOrEmpty(markerId))
 			{
 				_markerPositions[markerId] = GetCellWorldPosition(column, row, new Vector2(offsetX, offsetY));
 				_markerCells[markerId] = new Vector2I(column, row);
+				_markerPlacements.Add(new MarkerPlacement
+				{
+					MarkerId = markerId,
+					Label = tileDict.TryGetValue("logic_label", out Variant logicLabelVariant) ? logicLabelVariant.AsString() : markerId,
+					TargetId = tileDict.TryGetValue("logic_target_id", out Variant logicTargetVariant) ? logicTargetVariant.AsString() : markerId,
+					NpcPortraitPath = tileDict.TryGetValue("logic_npc_portrait", out Variant logicPortraitVariant) ? logicPortraitVariant.AsString() : string.Empty,
+					RequiredFlag = tileDict.TryGetValue("logic_required_flag", out Variant logicRequiredVariant) ? logicRequiredVariant.AsString() : string.Empty,
+					SetFlag = tileDict.TryGetValue("logic_set_flag", out Variant logicSetVariant) ? logicSetVariant.AsString() : string.Empty,
+					TriggerMode = tileDict.TryGetValue("logic_trigger_mode", out Variant logicTriggerVariant)
+						? logicTriggerVariant.AsString()
+						: GetDefaultTriggerMode(markerId),
+					OneShot = tileDict.TryGetValue("logic_once", out Variant logicOnceVariant)
+						? logicOnceVariant.AsBool()
+						: markerId.StartsWith("trigger_"),
+					Notes = tileDict.TryGetValue("logic_notes", out Variant logicNotesVariant) ? logicNotesVariant.AsString() : string.Empty,
+					Cell = new Vector2I(column, row)
+				});
 				continue;
 			}
 
@@ -371,6 +473,11 @@ public partial class MissionRoomBuilder : Node
 
 		path.Reverse();
 		return path;
+	}
+
+	private static string GetDefaultTriggerMode(string markerId)
+	{
+		return markerId == "trigger_dialogue" ? "enter" : "none";
 	}
 
 	private Sprite2D CreateSprite(MissionTileDefinition definition, int column, int row, string name, Vector2 extraOffset, float rotationDegrees)

@@ -28,12 +28,16 @@ public partial class MissionSceneBuilder : Node2D
 	private VBoxContainer _paletteContainer;
 	private Label _statusLabel;
 	private LineEdit _layoutNameEdit;
+	private OptionButton _backgroundOption;
 	private Node2D _hoverLayer;
+	private TextureRect _backgroundBackdrop;
+	private Sprite2D _backgroundFeatureSprite;
 	private Label _selectedLabel;
 	private Label _logicSelectionLabel;
 	private Label _logicHintLabel;
 	private LineEdit _logicLabelEdit;
 	private LineEdit _logicTargetIdEdit;
+	private OptionButton _logicNpcPortraitOption;
 	private LineEdit _logicRequiredFlagEdit;
 	private LineEdit _logicSetFlagEdit;
 	private OptionButton _logicTriggerModeOption;
@@ -46,12 +50,14 @@ public partial class MissionSceneBuilder : Node2D
 	private Sprite2D _selectedPlacedSprite;
 	private Vector2I _draggedCell;
 	private bool _isPanning;
+	private bool _isUpdatingBackgroundUi;
 	private bool _isUpdatingLogicUi;
 	private Vector2 _lastMouseScreenPosition;
 	private readonly List<Line2D> _gridLines = new List<Line2D>();
 	private Polygon2D _hoverDiamond;
 	private readonly Vector2 _tileStep = MissionFloorTextureFactory.TileSize;
 	private readonly Vector2 _gridOrigin = new Vector2(0f, -20f);
+	private string _selectedBackgroundId = MissionBackgroundCatalog.DefaultId;
 
 	public override void _Ready()
 	{
@@ -66,6 +72,8 @@ public partial class MissionSceneBuilder : Node2D
 		_selectedLabel = GetNode<Label>("UILayer/TopBar/Margin/TopRow/SelectedTileLabel");
 		_hoverLayer = GetNode<Node2D>("World/HoverLayer");
 
+		EnsureBackgroundPreviewNodes();
+		BuildBackgroundControls();
 		BuildPalette();
 		BuildGrid();
 		BuildHoverDiamond();
@@ -81,6 +89,7 @@ public partial class MissionSceneBuilder : Node2D
 	{
 		UpdateCameraPan((float)delta);
 		UpdateHoverDiamond();
+		UpdateBackgroundFeaturePlacement();
 	}
 
 	public override void _UnhandledInput(InputEvent @event)
@@ -239,6 +248,183 @@ public partial class MissionSceneBuilder : Node2D
 		GetNode<Button>("UILayer/TopBar/Margin/TopRow/ExitButton").Pressed += ExitBuilder;
 	}
 
+	private void BuildBackgroundControls()
+	{
+		HBoxContainer topRow = GetNode<HBoxContainer>("UILayer/TopBar/Margin/TopRow");
+		Label backgroundLabel = new Label { Text = "Background" };
+		_backgroundOption = new OptionButton
+		{
+			CustomMinimumSize = new Vector2(260f, 0f)
+		};
+
+		for (int i = 0; i < MissionBackgroundCatalog.All.Count; i++)
+		{
+			MissionBackgroundDefinition definition = MissionBackgroundCatalog.All[i];
+			_backgroundOption.AddItem(definition.DisplayName, i);
+			_backgroundOption.SetItemMetadata(i, definition.Id);
+		}
+
+		_backgroundOption.ItemSelected += OnBackgroundOptionSelected;
+		topRow.AddChild(backgroundLabel);
+		topRow.AddChild(_backgroundOption);
+		topRow.MoveChild(backgroundLabel, 1);
+		topRow.MoveChild(_backgroundOption, 2);
+		SelectBackgroundById(MissionBackgroundCatalog.DefaultId, true, false);
+	}
+
+	private void EnsureBackgroundPreviewNodes()
+	{
+		CanvasLayer backdropCanvas = GetNode<CanvasLayer>("BackdropCanvas");
+		_backgroundBackdrop = backdropCanvas.GetNodeOrNull<TextureRect>("BackgroundTexture");
+		if (_backgroundBackdrop == null)
+		{
+			_backgroundBackdrop = new TextureRect
+			{
+				Name = "BackgroundTexture",
+				AnchorsPreset = (int)Control.LayoutPreset.FullRect,
+				AnchorRight = 1f,
+				AnchorBottom = 1f,
+				GrowHorizontal = Control.GrowDirection.Both,
+				GrowVertical = Control.GrowDirection.Both,
+				MouseFilter = Control.MouseFilterEnum.Ignore,
+				ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+				StretchMode = TextureRect.StretchModeEnum.KeepAspectCovered,
+				Visible = false,
+				Modulate = new Color(0.72f, 0.78f, 0.92f, 0.28f)
+			};
+			backdropCanvas.AddChild(_backgroundBackdrop);
+			backdropCanvas.MoveChild(_backgroundBackdrop, 1);
+		}
+
+		Node2D world = GetNode<Node2D>("World");
+		Node2D backgroundLayer = world.GetNodeOrNull<Node2D>("BackgroundArtLayer");
+		if (backgroundLayer == null)
+		{
+			backgroundLayer = new Node2D
+			{
+				Name = "BackgroundArtLayer",
+				ZIndex = -10
+			};
+			world.AddChild(backgroundLayer);
+			world.MoveChild(backgroundLayer, 0);
+		}
+
+		_backgroundFeatureSprite = backgroundLayer.GetNodeOrNull<Sprite2D>("BackgroundFeature");
+		if (_backgroundFeatureSprite == null)
+		{
+			_backgroundFeatureSprite = new Sprite2D
+			{
+				Name = "BackgroundFeature",
+				Centered = true,
+				Visible = false
+			};
+			backgroundLayer.AddChild(_backgroundFeatureSprite);
+		}
+	}
+
+	private void OnBackgroundOptionSelected(long selectedIndex)
+	{
+		if (_isUpdatingBackgroundUi)
+		{
+			return;
+		}
+
+		string backgroundId = _backgroundOption.GetItemMetadata((int)selectedIndex).AsString();
+		SelectBackgroundById(backgroundId, false, true);
+	}
+
+	private void SelectBackgroundById(string backgroundId, bool syncUi, bool updateStatus)
+	{
+		MissionBackgroundDefinition definition = MissionBackgroundCatalog.GetById(backgroundId);
+		_selectedBackgroundId = definition.Id;
+
+		if (syncUi && _backgroundOption != null)
+		{
+			_isUpdatingBackgroundUi = true;
+			for (int i = 0; i < _backgroundOption.ItemCount; i++)
+			{
+				if (_backgroundOption.GetItemMetadata(i).AsString() != _selectedBackgroundId)
+				{
+					continue;
+				}
+
+				_backgroundOption.Select(i);
+				break;
+			}
+			_isUpdatingBackgroundUi = false;
+		}
+
+		ApplySelectedBackgroundPreview();
+		if (updateStatus)
+		{
+			SetStatus($"Background set to {definition.DisplayName}.");
+		}
+	}
+
+	private void ApplySelectedBackgroundPreview()
+	{
+		MissionBackgroundDefinition definition = MissionBackgroundCatalog.GetById(_selectedBackgroundId);
+
+		if (_backgroundBackdrop != null)
+		{
+			_backgroundBackdrop.Texture = string.IsNullOrEmpty(definition.BackdropTexturePath)
+				? null
+				: GD.Load<Texture2D>(definition.BackdropTexturePath);
+			_backgroundBackdrop.Visible = _backgroundBackdrop.Texture != null;
+		}
+
+		if (_backgroundFeatureSprite == null)
+		{
+			return;
+		}
+
+		_backgroundFeatureSprite.Texture = string.IsNullOrEmpty(definition.FeatureTexturePath)
+			? null
+			: GD.Load<Texture2D>(definition.FeatureTexturePath);
+		_backgroundFeatureSprite.Visible = _backgroundFeatureSprite.Texture != null;
+		if (_backgroundFeatureSprite.Texture != null)
+		{
+			_backgroundFeatureSprite.Scale = new Vector2(definition.FeatureScale, definition.FeatureScale);
+			_backgroundFeatureSprite.Modulate = definition.FeatureModulate;
+			UpdateBackgroundFeaturePlacement();
+		}
+	}
+
+	private void UpdateBackgroundFeaturePlacement()
+	{
+		if (_backgroundFeatureSprite == null || !_backgroundFeatureSprite.Visible)
+		{
+			return;
+		}
+
+		MissionBackgroundDefinition definition = MissionBackgroundCatalog.GetById(_selectedBackgroundId);
+		_backgroundFeatureSprite.Position = GetPlacedMapCenter() + definition.FeatureOffset;
+	}
+
+	private Vector2 GetPlacedMapCenter()
+	{
+		List<Sprite2D> floorSprites = _floorLayer.GetChildren().OfType<Sprite2D>().ToList();
+		if (floorSprites.Count == 0)
+		{
+			return Vector2.Zero;
+		}
+
+		float minX = float.MaxValue;
+		float maxX = float.MinValue;
+		float minY = float.MaxValue;
+		float maxY = float.MinValue;
+		foreach (Sprite2D sprite in floorSprites)
+		{
+			Vector2 position = sprite.Position;
+			minX = Mathf.Min(minX, position.X);
+			maxX = Mathf.Max(maxX, position.X);
+			minY = Mathf.Min(minY, position.Y);
+			maxY = Mathf.Max(maxY, position.Y);
+		}
+
+		return new Vector2((minX + maxX) * 0.5f, (minY + maxY) * 0.5f);
+	}
+
 	private void BuildLogicPanel()
 	{
 		CanvasLayer uiLayer = GetNode<CanvasLayer>("UILayer");
@@ -279,6 +465,16 @@ public partial class MissionSceneBuilder : Node2D
 
 		_logicLabelEdit = AddInspectorField(root, "Marker Label");
 		_logicTargetIdEdit = AddInspectorField(root, "Target ID");
+		root.AddChild(new Label { Text = "Conversation Portrait" });
+		_logicNpcPortraitOption = new OptionButton();
+		for (int i = 0; i < MissionDialoguePortraitCatalog.All.Count; i++)
+		{
+			MissionDialoguePortraitDefinition definition = MissionDialoguePortraitCatalog.All[i];
+			_logicNpcPortraitOption.AddItem(definition.DisplayName, i);
+			_logicNpcPortraitOption.SetItemMetadata(i, definition.TexturePath);
+		}
+		_logicNpcPortraitOption.ItemSelected += _ => ApplyLogicFieldChanges();
+		root.AddChild(_logicNpcPortraitOption);
 		_logicRequiredFlagEdit = AddInspectorField(root, "Required Flag");
 		_logicSetFlagEdit = AddInspectorField(root, "Set Flag");
 
@@ -737,6 +933,7 @@ public partial class MissionSceneBuilder : Node2D
 			_logicHintLabel.Text = "Marker properties are where we hook up spawns, triggers, and future dialogue/events.";
 			_logicLabelEdit.Text = string.Empty;
 			_logicTargetIdEdit.Text = string.Empty;
+			_logicNpcPortraitOption.Select(0);
 			_logicRequiredFlagEdit.Text = string.Empty;
 			_logicSetFlagEdit.Text = string.Empty;
 			_logicTriggerModeOption.Select(0);
@@ -757,6 +954,7 @@ public partial class MissionSceneBuilder : Node2D
 		_logicHintLabel.Text = "These fields save into the layout file and define how the mission should react to this marker.";
 		_logicLabelEdit.Text = markerLabel;
 		_logicTargetIdEdit.Text = marker.GetMeta("logic_target_id", string.Empty).AsString();
+		SelectNpcPortraitOption(marker.GetMeta("logic_npc_portrait", string.Empty).AsString());
 		_logicRequiredFlagEdit.Text = marker.GetMeta("logic_required_flag", string.Empty).AsString();
 		_logicSetFlagEdit.Text = marker.GetMeta("logic_set_flag", string.Empty).AsString();
 		_logicTriggerModeOption.Select(GetTriggerModeIndex(marker.GetMeta("logic_trigger_mode", "none").AsString()));
@@ -770,6 +968,7 @@ public partial class MissionSceneBuilder : Node2D
 	{
 		_logicLabelEdit.Editable = enabled;
 		_logicTargetIdEdit.Editable = enabled;
+		_logicNpcPortraitOption.Disabled = !enabled;
 		_logicRequiredFlagEdit.Editable = enabled;
 		_logicSetFlagEdit.Editable = enabled;
 		_logicTriggerModeOption.Disabled = !enabled;
@@ -792,6 +991,7 @@ public partial class MissionSceneBuilder : Node2D
 
 		_selectedPlacedSprite.SetMeta("logic_label", _logicLabelEdit.Text.StripEdges());
 		_selectedPlacedSprite.SetMeta("logic_target_id", _logicTargetIdEdit.Text.StripEdges());
+		_selectedPlacedSprite.SetMeta("logic_npc_portrait", _logicNpcPortraitOption.GetItemMetadata(_logicNpcPortraitOption.Selected).AsString());
 		_selectedPlacedSprite.SetMeta("logic_required_flag", _logicRequiredFlagEdit.Text.StripEdges());
 		_selectedPlacedSprite.SetMeta("logic_set_flag", _logicSetFlagEdit.Text.StripEdges());
 		_selectedPlacedSprite.SetMeta("logic_trigger_mode", GetTriggerModeValue(_logicTriggerModeOption.Selected));
@@ -865,6 +1065,7 @@ public partial class MissionSceneBuilder : Node2D
 	{
 		sprite.SetMeta("logic_label", definition.DisplayName);
 		sprite.SetMeta("logic_target_id", definition.Id);
+		sprite.SetMeta("logic_npc_portrait", string.Empty);
 		sprite.SetMeta("logic_required_flag", string.Empty);
 		sprite.SetMeta("logic_set_flag", string.Empty);
 		sprite.SetMeta("logic_trigger_mode", definition.Category == MissionMarkerCategory.Trigger ? "enter" : "none");
@@ -882,6 +1083,23 @@ public partial class MissionSceneBuilder : Node2D
 
 		string caption = sprite.GetMeta("logic_label", sprite.GetMeta("marker_id", "Marker").AsString()).AsString();
 		label.Text = string.IsNullOrEmpty(caption) ? "Marker" : caption;
+	}
+
+	private void SelectNpcPortraitOption(string portraitPath)
+	{
+		string targetPath = portraitPath ?? string.Empty;
+		for (int i = 0; i < _logicNpcPortraitOption.ItemCount; i++)
+		{
+			if (_logicNpcPortraitOption.GetItemMetadata(i).AsString() != targetPath)
+			{
+				continue;
+			}
+
+			_logicNpcPortraitOption.Select(i);
+			return;
+		}
+
+		_logicNpcPortraitOption.Select(0);
 	}
 
 	private Node2D CreateSelectionOutline(Vector2 size)
@@ -989,6 +1207,12 @@ public partial class MissionSceneBuilder : Node2D
 		}
 
 		Godot.Collections.Array<Godot.Collections.Dictionary<string, Variant>> items = new();
+		items.Add(new Godot.Collections.Dictionary<string, Variant>
+		{
+			{ "item_type", "background" },
+			{ "background_id", _selectedBackgroundId }
+		});
+
 		foreach (Node2D layer in GetSaveLayers())
 		{
 			foreach (Node child in layer.GetChildren())
@@ -1015,6 +1239,7 @@ public partial class MissionSceneBuilder : Node2D
 					item["marker_id"] = markerId;
 					item["logic_label"] = sprite.GetMeta("logic_label", string.Empty).AsString();
 					item["logic_target_id"] = sprite.GetMeta("logic_target_id", string.Empty).AsString();
+					item["logic_npc_portrait"] = sprite.GetMeta("logic_npc_portrait", string.Empty).AsString();
 					item["logic_required_flag"] = sprite.GetMeta("logic_required_flag", string.Empty).AsString();
 					item["logic_set_flag"] = sprite.GetMeta("logic_set_flag", string.Empty).AsString();
 					item["logic_trigger_mode"] = sprite.GetMeta("logic_trigger_mode", "none").AsString();
@@ -1045,6 +1270,7 @@ public partial class MissionSceneBuilder : Node2D
 		}
 
 		ClearLayoutInternal();
+		string loadedBackgroundId = MissionBackgroundCatalog.DefaultId;
 
 		using FileAccess file = FileAccess.Open(path, FileAccess.ModeFlags.Read);
 		if (file == null)
@@ -1071,6 +1297,14 @@ public partial class MissionSceneBuilder : Node2D
 			float offsetX = tile.TryGetValue("offset_x", out Variant offsetXVariant) ? offsetXVariant.AsSingle() : 0f;
 			float offsetY = tile.TryGetValue("offset_y", out Variant offsetYVariant) ? offsetYVariant.AsSingle() : 0f;
 			float rotationDegrees = tile.TryGetValue("rotation_degrees", out Variant rotationVariant) ? rotationVariant.AsSingle() : 0f;
+			if (itemType == "background")
+			{
+				loadedBackgroundId = tile.TryGetValue("background_id", out Variant backgroundVariant)
+					? backgroundVariant.AsString()
+					: MissionBackgroundCatalog.DefaultId;
+				continue;
+			}
+
 			if (itemType == "marker" || !string.IsNullOrEmpty(markerId))
 			{
 				if (!MissionMarkerCatalog.TryGetById(markerId, out MissionMarkerDefinition markerDefinition))
@@ -1084,6 +1318,7 @@ public partial class MissionSceneBuilder : Node2D
 				marker.SetMeta("rotation_degrees", rotationDegrees);
 				marker.SetMeta("logic_label", tile.TryGetValue("logic_label", out Variant logicLabelVariant) ? logicLabelVariant.AsString() : marker.GetMeta("logic_label", markerDefinition.DisplayName).AsString());
 				marker.SetMeta("logic_target_id", tile.TryGetValue("logic_target_id", out Variant logicTargetVariant) ? logicTargetVariant.AsString() : marker.GetMeta("logic_target_id", markerDefinition.Id).AsString());
+				marker.SetMeta("logic_npc_portrait", tile.TryGetValue("logic_npc_portrait", out Variant logicPortraitVariant) ? logicPortraitVariant.AsString() : string.Empty);
 				marker.SetMeta("logic_required_flag", tile.TryGetValue("logic_required_flag", out Variant logicRequiredVariant) ? logicRequiredVariant.AsString() : string.Empty);
 				marker.SetMeta("logic_set_flag", tile.TryGetValue("logic_set_flag", out Variant logicSetVariant) ? logicSetVariant.AsString() : string.Empty);
 				marker.SetMeta("logic_trigger_mode", tile.TryGetValue("logic_trigger_mode", out Variant logicTriggerVariant) ? logicTriggerVariant.AsString() : marker.GetMeta("logic_trigger_mode", "none").AsString());
@@ -1110,6 +1345,7 @@ public partial class MissionSceneBuilder : Node2D
 			GetPlacementLayer(GetLayerForTile(definition)).AddChild(sprite);
 		}
 
+		SelectBackgroundById(loadedBackgroundId, true, false);
 		SetStatus($"Loaded layout from {ProjectSettings.LocalizePath(path)}");
 		RefreshValidationReport();
 	}

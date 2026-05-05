@@ -59,6 +59,48 @@ public static class QuestManager
 					}
 				}
 			}
+		},
+		{
+			"trigger_dialogue", new Dictionary<string, DialogueNode>
+			{
+				{
+					"Start", new DialogueNode
+					{
+						SpeakerName = "Relay Survivor",
+						Text = "Hold there. If you're hearing this, then the relay still has visitors left in the galaxy. The archive vault is destabilizing and the shelter seals are failing. We do not have time for both.",
+						Options = new Dictionary<string, string>
+						{
+							{ "Tell me about the survivors.", "Survivors" },
+							{ "Tell me about the archive.", "Archive" },
+							{ "We understand. We'll decide what to save.", "End" }
+						}
+					}
+				},
+				{
+					"Survivors", new DialogueNode
+					{
+						SpeakerName = "Relay Survivor",
+						Text = "Three cryo-pods still cycle in the shelter wing. If power drops again, they die with the station. Save them first and the archive will likely be lost to cascade failure.",
+						Options = new Dictionary<string, string>
+						{
+							{ "Understood. Back to the relay schematic.", "Start" },
+							{ "We'll move for the shelter.", "End" }
+						}
+					}
+				},
+				{
+					"Archive", new DialogueNode
+					{
+						SpeakerName = "Relay Survivor",
+						Text = "The archive core contains intact Custodian route-logic and pre-collapse relay logs. If you cut auxiliary power to stabilize it, the life-support reserves in the shelter will not hold much longer.",
+						Options = new Dictionary<string, string>
+						{
+							{ "Understood. Show me the tradeoff again.", "Start" },
+							{ "We'll secure the archive.", "End" }
+						}
+					}
+				}
+			}
 		}
 	};
 

@@ -3,12 +3,23 @@ using System.Collections.Generic;
 
 public partial class DialogueUI : CanvasLayer
 {
+	[Signal]
+	public delegate void ConversationEndedEventHandler();
+
 	[Export] public Label SpeakerNameLabel;
 	[Export] public RichTextLabel DialogueTextDisplay;
 	[Export] public VBoxContainer OptionsContainer;
+	[Export] public TextureRect OfficerPortraitRect;
+	[Export] public Label OfficerNameLabel;
+	[Export] public TextureRect NpcPortraitRect;
+	[Export] public Label NpcNameLabel;
 
 	private GlobalData _globalData;
 	private string _currentNpcId;
+	private string _currentOfficerName = "Officer";
+	private string _currentOfficerPortraitPath = string.Empty;
+	private string _currentNpcPortraitPath = string.Empty;
+	public bool IsConversationOpen => Visible;
 
 	public override void _Ready()
 	{
@@ -19,7 +30,16 @@ public partial class DialogueUI : CanvasLayer
 	// Call this from BattleMap.cs to start a conversation!
 	public void StartConversation(string npcId)
 	{
+		StartConversation(npcId, "Officer", string.Empty, string.Empty);
+	}
+
+	public void StartConversation(string npcId, string officerName, string officerPortraitPath, string npcPortraitPath)
+	{
 		_currentNpcId = npcId;
+		_currentOfficerName = string.IsNullOrEmpty(officerName) ? "Officer" : officerName;
+		_currentOfficerPortraitPath = officerPortraitPath ?? string.Empty;
+		_currentNpcPortraitPath = npcPortraitPath ?? string.Empty;
+		ApplyPortraits();
 		Visible = true;
 		LoadDialogueNode("Start"); // Every conversation begins at the "Start" node
 	}
@@ -37,6 +57,10 @@ public partial class DialogueUI : CanvasLayer
 		// Update the visual text
 		SpeakerNameLabel.Text = nodeData.SpeakerName;
 		DialogueTextDisplay.Text = nodeData.Text;
+		if (NpcNameLabel != null)
+		{
+			NpcNameLabel.Text = nodeData.SpeakerName;
+		}
 
 		// Check if this node triggers a quest
 		if (!string.IsNullOrEmpty(nodeData.QuestToTrigger))
@@ -73,6 +97,33 @@ public partial class DialogueUI : CanvasLayer
 	private void EndConversation()
 	{
 		Visible = false;
-		// Optional: Trigger an event here to tell BattleMap.cs to unpause the game
+		EmitSignal(SignalName.ConversationEnded);
+	}
+
+	private void ApplyPortraits()
+	{
+		if (OfficerNameLabel != null)
+		{
+			OfficerNameLabel.Text = _currentOfficerName;
+		}
+
+		if (OfficerPortraitRect != null)
+		{
+			OfficerPortraitRect.Texture = string.IsNullOrEmpty(_currentOfficerPortraitPath)
+				? null
+				: GD.Load<Texture2D>(_currentOfficerPortraitPath);
+		}
+
+		if (NpcPortraitRect != null)
+		{
+			NpcPortraitRect.Texture = string.IsNullOrEmpty(_currentNpcPortraitPath)
+				? null
+				: GD.Load<Texture2D>(_currentNpcPortraitPath);
+		}
+
+		if (NpcNameLabel != null && string.IsNullOrEmpty(NpcNameLabel.Text))
+		{
+			NpcNameLabel.Text = "Contact";
+		}
 	}
 }

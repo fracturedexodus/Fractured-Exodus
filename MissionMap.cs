@@ -6,24 +6,28 @@ public partial class MissionMap : Node2D
 {
 	private const string MissionId = "black_site_relay";
 	private const float DefaultZoom = 0.52f;
-	private const float MinZoom = 0.34f;
-	private const float MaxZoom = 1.00f;
+	private const float MinZoom = 0.75f;
+	private const float MaxZoom = 2.00f;
 	private const float ZoomStep = 0.08f;
 	private const float CameraPanSpeed = 720f;
+	private const int FogRevealRadius = 4;
 
 	private GlobalData _globalData;
 	private MissionService _missionService;
 	private MissionRuntimeState _missionState;
 	private MissionUI _missionUi;
+	private DialogueUI _dialogueUi;
 	private Node2D _isoWorld;
 	private Node2D _characterLayer;
 	private Camera2D _camera;
 	private MissionRoomBuilder _roomBuilder;
-	private readonly List<Node2D> _zoneMarkers = new List<Node2D>();
-	private readonly List<Vector2> _zoneMarkerBasePositions = new List<Vector2>();
+	private TextureRect _backgroundBackdrop;
+	private Sprite2D _backgroundFeatureSprite;
 	private readonly List<OfficerPawn> _officerPawns = new List<OfficerPawn>();
+	private readonly HashSet<string> _consumedTriggerKeys = new HashSet<string>();
+	private readonly HashSet<Vector2I> _exploredCells = new HashSet<Vector2I>();
+	private readonly HashSet<Vector2I> _visibleCells = new HashSet<Vector2I>();
 	private int _selectedOfficerIndex;
-	private float _markerPulseTime;
 	private bool _isPanning;
 	private Vector2 _lastMouseScreenPosition;
 
@@ -37,6 +41,8 @@ public partial class MissionMap : Node2D
 		_camera = GetNode<Camera2D>("Camera2D");
 		_roomBuilder = GetNode<MissionRoomBuilder>("IsoWorld/RoomBuilder");
 		_missionUi = GetNode<MissionUI>("MissionUI");
+		_dialogueUi = GetNode<DialogueUI>("DialogueUI");
+		EnsureBackgroundNodes();
 
 		if (_missionState == null || string.IsNullOrEmpty(_missionState.MissionID))
 		{
@@ -44,31 +50,27 @@ public partial class MissionMap : Node2D
 		}
 
 		_roomBuilder?.BuildRoom();
+		ApplyMissionBackground();
 		ConfigureMissionView();
-		ConfigureMissionAnchors();
-		CacheZoneMarkers();
 		SpawnMissionOfficers();
+		UpdateFogOfWar();
 		WireUi();
+		WireDialogue();
 		UpdateSelectedOfficerDisplay();
 	}
 
 	public override void _Process(double delta)
 	{
 		UpdateCameraPan((float)delta);
-		_markerPulseTime += (float)delta;
-		for (int i = 0; i < _zoneMarkers.Count; i++)
-		{
-			Node2D marker = _zoneMarkers[i];
-			float pulse = Mathf.Sin((_markerPulseTime * 2.2f) + (i * 0.8f));
-			float scale = 1.0f + (0.06f * pulse);
-			marker.Scale = new Vector2(scale, scale);
-			marker.Position = _zoneMarkerBasePositions[i] + new Vector2(0f, pulse * -3.5f);
-			marker.Modulate = new Color(1f, 1f, 1f, 0.9f + (0.1f * ((pulse + 1f) * 0.5f)));
-		}
 	}
 
 	public override void _UnhandledInput(InputEvent @event)
 	{
+		if (_dialogueUi != null && _dialogueUi.IsConversationOpen)
+		{
+			return;
+		}
+
 		if (@event is InputEventKey keyEvent && keyEvent.Pressed && !keyEvent.Echo)
 		{
 			if (keyEvent.Keycode == Key.Tab)
@@ -183,65 +185,84 @@ public partial class MissionMap : Node2D
 		}
 	}
 
-	private void CacheZoneMarkers()
+	private void EnsureBackgroundNodes()
 	{
-		_zoneMarkers.Clear();
-		_zoneMarkerBasePositions.Clear();
-
-		string[] markerPaths =
+		CanvasLayer backdropCanvas = GetNode<CanvasLayer>("BackdropCanvas");
+		_backgroundBackdrop = backdropCanvas.GetNodeOrNull<TextureRect>("BackgroundTexture");
+		if (_backgroundBackdrop == null)
 		{
-			"IsoWorld/MarkerLayer/SurvivorMarker",
-			"IsoWorld/MarkerLayer/PowerMarker",
-			"IsoWorld/MarkerLayer/ArchiveMarker"
-		};
-
-		foreach (string markerPath in markerPaths)
-		{
-			Node2D marker = GetNodeOrNull<Node2D>(markerPath);
-			if (marker == null)
+			_backgroundBackdrop = new TextureRect
 			{
-				continue;
-			}
+				Name = "BackgroundTexture",
+				AnchorsPreset = (int)Control.LayoutPreset.FullRect,
+				AnchorRight = 1f,
+				AnchorBottom = 1f,
+				GrowHorizontal = Control.GrowDirection.Both,
+				GrowVertical = Control.GrowDirection.Both,
+				MouseFilter = Control.MouseFilterEnum.Ignore,
+				ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+				StretchMode = TextureRect.StretchModeEnum.KeepAspectCovered,
+				Visible = false,
+				Modulate = new Color(0.72f, 0.78f, 0.92f, 0.26f)
+			};
+			backdropCanvas.AddChild(_backgroundBackdrop);
+			backdropCanvas.MoveChild(_backgroundBackdrop, 1);
+		}
 
-			_zoneMarkers.Add(marker);
-			_zoneMarkerBasePositions.Add(marker.Position);
+		Node2D backgroundLayer = _isoWorld.GetNodeOrNull<Node2D>("BackgroundArtLayer");
+		if (backgroundLayer == null)
+		{
+			backgroundLayer = new Node2D
+			{
+				Name = "BackgroundArtLayer",
+				ZIndex = -10
+			};
+			_isoWorld.AddChild(backgroundLayer);
+			_isoWorld.MoveChild(backgroundLayer, 0);
+		}
+
+		_backgroundFeatureSprite = backgroundLayer.GetNodeOrNull<Sprite2D>("BackgroundFeature");
+		if (_backgroundFeatureSprite == null)
+		{
+			_backgroundFeatureSprite = new Sprite2D
+			{
+				Name = "BackgroundFeature",
+				Centered = true,
+				Visible = false
+			};
+			backgroundLayer.AddChild(_backgroundFeatureSprite);
 		}
 	}
 
-	private void ConfigureMissionAnchors()
+	private void ApplyMissionBackground()
 	{
-		if (_roomBuilder == null)
+		MissionBackgroundDefinition definition = MissionBackgroundCatalog.GetById(_roomBuilder?.GetSelectedBackgroundId());
+
+		if (_backgroundBackdrop != null)
+		{
+			_backgroundBackdrop.Texture = string.IsNullOrEmpty(definition.BackdropTexturePath)
+				? null
+				: GD.Load<Texture2D>(definition.BackdropTexturePath);
+			_backgroundBackdrop.Visible = _backgroundBackdrop.Texture != null;
+		}
+
+		if (_backgroundFeatureSprite == null)
 		{
 			return;
 		}
 
-		Marker2D spawnPointA = GetNodeOrNull<Marker2D>("IsoWorld/SpawnPointA");
-		Marker2D spawnPointB = GetNodeOrNull<Marker2D>("IsoWorld/SpawnPointB");
-		Node2D survivorMarker = GetNodeOrNull<Node2D>("IsoWorld/MarkerLayer/SurvivorMarker");
-		Node2D powerMarker = GetNodeOrNull<Node2D>("IsoWorld/MarkerLayer/PowerMarker");
-		Node2D archiveMarker = GetNodeOrNull<Node2D>("IsoWorld/MarkerLayer/ArchiveMarker");
-
-		ApplyMarkerPosition(spawnPointA, "spawn_a", 3, 5, new Vector2(-16f, 10f));
-		ApplyMarkerPosition(spawnPointB, "spawn_b", 4, 5, new Vector2(24f, 10f));
-		ApplyMarkerPosition(survivorMarker, "objective_survivors", 1, 3, new Vector2(-12f, -72f));
-		ApplyMarkerPosition(powerMarker, "objective_power", 4, 4, new Vector2(0f, -70f));
-		ApplyMarkerPosition(archiveMarker, "objective_archive", 7, 3, new Vector2(12f, -72f));
-	}
-
-	private void ApplyMarkerPosition(Node2D marker, string markerId, int fallbackColumn, int fallbackRow, Vector2 fallbackOffset)
-	{
-		if (marker == null || _roomBuilder == null)
+		_backgroundFeatureSprite.Texture = string.IsNullOrEmpty(definition.FeatureTexturePath)
+			? null
+			: GD.Load<Texture2D>(definition.FeatureTexturePath);
+		_backgroundFeatureSprite.Visible = _backgroundFeatureSprite.Texture != null;
+		if (!_backgroundFeatureSprite.Visible || _roomBuilder == null)
 		{
 			return;
 		}
 
-		if (_roomBuilder.TryGetMarkerWorldPosition(markerId, fallbackOffset, out Vector2 savedPosition))
-		{
-			marker.Position = savedPosition;
-			return;
-		}
-
-		marker.Position = _roomBuilder.GetCellWorldPosition(fallbackColumn, fallbackRow, fallbackOffset);
+		_backgroundFeatureSprite.Scale = new Vector2(definition.FeatureScale, definition.FeatureScale);
+		_backgroundFeatureSprite.Modulate = definition.FeatureModulate;
+		_backgroundFeatureSprite.Position = _roomBuilder.GetRoomCenterWorldPosition() + definition.FeatureOffset;
 	}
 
 	private void AdjustZoom(float delta)
@@ -283,12 +304,94 @@ public partial class MissionMap : Node2D
 
 			OfficerPawn pawn = pawnScene.Instantiate<OfficerPawn>();
 			pawn.SetOfficer(officer);
+			pawn.EnteredCell += OnOfficerEnteredCell;
 			_characterLayer.AddChild(pawn);
 			PlaceOfficerAtSpawn(pawn, i);
 			_officerPawns.Add(pawn);
 		}
 
 		SelectOfficer(0);
+	}
+
+	private void UpdateFogOfWar()
+	{
+		if (_roomBuilder == null)
+		{
+			return;
+		}
+
+		_visibleCells.Clear();
+		foreach (OfficerPawn pawn in _officerPawns)
+		{
+			if (pawn == null)
+			{
+				continue;
+			}
+
+			foreach (Vector2I cell in _roomBuilder.GetReachableCells(pawn.CurrentCell, FogRevealRadius))
+			{
+				_visibleCells.Add(cell);
+				_exploredCells.Add(cell);
+			}
+		}
+
+		ApplyFogToLayer(GetNodeOrNull<Node2D>("IsoWorld/FloorLayer"));
+		ApplyFogToLayer(GetNodeOrNull<Node2D>("IsoWorld/WallLayer"));
+		ApplyFogToLayer(GetNodeOrNull<Node2D>("IsoWorld/PropLayer"));
+	}
+
+	private void ApplyFogToLayer(Node2D layer)
+	{
+		if (layer == null)
+		{
+			return;
+		}
+
+		foreach (Node child in layer.GetChildren())
+		{
+			if (child is not Sprite2D sprite)
+			{
+				continue;
+			}
+
+			Vector2I cell = new Vector2I(
+				sprite.GetMeta("column", int.MinValue).AsInt32(),
+				sprite.GetMeta("row", int.MinValue).AsInt32());
+			if (cell.X == int.MinValue || cell.Y == int.MinValue)
+			{
+				continue;
+			}
+
+			Color baseColor = sprite.HasMeta("fog_base_modulate")
+				? sprite.GetMeta("fog_base_modulate").AsColor()
+				: sprite.Modulate;
+			if (!sprite.HasMeta("fog_base_modulate"))
+			{
+				sprite.SetMeta("fog_base_modulate", baseColor);
+			}
+
+			if (_visibleCells.Contains(cell))
+			{
+				sprite.Modulate = baseColor;
+			}
+			else if (_exploredCells.Contains(cell))
+			{
+				sprite.Modulate = MultiplyColor(baseColor, 0.38f);
+			}
+			else
+			{
+				sprite.Modulate = MultiplyColor(baseColor, 0.08f);
+			}
+		}
+	}
+
+	private static Color MultiplyColor(Color color, float factor)
+	{
+		return new Color(
+			Mathf.Clamp(color.R * factor, 0f, 1f),
+			Mathf.Clamp(color.G * factor, 0f, 1f),
+			Mathf.Clamp(color.B * factor, 0f, 1f),
+			color.A);
 	}
 
 	private void WireUi()
@@ -307,6 +410,16 @@ public partial class MissionMap : Node2D
 		_missionUi.SaveSurvivorsButton.Pressed += () => CompleteMission(BuildOutcome("survivors_saved"));
 		_missionUi.SecureArchiveButton.Pressed += () => CompleteMission(BuildOutcome("archive_secured"));
 		_missionUi.ReturnButton.Pressed += ReturnWithoutOutcome;
+	}
+
+	private void WireDialogue()
+	{
+		if (_dialogueUi == null)
+		{
+			return;
+		}
+
+		_dialogueUi.ConversationEnded += OnMissionConversationEnded;
 	}
 
 	private void SelectOfficer(int index)
@@ -474,7 +587,10 @@ public partial class MissionMap : Node2D
 			.Skip(1)
 			.Select(GetCellGlobalPosition)
 			.ToList();
-		activeOfficer.MoveAlongPath(pathPoints, targetCell);
+		List<Vector2I> steppedCells = pathCells
+			.Skip(1)
+			.ToList();
+		activeOfficer.MoveAlongPath(pathPoints, steppedCells, targetCell);
 	}
 
 	private void PlaceOfficerAtSpawn(OfficerPawn pawn, int spawnIndex)
@@ -523,5 +639,75 @@ public partial class MissionMap : Node2D
 		}
 
 		return false;
+	}
+
+	private void CheckDialogueTriggers(OfficerPawn officer)
+	{
+		if (officer == null || _roomBuilder == null || _dialogueUi == null || _dialogueUi.IsConversationOpen)
+		{
+			return;
+		}
+
+		foreach (MissionRoomBuilder.MarkerPlacement marker in _roomBuilder.GetMarkerPlacements())
+		{
+			if (marker.MarkerId != "trigger_dialogue")
+			{
+				continue;
+			}
+
+			if (!string.Equals(marker.TriggerMode, "enter", System.StringComparison.OrdinalIgnoreCase))
+			{
+				continue;
+			}
+
+			if (marker.Cell != officer.CurrentCell)
+			{
+				continue;
+			}
+
+			if (!string.IsNullOrEmpty(marker.RequiredFlag) && (_globalData?.StoryFlags?.Contains(marker.RequiredFlag) != true))
+			{
+				continue;
+			}
+
+			string triggerKey = BuildTriggerKey(marker);
+			if (marker.OneShot && _consumedTriggerKeys.Contains(triggerKey))
+			{
+				continue;
+			}
+
+			if (!string.IsNullOrEmpty(marker.SetFlag) && _globalData != null && !_globalData.StoryFlags.Contains(marker.SetFlag))
+			{
+				_globalData.StoryFlags.Add(marker.SetFlag);
+			}
+
+			if (marker.OneShot)
+			{
+				_consumedTriggerKeys.Add(triggerKey);
+			}
+
+			_dialogueUi.StartConversation(
+				string.IsNullOrEmpty(marker.TargetId) ? marker.MarkerId : marker.TargetId,
+				officer.OfficerName,
+				officer.PortraitPath,
+				marker.NpcPortraitPath);
+			break;
+		}
+	}
+
+	private void OnMissionConversationEnded()
+	{
+		UpdateSelectedOfficerDisplay();
+	}
+
+	private void OnOfficerEnteredCell(OfficerPawn pawn, Vector2I cell)
+	{
+		UpdateFogOfWar();
+		CheckDialogueTriggers(pawn);
+	}
+
+	private static string BuildTriggerKey(MissionRoomBuilder.MarkerPlacement marker)
+	{
+		return $"{marker.MarkerId}:{marker.Cell.X},{marker.Cell.Y}:{marker.TargetId}";
 	}
 }
