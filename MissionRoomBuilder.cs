@@ -10,6 +10,8 @@ public partial class MissionRoomBuilder : Node
 	public sealed class MarkerPlacement
 	{
 		public string MarkerId { get; init; } = string.Empty;
+		public string TileId { get; init; } = string.Empty;
+		public string LogicRole { get; init; } = string.Empty;
 		public string Label { get; init; } = string.Empty;
 		public string TargetId { get; init; } = string.Empty;
 		public string NpcPortraitPath { get; init; } = string.Empty;
@@ -37,6 +39,9 @@ public partial class MissionRoomBuilder : Node
 	private readonly List<MarkerPlacement> _markerPlacements = new List<MarkerPlacement>();
 	private readonly HashSet<Vector2I> _floorCells = new HashSet<Vector2I>();
 	private readonly HashSet<string> _blockedTransitions = new HashSet<string>();
+	private readonly Dictionary<string, MissionDoor2D> _doorsById = new Dictionary<string, MissionDoor2D>();
+	private readonly Dictionary<Vector2I, string> _doorIdsByCell = new Dictionary<Vector2I, string>();
+	private readonly HashSet<Vector2I> _closedDoorCells = new HashSet<Vector2I>();
 	private string _selectedBackgroundId = MissionBackgroundCatalog.DefaultId;
 
 	[Export] public Texture2D TilesetTexture { get; set; }
@@ -108,6 +113,11 @@ public partial class MissionRoomBuilder : Node
 		return _markerPlacements;
 	}
 
+	public IEnumerable<MarkerPlacement> GetInteractPlacementsAtCell(Vector2I cell)
+	{
+		return _markerPlacements.Where(placement => placement.Cell == cell);
+	}
+
 	public string GetSelectedBackgroundId()
 	{
 		return _selectedBackgroundId;
@@ -120,7 +130,37 @@ public partial class MissionRoomBuilder : Node
 
 	public bool IsWalkableCell(Vector2I cell)
 	{
-		return _floorCells.Contains(cell);
+		return _floorCells.Contains(cell) && !_closedDoorCells.Contains(cell);
+	}
+
+	public bool IsDoorOpen(string doorId)
+	{
+		return _doorsById.TryGetValue(doorId, out MissionDoor2D door) && door.IsOpen;
+	}
+
+	public bool TrySetDoorOpen(string doorId, bool open, bool animated = true)
+	{
+		if (!_doorsById.TryGetValue(doorId, out MissionDoor2D door))
+		{
+			return false;
+		}
+
+		door.SetOpen(open, animated);
+		if (open)
+		{
+			_closedDoorCells.Remove(door.Cell);
+		}
+		else
+		{
+			_closedDoorCells.Add(door.Cell);
+		}
+
+		return true;
+	}
+
+	public bool TryGetDoorIdAtCell(Vector2I cell, out string doorId)
+	{
+		return _doorIdsByCell.TryGetValue(cell, out doorId);
 	}
 
 	public Vector2I GetNearestCell(Vector2 localPosition)
@@ -266,6 +306,9 @@ public partial class MissionRoomBuilder : Node
 		_markerPlacements.Clear();
 		_floorCells.Clear();
 		_blockedTransitions.Clear();
+		_doorsById.Clear();
+		_doorIdsByCell.Clear();
+		_closedDoorCells.Clear();
 		_selectedBackgroundId = MissionBackgroundCatalog.DefaultId;
 
 		if (!BuildFromSavedLayout(floorLayer, wallLayer, propLayer))
@@ -315,6 +358,15 @@ public partial class MissionRoomBuilder : Node
 			float offsetX = tileDict.TryGetValue("offset_x", out Variant offsetXVariant) ? offsetXVariant.AsSingle() : 0f;
 			float offsetY = tileDict.TryGetValue("offset_y", out Variant offsetYVariant) ? offsetYVariant.AsSingle() : 0f;
 			float rotationDegrees = tileDict.TryGetValue("rotation_degrees", out Variant rotationVariant) ? rotationVariant.AsSingle() : 0f;
+			string logicRole = tileDict.TryGetValue("logic_role", out Variant logicRoleVariant) ? logicRoleVariant.AsString() : string.Empty;
+			string logicLabel = tileDict.TryGetValue("logic_label", out Variant logicLabelVariant) ? logicLabelVariant.AsString() : string.Empty;
+			string logicTargetId = tileDict.TryGetValue("logic_target_id", out Variant logicTargetVariant) ? logicTargetVariant.AsString() : string.Empty;
+			string logicNpcPortrait = tileDict.TryGetValue("logic_npc_portrait", out Variant logicPortraitVariant) ? logicPortraitVariant.AsString() : string.Empty;
+			string logicRequiredFlag = tileDict.TryGetValue("logic_required_flag", out Variant logicRequiredVariant) ? logicRequiredVariant.AsString() : string.Empty;
+			string logicSetFlag = tileDict.TryGetValue("logic_set_flag", out Variant logicSetVariant) ? logicSetVariant.AsString() : string.Empty;
+			string logicTriggerMode = tileDict.TryGetValue("logic_trigger_mode", out Variant logicTriggerVariant) ? logicTriggerVariant.AsString() : "none";
+			bool logicOnce = tileDict.TryGetValue("logic_once", out Variant logicOnceVariant) && logicOnceVariant.AsBool();
+			string logicNotes = tileDict.TryGetValue("logic_notes", out Variant logicNotesVariant) ? logicNotesVariant.AsString() : string.Empty;
 
 			if (itemType == "background")
 			{
@@ -331,18 +383,15 @@ public partial class MissionRoomBuilder : Node
 				_markerPlacements.Add(new MarkerPlacement
 				{
 					MarkerId = markerId,
-					Label = tileDict.TryGetValue("logic_label", out Variant logicLabelVariant) ? logicLabelVariant.AsString() : markerId,
-					TargetId = tileDict.TryGetValue("logic_target_id", out Variant logicTargetVariant) ? logicTargetVariant.AsString() : markerId,
-					NpcPortraitPath = tileDict.TryGetValue("logic_npc_portrait", out Variant logicPortraitVariant) ? logicPortraitVariant.AsString() : string.Empty,
-					RequiredFlag = tileDict.TryGetValue("logic_required_flag", out Variant logicRequiredVariant) ? logicRequiredVariant.AsString() : string.Empty,
-					SetFlag = tileDict.TryGetValue("logic_set_flag", out Variant logicSetVariant) ? logicSetVariant.AsString() : string.Empty,
-					TriggerMode = tileDict.TryGetValue("logic_trigger_mode", out Variant logicTriggerVariant)
-						? logicTriggerVariant.AsString()
-						: GetDefaultTriggerMode(markerId),
-					OneShot = tileDict.TryGetValue("logic_once", out Variant logicOnceVariant)
-						? logicOnceVariant.AsBool()
-						: markerId.StartsWith("trigger_"),
-					Notes = tileDict.TryGetValue("logic_notes", out Variant logicNotesVariant) ? logicNotesVariant.AsString() : string.Empty,
+					LogicRole = "marker",
+					Label = string.IsNullOrEmpty(logicLabel) ? markerId : logicLabel,
+					TargetId = string.IsNullOrEmpty(logicTargetId) ? markerId : logicTargetId,
+					NpcPortraitPath = logicNpcPortrait,
+					RequiredFlag = logicRequiredFlag,
+					SetFlag = logicSetFlag,
+					TriggerMode = string.IsNullOrEmpty(logicTriggerMode) ? GetDefaultTriggerMode(markerId) : logicTriggerMode,
+					OneShot = logicOnce || markerId.StartsWith("trigger_"),
+					Notes = logicNotes,
 					Cell = new Vector2I(column, row)
 				});
 				continue;
@@ -360,7 +409,48 @@ public partial class MissionRoomBuilder : Node
 				_ => propLayer
 			};
 			RegisterTileCell(definition, column, row);
-			targetLayer.AddChild(CreateSprite(definition, column, row, $"{definition.Category}_{column}_{row}_{definition.Id}", new Vector2(offsetX, offsetY), rotationDegrees));
+			Vector2I cell = new Vector2I(column, row);
+			Vector2 extraOffset = new Vector2(offsetX, offsetY);
+			if (logicRole == "door" && definition.Category == MissionTileCategory.Prop)
+			{
+				MissionDoor2D doorNode = CreateDoorNode(definition, cell, extraOffset, logicTargetId, rotationDegrees);
+				targetLayer.AddChild(doorNode);
+				_doorsById[logicTargetId] = doorNode;
+				_doorIdsByCell[cell] = logicTargetId;
+				_closedDoorCells.Add(cell);
+			}
+			else
+			{
+				Sprite2D sprite = CreateSprite(definition, column, row, $"{definition.Category}_{column}_{row}_{definition.Id}", extraOffset, rotationDegrees);
+				sprite.SetMeta("logic_role", logicRole);
+				sprite.SetMeta("logic_label", logicLabel);
+				sprite.SetMeta("logic_target_id", logicTargetId);
+				sprite.SetMeta("logic_npc_portrait", logicNpcPortrait);
+				sprite.SetMeta("logic_required_flag", logicRequiredFlag);
+				sprite.SetMeta("logic_set_flag", logicSetFlag);
+				sprite.SetMeta("logic_trigger_mode", logicTriggerMode);
+				sprite.SetMeta("logic_once", logicOnce);
+				sprite.SetMeta("logic_notes", logicNotes);
+				targetLayer.AddChild(sprite);
+			}
+
+			if (!string.IsNullOrEmpty(logicRole))
+			{
+				_markerPlacements.Add(new MarkerPlacement
+				{
+					TileId = definition.Id,
+					LogicRole = logicRole,
+					Label = string.IsNullOrEmpty(logicLabel) ? definition.DisplayName : logicLabel,
+					TargetId = logicTargetId,
+					NpcPortraitPath = logicNpcPortrait,
+					RequiredFlag = logicRequiredFlag,
+					SetFlag = logicSetFlag,
+					TriggerMode = string.IsNullOrEmpty(logicTriggerMode) ? "none" : logicTriggerMode,
+					OneShot = logicOnce,
+					Notes = logicNotes,
+					Cell = cell
+				});
+			}
 			placedAnyTile = true;
 		}
 
@@ -500,6 +590,49 @@ public partial class MissionRoomBuilder : Node
 		sprite.SetMeta("offset_y", extraOffset.Y);
 		sprite.SetMeta("rotation_degrees", rotationDegrees);
 		return sprite;
+	}
+
+	private MissionDoor2D CreateDoorNode(MissionTileDefinition definition, Vector2I cell, Vector2 extraOffset, string doorId, float rotationDegrees)
+	{
+		string resolvedTexturePath = ResolveDoorTexturePath(definition, rotationDegrees);
+		MissionDoor2D doorNode = new MissionDoor2D
+		{
+			Name = $"Door_{cell.X}_{cell.Y}_{definition.Id}",
+			RotationDegrees = 0f
+		};
+		doorNode.Configure(
+			GD.Load<Texture2D>(resolvedTexturePath),
+			definition.Scale,
+			GetCellWorldPosition(cell.X, cell.Y, definition.Offset + extraOffset),
+			string.IsNullOrEmpty(doorId) ? $"{definition.Id}_{cell.X}_{cell.Y}" : doorId,
+			cell,
+			false);
+		return doorNode;
+	}
+
+	private static string ResolveDoorTexturePath(MissionTileDefinition definition, float rotationDegrees)
+	{
+		string basePath = definition.TexturePath;
+		if (string.IsNullOrEmpty(basePath))
+		{
+			return basePath;
+		}
+
+		string suffix = GetDoorOrientationSuffix(rotationDegrees);
+		return basePath.Replace("_nw_", $"_{suffix}_");
+	}
+
+	private static string GetDoorOrientationSuffix(float rotationDegrees)
+	{
+		int quarterTurns = Mathf.PosMod(Mathf.RoundToInt(rotationDegrees / 90f), 4);
+		return quarterTurns switch
+		{
+			0 => "nw",
+			1 => "ne",
+			2 => "se",
+			3 => "sw",
+			_ => "nw"
+		};
 	}
 
 	private Texture2D GetTileTexture(MissionTileDefinition definition)

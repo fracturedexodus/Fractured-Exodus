@@ -35,6 +35,7 @@ public partial class MissionSceneBuilder : Node2D
 	private Label _selectedLabel;
 	private Label _logicSelectionLabel;
 	private Label _logicHintLabel;
+	private OptionButton _logicRoleOption;
 	private LineEdit _logicLabelEdit;
 	private LineEdit _logicTargetIdEdit;
 	private OptionButton _logicNpcPortraitOption;
@@ -463,7 +464,15 @@ public partial class MissionSceneBuilder : Node2D
 		};
 		root.AddChild(_logicHintLabel);
 
-		_logicLabelEdit = AddInspectorField(root, "Marker Label");
+		root.AddChild(new Label { Text = "Interaction Role" });
+		_logicRoleOption = new OptionButton();
+		_logicRoleOption.AddItem("None", 0);
+		_logicRoleOption.AddItem("Door", 1);
+		_logicRoleOption.AddItem("Terminal", 2);
+		_logicRoleOption.ItemSelected += _ => ApplyLogicFieldChanges();
+		root.AddChild(_logicRoleOption);
+
+		_logicLabelEdit = AddInspectorField(root, "Item Label");
 		_logicTargetIdEdit = AddInspectorField(root, "Target ID");
 		root.AddChild(new Label { Text = "Conversation Portrait" });
 		_logicNpcPortraitOption = new OptionButton();
@@ -922,15 +931,18 @@ public partial class MissionSceneBuilder : Node2D
 		}
 
 		bool isMarker = _selectedPlacedSprite != null && !string.IsNullOrEmpty(_selectedPlacedSprite.GetMeta("marker_id", "").AsString());
-		SetLogicEditorEnabled(isMarker);
+		bool isLogicProp = _selectedPlacedSprite != null && IsLogicCapableSprite(_selectedPlacedSprite);
+		bool isLogicItem = isMarker || isLogicProp;
+		SetLogicEditorEnabled(isLogicItem);
 		_isUpdatingLogicUi = true;
 
-		if (!isMarker)
+		if (!isLogicItem)
 		{
 			_logicSelectionLabel.Text = _selectedPlacedSprite == null
-				? "Select a marker to edit mission logic."
-				: "Selected item is not a logic marker.";
-			_logicHintLabel.Text = "Marker properties are where we hook up spawns, triggers, and future dialogue/events.";
+				? "Select a marker, door, or terminal to edit mission logic."
+				: "Selected item does not support mission logic.";
+			_logicHintLabel.Text = "Use mission logic on markers, doors, and computer terminals.";
+			_logicRoleOption.Select(0);
 			_logicLabelEdit.Text = string.Empty;
 			_logicTargetIdEdit.Text = string.Empty;
 			_logicNpcPortraitOption.Select(0);
@@ -944,28 +956,33 @@ public partial class MissionSceneBuilder : Node2D
 			return;
 		}
 
-		Sprite2D marker = _selectedPlacedSprite;
-		string markerId = marker.GetMeta("marker_id", "").AsString();
-		string markerLabel = marker.GetMeta("logic_label", markerId).AsString();
-		int column = marker.GetMeta("column", 0).AsInt32();
-		int row = marker.GetMeta("row", 0).AsInt32();
+		Sprite2D item = _selectedPlacedSprite;
+		string itemId = GetItemDisplayId(item);
+		string logicLabel = item.GetMeta("logic_label", itemId).AsString();
+		int column = item.GetMeta("column", 0).AsInt32();
+		int row = item.GetMeta("row", 0).AsInt32();
+		string logicRole = item.GetMeta("logic_role", isMarker ? "marker" : string.Empty).AsString();
 
-		_logicSelectionLabel.Text = $"Editing {markerId} @ {column},{row}";
-		_logicHintLabel.Text = "These fields save into the layout file and define how the mission should react to this marker.";
-		_logicLabelEdit.Text = markerLabel;
-		_logicTargetIdEdit.Text = marker.GetMeta("logic_target_id", string.Empty).AsString();
-		SelectNpcPortraitOption(marker.GetMeta("logic_npc_portrait", string.Empty).AsString());
-		_logicRequiredFlagEdit.Text = marker.GetMeta("logic_required_flag", string.Empty).AsString();
-		_logicSetFlagEdit.Text = marker.GetMeta("logic_set_flag", string.Empty).AsString();
-		_logicTriggerModeOption.Select(GetTriggerModeIndex(marker.GetMeta("logic_trigger_mode", "none").AsString()));
-		_logicOneShotCheck.ButtonPressed = marker.GetMeta("logic_once", false).AsBool();
-		_logicNotesEdit.Text = marker.GetMeta("logic_notes", string.Empty).AsString();
+		_logicSelectionLabel.Text = $"Editing {itemId} @ {column},{row}";
+		_logicHintLabel.Text = isMarker
+			? "These fields save into the layout file and define how the mission should react to this marker."
+			: "Doors can be opened directly. Terminals can target door IDs and operate them from a nearby console.";
+		_logicRoleOption.Select(GetLogicRoleIndex(logicRole));
+		_logicLabelEdit.Text = logicLabel;
+		_logicTargetIdEdit.Text = item.GetMeta("logic_target_id", string.Empty).AsString();
+		SelectNpcPortraitOption(item.GetMeta("logic_npc_portrait", string.Empty).AsString());
+		_logicRequiredFlagEdit.Text = item.GetMeta("logic_required_flag", string.Empty).AsString();
+		_logicSetFlagEdit.Text = item.GetMeta("logic_set_flag", string.Empty).AsString();
+		_logicTriggerModeOption.Select(GetTriggerModeIndex(item.GetMeta("logic_trigger_mode", "none").AsString()));
+		_logicOneShotCheck.ButtonPressed = item.GetMeta("logic_once", false).AsBool();
+		_logicNotesEdit.Text = item.GetMeta("logic_notes", string.Empty).AsString();
 		_isUpdatingLogicUi = false;
 		RefreshValidationReport();
 	}
 
 	private void SetLogicEditorEnabled(bool enabled)
 	{
+		_logicRoleOption.Disabled = !enabled;
 		_logicLabelEdit.Editable = enabled;
 		_logicTargetIdEdit.Editable = enabled;
 		_logicNpcPortraitOption.Disabled = !enabled;
@@ -983,12 +1000,14 @@ public partial class MissionSceneBuilder : Node2D
 			return;
 		}
 
-		string markerId = _selectedPlacedSprite.GetMeta("marker_id", "").AsString();
-		if (string.IsNullOrEmpty(markerId))
+		bool isMarker = !string.IsNullOrEmpty(_selectedPlacedSprite.GetMeta("marker_id", "").AsString());
+		bool isLogicProp = IsLogicCapableSprite(_selectedPlacedSprite);
+		if (!isMarker && !isLogicProp)
 		{
 			return;
 		}
 
+		_selectedPlacedSprite.SetMeta("logic_role", GetLogicRoleValue(_logicRoleOption.Selected, isMarker));
 		_selectedPlacedSprite.SetMeta("logic_label", _logicLabelEdit.Text.StripEdges());
 		_selectedPlacedSprite.SetMeta("logic_target_id", _logicTargetIdEdit.Text.StripEdges());
 		_selectedPlacedSprite.SetMeta("logic_npc_portrait", _logicNpcPortraitOption.GetItemMetadata(_logicNpcPortraitOption.Selected).AsString());
@@ -1021,8 +1040,37 @@ public partial class MissionSceneBuilder : Node2D
 		sprite.SetMeta("offset_y", 0f);
 		sprite.SetMeta("rotation_degrees", 0f);
 		sprite.SetMeta("base_modulate", Colors.White);
+		ApplyDefaultTileLogic(sprite, definition, column, row);
 		sprite.AddChild(CreateSelectionOutline(GetSpriteBoundsSize(sprite)));
 		return sprite;
+	}
+
+	private void ApplyDefaultTileLogic(Sprite2D sprite, MissionTileDefinition definition, int column, int row)
+	{
+		string defaultRole = string.Empty;
+		string defaultTargetId = string.Empty;
+		string defaultTriggerMode = "none";
+		if (IsDoorTileId(definition.Id))
+		{
+			defaultRole = "door";
+			defaultTargetId = $"{definition.Id}_{column}_{row}";
+			defaultTriggerMode = "interact";
+		}
+		else if (IsTerminalTileId(definition.Id))
+		{
+			defaultRole = "terminal";
+			defaultTriggerMode = "interact";
+		}
+
+		sprite.SetMeta("logic_role", defaultRole);
+		sprite.SetMeta("logic_label", definition.DisplayName);
+		sprite.SetMeta("logic_target_id", defaultTargetId);
+		sprite.SetMeta("logic_npc_portrait", string.Empty);
+		sprite.SetMeta("logic_required_flag", string.Empty);
+		sprite.SetMeta("logic_set_flag", string.Empty);
+		sprite.SetMeta("logic_trigger_mode", defaultTriggerMode);
+		sprite.SetMeta("logic_once", false);
+		sprite.SetMeta("logic_notes", string.Empty);
 	}
 
 	private Sprite2D CreateMarker(MissionMarkerDefinition definition, int column, int row)
@@ -1249,6 +1297,15 @@ public partial class MissionSceneBuilder : Node2D
 				else
 				{
 					item["tile_id"] = sprite.GetMeta("tile_id", "").AsString();
+					item["logic_role"] = sprite.GetMeta("logic_role", string.Empty).AsString();
+					item["logic_label"] = sprite.GetMeta("logic_label", string.Empty).AsString();
+					item["logic_target_id"] = sprite.GetMeta("logic_target_id", string.Empty).AsString();
+					item["logic_npc_portrait"] = sprite.GetMeta("logic_npc_portrait", string.Empty).AsString();
+					item["logic_required_flag"] = sprite.GetMeta("logic_required_flag", string.Empty).AsString();
+					item["logic_set_flag"] = sprite.GetMeta("logic_set_flag", string.Empty).AsString();
+					item["logic_trigger_mode"] = sprite.GetMeta("logic_trigger_mode", "none").AsString();
+					item["logic_once"] = sprite.GetMeta("logic_once", false).AsBool();
+					item["logic_notes"] = sprite.GetMeta("logic_notes", string.Empty).AsString();
 				}
 
 				items.Add(item);
@@ -1340,6 +1397,15 @@ public partial class MissionSceneBuilder : Node2D
 			sprite.SetMeta("offset_x", offsetX);
 			sprite.SetMeta("offset_y", offsetY);
 			sprite.SetMeta("rotation_degrees", rotationDegrees);
+			sprite.SetMeta("logic_role", tile.TryGetValue("logic_role", out Variant logicRoleVariant) ? logicRoleVariant.AsString() : sprite.GetMeta("logic_role", string.Empty).AsString());
+			sprite.SetMeta("logic_label", tile.TryGetValue("logic_label", out Variant tileLogicLabelVariant) ? tileLogicLabelVariant.AsString() : sprite.GetMeta("logic_label", definition.DisplayName).AsString());
+			sprite.SetMeta("logic_target_id", tile.TryGetValue("logic_target_id", out Variant tileLogicTargetVariant) ? tileLogicTargetVariant.AsString() : sprite.GetMeta("logic_target_id", string.Empty).AsString());
+			sprite.SetMeta("logic_npc_portrait", tile.TryGetValue("logic_npc_portrait", out Variant tileLogicPortraitVariant) ? tileLogicPortraitVariant.AsString() : string.Empty);
+			sprite.SetMeta("logic_required_flag", tile.TryGetValue("logic_required_flag", out Variant tileLogicRequiredVariant) ? tileLogicRequiredVariant.AsString() : string.Empty);
+			sprite.SetMeta("logic_set_flag", tile.TryGetValue("logic_set_flag", out Variant tileLogicSetVariant) ? tileLogicSetVariant.AsString() : string.Empty);
+			sprite.SetMeta("logic_trigger_mode", tile.TryGetValue("logic_trigger_mode", out Variant tileLogicTriggerVariant) ? tileLogicTriggerVariant.AsString() : sprite.GetMeta("logic_trigger_mode", "none").AsString());
+			sprite.SetMeta("logic_once", tile.TryGetValue("logic_once", out Variant tileLogicOnceVariant) ? tileLogicOnceVariant.AsBool() : sprite.GetMeta("logic_once", false).AsBool());
+			sprite.SetMeta("logic_notes", tile.TryGetValue("logic_notes", out Variant tileLogicNotesVariant) ? tileLogicNotesVariant.AsString() : string.Empty);
 			sprite.RotationDegrees = rotationDegrees;
 			MoveSpriteToCell(sprite, column, row);
 			GetPlacementLayer(GetLayerForTile(definition)).AddChild(sprite);
@@ -1503,6 +1569,50 @@ public partial class MissionSceneBuilder : Node2D
 			}
 		}
 
+		List<Sprite2D> logicProps = _propLayer.GetChildren()
+			.OfType<Sprite2D>()
+			.Where(sprite => !string.IsNullOrEmpty(sprite.GetMeta("logic_role", string.Empty).AsString()))
+			.ToList();
+		HashSet<string> doorIds = new HashSet<string>();
+		foreach (Sprite2D prop in logicProps)
+		{
+			string logicRole = prop.GetMeta("logic_role", string.Empty).AsString();
+			string label = prop.GetMeta("logic_label", GetItemDisplayId(prop)).AsString();
+			string targetId = prop.GetMeta("logic_target_id", string.Empty).AsString();
+
+			if (logicRole == "door")
+			{
+				if (string.IsNullOrEmpty(targetId))
+				{
+					issues.Add($"{label} needs a Door ID in Target ID.");
+				}
+				else if (!doorIds.Add(targetId))
+				{
+					issues.Add($"Door ID {targetId} is used more than once.");
+				}
+			}
+		}
+
+		foreach (Sprite2D prop in logicProps)
+		{
+			string logicRole = prop.GetMeta("logic_role", string.Empty).AsString();
+			if (logicRole != "terminal")
+			{
+				continue;
+			}
+
+			string label = prop.GetMeta("logic_label", GetItemDisplayId(prop)).AsString();
+			string targetId = prop.GetMeta("logic_target_id", string.Empty).AsString();
+			if (string.IsNullOrEmpty(targetId))
+			{
+				issues.Add($"{label} needs a linked Door ID in Target ID.");
+			}
+			else if (!doorIds.Contains(targetId))
+			{
+				issues.Add($"{label} points to missing door ID {targetId}.");
+			}
+		}
+
 		return issues;
 	}
 
@@ -1546,6 +1656,52 @@ public partial class MissionSceneBuilder : Node2D
 			2 => "interact",
 			_ => "none"
 		};
+	}
+
+	private static int GetLogicRoleIndex(string logicRole)
+	{
+		return logicRole switch
+		{
+			"door" => 1,
+			"terminal" => 2,
+			_ => 0
+		};
+	}
+
+	private static string GetLogicRoleValue(int selectedIndex, bool isMarker)
+	{
+		if (isMarker)
+		{
+			return "marker";
+		}
+
+		return selectedIndex switch
+		{
+			1 => "door",
+			2 => "terminal",
+			_ => string.Empty
+		};
+	}
+
+	private static bool IsDoorTileId(string tileId)
+	{
+		return tileId.StartsWith("door_");
+	}
+
+	private static bool IsTerminalTileId(string tileId)
+	{
+		return tileId.StartsWith("console_");
+	}
+
+	private static bool IsLogicCapableTileId(string tileId)
+	{
+		return IsDoorTileId(tileId) || IsTerminalTileId(tileId);
+	}
+
+	private static bool IsLogicCapableSprite(Sprite2D sprite)
+	{
+		string tileId = sprite?.GetMeta("tile_id", string.Empty).AsString() ?? string.Empty;
+		return !string.IsNullOrEmpty(tileId) && IsLogicCapableTileId(tileId);
 	}
 
 	private BuilderLayer GetLayerForTile(MissionTileDefinition definition)

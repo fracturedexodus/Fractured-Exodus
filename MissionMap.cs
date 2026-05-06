@@ -30,6 +30,8 @@ public partial class MissionMap : Node2D
 	private int _selectedOfficerIndex;
 	private bool _isPanning;
 	private Vector2 _lastMouseScreenPosition;
+	private string _pendingInteractionKey = string.Empty;
+	private string _pendingInteractionOfficerId = string.Empty;
 
 	public override void _Ready()
 	{
@@ -152,6 +154,12 @@ public partial class MissionMap : Node2D
 			OfficerPawn activeOfficer = GetSelectedOfficer();
 			if (activeOfficer == null)
 			{
+				return;
+			}
+
+			if (TryHandleInteractionClick(activeOfficer))
+			{
+				GetViewport().SetInputAsHandled();
 				return;
 			}
 
@@ -305,6 +313,7 @@ public partial class MissionMap : Node2D
 			OfficerPawn pawn = pawnScene.Instantiate<OfficerPawn>();
 			pawn.SetOfficer(officer);
 			pawn.EnteredCell += OnOfficerEnteredCell;
+			pawn.ReachedCell += OnOfficerReachedCell;
 			_characterLayer.AddChild(pawn);
 			PlaceOfficerAtSpawn(pawn, i);
 			_officerPawns.Add(pawn);
@@ -349,6 +358,16 @@ public partial class MissionMap : Node2D
 
 		foreach (Node child in layer.GetChildren())
 		{
+			if (child is MissionDoor2D door)
+			{
+				Vector2I doorCell = door.Cell;
+				Color fogColor = _visibleCells.Contains(doorCell)
+					? Colors.White
+					: (_exploredCells.Contains(doorCell) ? MultiplyColor(Colors.White, 0.38f) : MultiplyColor(Colors.White, 0.08f));
+				door.SetVisualModulate(fogColor);
+				continue;
+			}
+
 			if (child is not Sprite2D sprite)
 			{
 				continue;
@@ -573,14 +592,24 @@ public partial class MissionMap : Node2D
 
 		Vector2 localMousePosition = _isoWorld.ToLocal(GetGlobalMousePosition());
 		Vector2I targetCell = _roomBuilder.GetNearestCell(localMousePosition);
-		if (!_roomBuilder.TryGetPath(activeOfficer.CurrentCell, targetCell, out List<Vector2I> pathCells))
+		TryMoveOfficerToCell(activeOfficer, targetCell);
+	}
+
+	private bool TryMoveOfficerToCell(OfficerPawn officer, Vector2I targetCell)
+	{
+		if (officer == null || _roomBuilder == null || _isoWorld == null)
 		{
-			return;
+			return false;
+		}
+
+		if (!_roomBuilder.TryGetPath(officer.CurrentCell, targetCell, out List<Vector2I> pathCells))
+		{
+			return false;
 		}
 
 		if (pathCells.Count <= 1)
 		{
-			return;
+			return false;
 		}
 
 		List<Vector2> pathPoints = pathCells
@@ -590,7 +619,185 @@ public partial class MissionMap : Node2D
 		List<Vector2I> steppedCells = pathCells
 			.Skip(1)
 			.ToList();
-		activeOfficer.MoveAlongPath(pathPoints, steppedCells, targetCell);
+		officer.MoveAlongPath(pathPoints, steppedCells, targetCell);
+		return true;
+	}
+
+	private bool TryHandleInteractionClick(OfficerPawn officer)
+	{
+		if (officer == null || _roomBuilder == null || _isoWorld == null || (_dialogueUi?.IsConversationOpen ?? false))
+		{
+			return false;
+		}
+
+		Vector2I clickedCell = _roomBuilder.GetNearestCell(_isoWorld.ToLocal(GetGlobalMousePosition()));
+		List<MissionRoomBuilder.MarkerPlacement> interactions = _roomBuilder.GetInteractPlacementsAtCell(clickedCell)
+			.Where(placement => string.Equals(placement.TriggerMode, "interact", System.StringComparison.OrdinalIgnoreCase)
+				|| placement.LogicRole == "door"
+				|| placement.LogicRole == "terminal")
+			.ToList();
+		if (interactions.Count == 0)
+		{
+			return false;
+		}
+
+		MissionRoomBuilder.MarkerPlacement interaction = interactions
+			.OrderByDescending(placement => placement.LogicRole == "door")
+			.ThenByDescending(placement => placement.LogicRole == "terminal")
+			.First();
+
+		if (CanOfficerExecuteInteraction(officer, interaction))
+		{
+			ExecuteInteraction(officer, interaction);
+			return true;
+		}
+
+		Vector2I? approachCell = FindBestInteractionApproachCell(officer, interaction);
+		if (approachCell.HasValue && TryMoveOfficerToCell(officer, approachCell.Value))
+		{
+			_pendingInteractionKey = BuildInteractionKey(interaction);
+			_pendingInteractionOfficerId = officer.OfficerID;
+			return true;
+		}
+
+		return true;
+	}
+
+	private bool CanOfficerExecuteInteraction(OfficerPawn officer, MissionRoomBuilder.MarkerPlacement interaction)
+	{
+		return GetInteractionDistance(officer.CurrentCell, interaction) <= 1;
+	}
+
+	private int GetInteractionDistance(Vector2I officerCell, MissionRoomBuilder.MarkerPlacement interaction)
+	{
+		if (interaction.LogicRole == "terminal")
+		{
+			return Mathf.Abs(officerCell.X - interaction.Cell.X) + Mathf.Abs(officerCell.Y - interaction.Cell.Y);
+		}
+
+		if (interaction.LogicRole == "door")
+		{
+			return Mathf.Abs(officerCell.X - interaction.Cell.X) + Mathf.Abs(officerCell.Y - interaction.Cell.Y);
+		}
+
+		return officerCell == interaction.Cell ? 0 : int.MaxValue;
+	}
+
+	private Vector2I? FindBestInteractionApproachCell(OfficerPawn officer, MissionRoomBuilder.MarkerPlacement interaction)
+	{
+		if (_roomBuilder == null)
+		{
+			return null;
+		}
+
+		List<Vector2I> candidates = new List<Vector2I>();
+		if (interaction.LogicRole == "terminal")
+		{
+			if (_roomBuilder.IsWalkableCell(interaction.Cell))
+			{
+				candidates.Add(interaction.Cell);
+			}
+		}
+
+		Vector2I[] directions =
+		{
+			new Vector2I(1, 0),
+			new Vector2I(-1, 0),
+			new Vector2I(0, 1),
+			new Vector2I(0, -1)
+		};
+		foreach (Vector2I direction in directions)
+		{
+			Vector2I candidate = interaction.Cell + direction;
+			if (_roomBuilder.IsWalkableCell(candidate))
+			{
+				candidates.Add(candidate);
+			}
+		}
+
+		foreach (Vector2I candidate in candidates.Distinct())
+		{
+			if (_roomBuilder.TryGetPath(officer.CurrentCell, candidate, out List<Vector2I> _))
+			{
+				return candidate;
+			}
+		}
+
+		return null;
+	}
+
+	private void ExecuteInteraction(OfficerPawn officer, MissionRoomBuilder.MarkerPlacement interaction)
+	{
+		string interactionKey = BuildInteractionKey(interaction);
+		if (interaction.OneShot && _consumedTriggerKeys.Contains(interactionKey))
+		{
+			return;
+		}
+
+		if (!string.IsNullOrEmpty(interaction.RequiredFlag) && (_globalData?.StoryFlags?.Contains(interaction.RequiredFlag) != true))
+		{
+			return;
+		}
+
+		if (!string.IsNullOrEmpty(interaction.SetFlag) && _globalData != null && !_globalData.StoryFlags.Contains(interaction.SetFlag))
+		{
+			_globalData.StoryFlags.Add(interaction.SetFlag);
+		}
+
+		if (interaction.LogicRole == "door")
+		{
+			ToggleDoorInteraction(interaction);
+			if (interaction.OneShot)
+			{
+				_consumedTriggerKeys.Add(interactionKey);
+			}
+			UpdateFogOfWar();
+			return;
+		}
+
+		if (interaction.LogicRole == "terminal")
+		{
+			if (!string.IsNullOrEmpty(interaction.TargetId))
+			{
+				bool nextOpenState = !_roomBuilder.IsDoorOpen(interaction.TargetId);
+				_roomBuilder.TrySetDoorOpen(interaction.TargetId, nextOpenState, true);
+				UpdateFogOfWar();
+			}
+			if (interaction.OneShot)
+			{
+				_consumedTriggerKeys.Add(interactionKey);
+			}
+			return;
+		}
+
+		if (interaction.MarkerId == "trigger_dialogue")
+		{
+			_dialogueUi.StartConversation(
+				string.IsNullOrEmpty(interaction.TargetId) ? interaction.MarkerId : interaction.TargetId,
+				officer.OfficerName,
+				officer.PortraitPath,
+				interaction.NpcPortraitPath);
+			if (interaction.OneShot)
+			{
+				_consumedTriggerKeys.Add(interactionKey);
+			}
+		}
+	}
+
+	private void ToggleDoorInteraction(MissionRoomBuilder.MarkerPlacement interaction)
+	{
+		if (_roomBuilder == null || string.IsNullOrEmpty(interaction.TargetId))
+		{
+			return;
+		}
+
+		bool nextOpenState = !_roomBuilder.IsDoorOpen(interaction.TargetId);
+		if (!nextOpenState && _officerPawns.Any(pawn => pawn.CurrentCell == interaction.Cell))
+		{
+			return;
+		}
+
+		_roomBuilder.TrySetDoorOpen(interaction.TargetId, nextOpenState, true);
 	}
 
 	private void PlaceOfficerAtSpawn(OfficerPawn pawn, int spawnIndex)
@@ -670,7 +877,7 @@ public partial class MissionMap : Node2D
 				continue;
 			}
 
-			string triggerKey = BuildTriggerKey(marker);
+			string triggerKey = BuildInteractionKey(marker);
 			if (marker.OneShot && _consumedTriggerKeys.Contains(triggerKey))
 			{
 				continue;
@@ -706,8 +913,27 @@ public partial class MissionMap : Node2D
 		CheckDialogueTriggers(pawn);
 	}
 
-	private static string BuildTriggerKey(MissionRoomBuilder.MarkerPlacement marker)
+	private void OnOfficerReachedCell(OfficerPawn pawn, Vector2I cell)
 	{
-		return $"{marker.MarkerId}:{marker.Cell.X},{marker.Cell.Y}:{marker.TargetId}";
+		if (pawn == null || pawn.OfficerID != _pendingInteractionOfficerId || string.IsNullOrEmpty(_pendingInteractionKey))
+		{
+			return;
+		}
+
+		MissionRoomBuilder.MarkerPlacement interaction = _roomBuilder?.GetMarkerPlacements()
+			.FirstOrDefault(placement => BuildInteractionKey(placement) == _pendingInteractionKey);
+		_pendingInteractionKey = string.Empty;
+		_pendingInteractionOfficerId = string.Empty;
+		if (interaction != null && CanOfficerExecuteInteraction(pawn, interaction))
+		{
+			ExecuteInteraction(pawn, interaction);
+		}
+	}
+
+	private static string BuildInteractionKey(MissionRoomBuilder.MarkerPlacement marker)
+	{
+		string roleOrMarker = !string.IsNullOrEmpty(marker.MarkerId) ? marker.MarkerId : marker.LogicRole;
+		string tileId = marker.TileId ?? string.Empty;
+		return $"{roleOrMarker}:{tileId}:{marker.Cell.X},{marker.Cell.Y}:{marker.TargetId}";
 	}
 }
