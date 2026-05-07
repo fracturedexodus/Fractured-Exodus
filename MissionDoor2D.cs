@@ -130,8 +130,8 @@ public partial class MissionDoor2D : Node2D
 		_closedRightPosition = Vector2.Zero;
 
 		bool opensRightUp = sourcePath.Contains("_nw_") || sourcePath.Contains("_sw_");
-		float slideX = 24f * scale.X;
-		float slideY = 12f * scale.Y;
+		float slideX = 11f * scale.X;
+		float slideY = 5f * scale.Y;
 		_openLeftPosition = opensRightUp
 			? new Vector2(-slideX, slideY)
 			: new Vector2(-slideX, -slideY);
