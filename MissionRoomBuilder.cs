@@ -12,6 +12,7 @@ public partial class MissionRoomBuilder : Node
 		public string MarkerId { get; init; } = string.Empty;
 		public string TileId { get; init; } = string.Empty;
 		public string LogicRole { get; init; } = string.Empty;
+		public string PropDefinitionPath { get; init; } = string.Empty;
 		public string Label { get; init; } = string.Empty;
 		public string TargetId { get; init; } = string.Empty;
 		public string NpcPortraitPath { get; init; } = string.Empty;
@@ -367,6 +368,7 @@ public partial class MissionRoomBuilder : Node
 			string logicTriggerMode = tileDict.TryGetValue("logic_trigger_mode", out Variant logicTriggerVariant) ? logicTriggerVariant.AsString() : "none";
 			bool logicOnce = tileDict.TryGetValue("logic_once", out Variant logicOnceVariant) && logicOnceVariant.AsBool();
 			string logicNotes = tileDict.TryGetValue("logic_notes", out Variant logicNotesVariant) ? logicNotesVariant.AsString() : string.Empty;
+			string propDefinitionPath = tileDict.TryGetValue("prop_definition_path", out Variant propDefinitionVariant) ? propDefinitionVariant.AsString() : string.Empty;
 
 			if (itemType == "background")
 			{
@@ -384,6 +386,7 @@ public partial class MissionRoomBuilder : Node
 				{
 					MarkerId = markerId,
 					LogicRole = "marker",
+					PropDefinitionPath = propDefinitionPath,
 					Label = string.IsNullOrEmpty(logicLabel) ? markerId : logicLabel,
 					TargetId = string.IsNullOrEmpty(logicTargetId) ? markerId : logicTargetId,
 					NpcPortraitPath = logicNpcPortrait,
@@ -394,6 +397,26 @@ public partial class MissionRoomBuilder : Node
 					Notes = logicNotes,
 					Cell = new Vector2I(column, row)
 				});
+				continue;
+			}
+
+			if (itemType == "placed_prop" || (string.IsNullOrEmpty(tileId) && !string.IsNullOrEmpty(propDefinitionPath)))
+			{
+				_markerPlacements.Add(new MarkerPlacement
+				{
+					LogicRole = string.IsNullOrEmpty(logicRole) ? "prop" : logicRole,
+					PropDefinitionPath = propDefinitionPath,
+					Label = string.IsNullOrEmpty(logicLabel) ? GetPropDefinitionDisplayName(propDefinitionPath) : logicLabel,
+					TargetId = logicTargetId,
+					NpcPortraitPath = logicNpcPortrait,
+					RequiredFlag = logicRequiredFlag,
+					SetFlag = logicSetFlag,
+					TriggerMode = string.IsNullOrEmpty(logicTriggerMode) ? "interact" : logicTriggerMode,
+					OneShot = logicOnce,
+					Notes = logicNotes,
+					Cell = new Vector2I(column, row)
+				});
+				placedAnyTile = true;
 				continue;
 			}
 
@@ -431,6 +454,7 @@ public partial class MissionRoomBuilder : Node
 				sprite.SetMeta("logic_trigger_mode", logicTriggerMode);
 				sprite.SetMeta("logic_once", logicOnce);
 				sprite.SetMeta("logic_notes", logicNotes);
+				sprite.SetMeta("prop_definition_path", propDefinitionPath);
 				targetLayer.AddChild(sprite);
 			}
 
@@ -440,6 +464,7 @@ public partial class MissionRoomBuilder : Node
 				{
 					TileId = definition.Id,
 					LogicRole = logicRole,
+					PropDefinitionPath = propDefinitionPath,
 					Label = string.IsNullOrEmpty(logicLabel) ? definition.DisplayName : logicLabel,
 					TargetId = logicTargetId,
 					NpcPortraitPath = logicNpcPortrait,
@@ -568,6 +593,12 @@ public partial class MissionRoomBuilder : Node
 	private static string GetDefaultTriggerMode(string markerId)
 	{
 		return markerId == "trigger_dialogue" ? "enter" : "none";
+	}
+
+	private static string GetPropDefinitionDisplayName(string path)
+	{
+		string fileName = System.IO.Path.GetFileNameWithoutExtension(path ?? string.Empty);
+		return string.IsNullOrEmpty(fileName) ? "Prop" : fileName.Replace('_', ' ');
 	}
 
 	private Sprite2D CreateSprite(MissionTileDefinition definition, int column, int row, string name, Vector2 extraOffset, float rotationDegrees)

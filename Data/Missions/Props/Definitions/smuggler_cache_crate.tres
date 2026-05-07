@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="PropDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://Scripts/Missions/Props/PropDefinition.cs" id="1_prop_definition"]
+
+[resource]
+script = ExtResource("1_prop_definition")
+PropId = "smuggler_cache_crate"
+DisplayName = "Smuggler Cache Crate"
+Description = "A sealed black-market cache packed with contraband manifests, salvage chits, and hidden route fragments."
+InteractionType = 1
+ScenePath = "res://Scenes/Missions/Props/LootCrateProp.tscn"
+SpriteTexturePath = "res://Assets/Missions/BlackSiteRelay/AlignedGrid226/props/crate_medium.png"
+InteractionRange = 1
+OneShot = true
+HideWhenConsumed = true
+SetFlags = PackedStringArray("smuggler_cache_opened")
+SuccessMessage = "Cache breached. Contraband manifests secured."
+RewardRawMaterials = 30
+RewardEnergyCores = 1
+RewardAncientTech = 1

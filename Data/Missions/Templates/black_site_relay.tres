@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="MissionTemplate" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://Scripts/Missions/Core/MissionTemplate.cs" id="1_mission_template"]
+
+[resource]
+script = ExtResource("1_mission_template")
+MissionId = "black_site_relay"
+Title = "Black Site Relay"
+Description = "Investigate a failing Custodian relay and decide whether to save the survivors or secure the archive core."
+MissionScenePath = "res://black_site_relay.tscn"
+LayoutResourcePath = "res://Data/MissionLayouts/black_site_relay_builder.json"
+DefaultReturnScenePath = "res://exploration_battle.tscn"
+RecommendedOfficerCount = 2
+SourceNodeType = "Planet"
+ObjectiveText = "OBJECTIVE: Investigate the relay, assess the survivors, and decide what to save."
+PromptText = "Controls: left click an officer to select, left click a floor tile to move, TAB or 1-2 to switch officers, middle mouse drag or WASD to pan, mouse wheel or +/- to zoom, ESC to return."
+PrimaryActionText = "SAVE SURVIVORS"
+PrimaryOutcomeId = "survivors_saved"
+SecondaryActionText = "SECURE ARCHIVE"
+SecondaryOutcomeId = "archive_secured"
+DefaultDialogueId = "trigger_dialogue"
+InteractionKeys = PackedStringArray("black_site_relay", "planet:black_site_relay")
+IsEnabled = true

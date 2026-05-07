@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="PropDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://Scripts/Missions/Props/PropDefinition.cs" id="1_prop_definition"]
+
+[resource]
+script = ExtResource("1_prop_definition")
+PropId = "dialogue_terminal"
+DisplayName = "Dialogue Terminal"
+Description = "A mission terminal that opens a dialogue sequence when an officer accesses it."
+InteractionType = 0
+ScenePath = "res://Scenes/Missions/Props/DialogueTerminalProp.tscn"
+SpriteTexturePath = "res://Assets/Missions/BlackSiteRelay/AlignedGrid226/props/console_single.png"
+InteractionRange = 1
+OneShot = false
+HideWhenConsumed = false
+DialogueId = "trigger_dialogue"
+SuccessMessage = "Terminal link established."

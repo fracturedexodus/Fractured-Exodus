@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="MissionTemplate" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://Scripts/Missions/Core/MissionTemplate.cs" id="1_mission_template"]
+
+[resource]
+script = ExtResource("1_mission_template")
+MissionId = "outpost_smuggler_exchange"
+Title = "Smuggler Exchange"
+Description = "Board a black-market outpost, crack the broker's vault, and choose between extracting illicit route data or walking away with the contraband stockpile."
+MissionScenePath = "res://black_site_relay.tscn"
+LayoutResourcePath = "res://Data/MissionLayouts/outpost_smuggler_exchange_builder.json"
+DefaultReturnScenePath = "res://exploration_battle.tscn"
+RecommendedOfficerCount = 2
+SourceNodeType = "Outpost"
+ObjectiveText = "OBJECTIVE: Breach the black-market vault, assess the broker's offer, and decide whether to seize the contraband or extract the route data."
+PromptText = "Controls: left click an officer to select, left click a floor tile to move, TAB or 1-2 to switch officers, middle mouse drag or WASD to pan, mouse wheel or +/- to zoom, ESC to abort. Use terminals and triggers to pressure the deal before patrols arrive."
+PrimaryActionText = "CUT A DEAL"
+PrimaryOutcomeId = "deal_cut"
+SecondaryActionText = "SEIZE CONTRABAND"
+SecondaryOutcomeId = "contraband_seized"
+DefaultDialogueId = "smuggler_exchange_dialogue"
+InteractionKeys = PackedStringArray("outpost:smuggler_exchange")
+IsEnabled = true

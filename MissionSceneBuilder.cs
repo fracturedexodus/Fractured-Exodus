@@ -38,6 +38,12 @@ public partial class MissionSceneBuilder : Node2D
 	private OptionButton _logicRoleOption;
 	private LineEdit _logicLabelEdit;
 	private LineEdit _logicTargetIdEdit;
+	private Label _logicTargetIdHelpLabel;
+	private LineEdit _logicPropDefinitionPathEdit;
+	private OptionButton _logicPropDefinitionOption;
+	private Button _logicPropDefinitionRefreshButton;
+	private TextureRect _logicPropDefinitionPreviewIcon;
+	private Label _logicPropDefinitionPreviewLabel;
 	private OptionButton _logicNpcPortraitOption;
 	private LineEdit _logicRequiredFlagEdit;
 	private LineEdit _logicSetFlagEdit;
@@ -47,6 +53,7 @@ public partial class MissionSceneBuilder : Node2D
 	private RichTextLabel _validationReport;
 	private MissionTileDefinition _selectedTile;
 	private MissionMarkerDefinition _selectedMarker;
+	private string _selectedPropDefinitionPath = string.Empty;
 	private Sprite2D _draggedSprite;
 	private Sprite2D _selectedPlacedSprite;
 	private Vector2I _draggedCell;
@@ -55,10 +62,20 @@ public partial class MissionSceneBuilder : Node2D
 	private bool _isUpdatingLogicUi;
 	private Vector2 _lastMouseScreenPosition;
 	private readonly List<Line2D> _gridLines = new List<Line2D>();
+	private readonly Dictionary<string, PropDefinitionPreview> _propDefinitionPreviewCache = new Dictionary<string, PropDefinitionPreview>();
 	private Polygon2D _hoverDiamond;
 	private readonly Vector2 _tileStep = MissionFloorTextureFactory.TileSize;
 	private readonly Vector2 _gridOrigin = new Vector2(0f, -20f);
 	private string _selectedBackgroundId = MissionBackgroundCatalog.DefaultId;
+
+	private sealed class PropDefinitionPreview
+	{
+		public string Path { get; init; } = string.Empty;
+		public string DisplayName { get; init; } = string.Empty;
+		public string Description { get; init; } = string.Empty;
+		public Texture2D Icon { get; init; }
+		public bool Exists { get; init; }
+	}
 
 	public override void _Ready()
 	{
@@ -474,6 +491,47 @@ public partial class MissionSceneBuilder : Node2D
 
 		_logicLabelEdit = AddInspectorField(root, "Item Label");
 		_logicTargetIdEdit = AddInspectorField(root, "Target ID");
+		_logicTargetIdHelpLabel = new Label
+		{
+			Text = "Target ID meaning depends on the selected marker or prop.",
+			AutowrapMode = TextServer.AutowrapMode.WordSmart
+		};
+		_logicTargetIdHelpLabel.AddThemeColorOverride("font_color", new Color(0.72f, 0.78f, 0.88f, 0.95f));
+		root.AddChild(_logicTargetIdHelpLabel);
+		_logicPropDefinitionPathEdit = AddInspectorField(root, "Prop Definition Path");
+		_logicPropDefinitionPathEdit.PlaceholderText = "res://Data/Missions/Props/Definitions/...";
+		_logicPropDefinitionPathEdit.TextChanged += OnPropDefinitionPathChanged;
+		root.AddChild(new Label { Text = "Prop Definition Library" });
+		HBoxContainer propDefinitionRow = new HBoxContainer();
+		_logicPropDefinitionOption = new OptionButton
+		{
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+		};
+		_logicPropDefinitionOption.ItemSelected += OnPropDefinitionOptionSelected;
+		propDefinitionRow.AddChild(_logicPropDefinitionOption);
+		_logicPropDefinitionRefreshButton = new Button { Text = "Refresh" };
+		_logicPropDefinitionRefreshButton.Pressed += RefreshPropDefinitionOptions;
+		propDefinitionRow.AddChild(_logicPropDefinitionRefreshButton);
+		root.AddChild(propDefinitionRow);
+		HBoxContainer propPreviewRow = new HBoxContainer();
+		propPreviewRow.AddThemeConstantOverride("separation", 10);
+		_logicPropDefinitionPreviewIcon = new TextureRect
+		{
+			CustomMinimumSize = new Vector2(52f, 52f),
+			ExpandMode = TextureRect.ExpandModeEnum.FitWidthProportional,
+			StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
+			Visible = false
+		};
+		propPreviewRow.AddChild(_logicPropDefinitionPreviewIcon);
+		_logicPropDefinitionPreviewLabel = new Label
+		{
+			Text = "No prop definition selected.",
+			AutowrapMode = TextServer.AutowrapMode.WordSmart,
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+			VerticalAlignment = VerticalAlignment.Center
+		};
+		propPreviewRow.AddChild(_logicPropDefinitionPreviewLabel);
+		root.AddChild(propPreviewRow);
 		root.AddChild(new Label { Text = "Conversation Portrait" });
 		_logicNpcPortraitOption = new OptionButton();
 		for (int i = 0; i < MissionDialoguePortraitCatalog.All.Count; i++)
@@ -523,6 +581,7 @@ public partial class MissionSceneBuilder : Node2D
 		};
 		root.AddChild(_validationReport);
 
+		RefreshPropDefinitionOptions();
 		UpdateLogicInspector();
 	}
 
@@ -564,6 +623,7 @@ public partial class MissionSceneBuilder : Node2D
 				{
 					_selectedTile = definition;
 					_selectedMarker = null;
+					_selectedPropDefinitionPath = string.Empty;
 					ClearPlacedSelection();
 					UpdateSelectedLabel();
 					UpdateLogicInspector();
@@ -590,6 +650,7 @@ public partial class MissionSceneBuilder : Node2D
 				{
 					_selectedTile = null;
 					_selectedMarker = definition;
+					_selectedPropDefinitionPath = string.Empty;
 					ClearPlacedSelection();
 					UpdateSelectedLabel();
 					UpdateLogicInspector();
@@ -598,7 +659,33 @@ public partial class MissionSceneBuilder : Node2D
 			}
 		}
 
+		_paletteContainer.AddChild(new Label { Text = "MISSION PROPS" });
+		foreach (string propDefinitionPath in GetAvailablePropDefinitionPaths())
+		{
+			PropDefinitionPreview preview = GetPropDefinitionPreview(propDefinitionPath);
+			Button button = new Button
+			{
+				Text = preview.DisplayName,
+				Icon = preview.Icon,
+				Alignment = HorizontalAlignment.Left,
+				ExpandIcon = true,
+				CustomMinimumSize = new Vector2(0f, 40f),
+				TooltipText = preview.Description
+			};
+			button.Pressed += () =>
+			{
+				_selectedTile = null;
+				_selectedMarker = null;
+				_selectedPropDefinitionPath = propDefinitionPath;
+				ClearPlacedSelection();
+				UpdateSelectedLabel();
+				UpdateLogicInspector();
+			};
+			_paletteContainer.AddChild(button);
+		}
+
 		_selectedTile = MissionTileCatalog.All.FirstOrDefault();
+		_selectedPropDefinitionPath = string.Empty;
 	}
 
 	private void UpdateSelectedLabel()
@@ -615,6 +702,12 @@ public partial class MissionSceneBuilder : Node2D
 		if (_selectedMarker != null)
 		{
 			_selectedLabel.Text = $"Palette: {_selectedMarker.DisplayName}";
+			return;
+		}
+
+		if (!string.IsNullOrWhiteSpace(_selectedPropDefinitionPath))
+		{
+			_selectedLabel.Text = $"Palette: {GetPropDefinitionPreview(_selectedPropDefinitionPath).DisplayName}";
 			return;
 		}
 
@@ -726,6 +819,15 @@ public partial class MissionSceneBuilder : Node2D
 
 			if (_selectedMarker == null)
 			{
+				if (string.IsNullOrWhiteSpace(_selectedPropDefinitionPath))
+				{
+					return;
+				}
+
+				Sprite2D propSprite = CreatePlacedPropSprite(_selectedPropDefinitionPath, cell.X, cell.Y);
+				GetPlacementLayer(BuilderLayer.Prop).AddChild(propSprite);
+				SelectPlacedSprite(propSprite);
+				SetStatus($"Placed {GetPropDefinitionPreview(_selectedPropDefinitionPath).DisplayName} at {cell.X},{cell.Y}");
 				return;
 			}
 
@@ -838,6 +940,11 @@ public partial class MissionSceneBuilder : Node2D
 			return FindSpriteAtCell(_markerLayer, cell.X, cell.Y);
 		}
 
+		if (!string.IsNullOrWhiteSpace(_selectedPropDefinitionPath))
+		{
+			return FindSpriteAtCell(_propLayer, cell.X, cell.Y);
+		}
+
 		if (_selectedTile == null)
 		{
 			return FindSpriteAtMouse();
@@ -885,6 +992,11 @@ public partial class MissionSceneBuilder : Node2D
 			return false;
 		}
 
+		if (!string.IsNullOrWhiteSpace(_selectedPropDefinitionPath))
+		{
+			return false;
+		}
+
 		return _selectedTile == null || _selectedTile.Category == MissionTileCategory.Floor;
 	}
 
@@ -911,6 +1023,18 @@ public partial class MissionSceneBuilder : Node2D
 
 		if (!MissionTileCatalog.TryGetById(tileId, out MissionTileDefinition definition))
 		{
+			if (!IsPlacedPropSprite(sprite))
+			{
+				return;
+			}
+
+			Vector2 propAdjustment = new Vector2(
+				sprite.GetMeta("offset_x", 0f).AsSingle(),
+				sprite.GetMeta("offset_y", 0f).AsSingle());
+			sprite.Position = IsoGridHelper.GridToWorld(column, row, _tileStep, _gridOrigin) + propAdjustment;
+			sprite.SetMeta("column", column);
+			sprite.SetMeta("row", row);
+			UpdateSelectedLabel();
 			return;
 		}
 
@@ -932,19 +1056,24 @@ public partial class MissionSceneBuilder : Node2D
 
 		bool isMarker = _selectedPlacedSprite != null && !string.IsNullOrEmpty(_selectedPlacedSprite.GetMeta("marker_id", "").AsString());
 		bool isLogicProp = _selectedPlacedSprite != null && IsLogicCapableSprite(_selectedPlacedSprite);
-		bool isLogicItem = isMarker || isLogicProp;
+		bool isPlacedProp = IsPlacedPropSprite(_selectedPlacedSprite);
+		bool isLogicItem = isMarker || isLogicProp || isPlacedProp;
 		SetLogicEditorEnabled(isLogicItem);
 		_isUpdatingLogicUi = true;
 
 		if (!isLogicItem)
 		{
 			_logicSelectionLabel.Text = _selectedPlacedSprite == null
-				? "Select a marker, door, or terminal to edit mission logic."
+				? "Select a marker, direct mission prop, door, or terminal to edit mission logic."
 				: "Selected item does not support mission logic.";
-			_logicHintLabel.Text = "Use mission logic on markers, doors, and computer terminals.";
+			_logicHintLabel.Text = "Use mission logic on markers, direct mission props, doors, and computer terminals.";
 			_logicRoleOption.Select(0);
 			_logicLabelEdit.Text = string.Empty;
 			_logicTargetIdEdit.Text = string.Empty;
+			_logicTargetIdEdit.PlaceholderText = string.Empty;
+			_logicTargetIdHelpLabel.Text = "Target ID meaning depends on the selected marker or prop.";
+			_logicPropDefinitionPathEdit.Text = string.Empty;
+			RefreshPropDefinitionOptions();
 			_logicNpcPortraitOption.Select(0);
 			_logicRequiredFlagEdit.Text = string.Empty;
 			_logicSetFlagEdit.Text = string.Empty;
@@ -966,16 +1095,22 @@ public partial class MissionSceneBuilder : Node2D
 		_logicSelectionLabel.Text = $"Editing {itemId} @ {column},{row}";
 		_logicHintLabel.Text = isMarker
 			? "These fields save into the layout file and define how the mission should react to this marker."
-			: "Doors can be opened directly. Terminals can target door IDs and operate them from a nearby console.";
+			: isPlacedProp
+				? "Direct props spawn from PropDefinitions at runtime. Use these fields for labels, portraits, and mission state hooks."
+				: "Doors can be opened directly. Terminals can target door IDs and operate them from a nearby console.";
 		_logicRoleOption.Select(GetLogicRoleIndex(logicRole));
 		_logicLabelEdit.Text = logicLabel;
 		_logicTargetIdEdit.Text = item.GetMeta("logic_target_id", string.Empty).AsString();
+		_logicPropDefinitionPathEdit.Text = item.GetMeta("prop_definition_path", string.Empty).AsString();
+		RefreshPropDefinitionOptions(_logicPropDefinitionPathEdit.Text);
+		UpdateTargetIdFieldContext(item, isMarker, isPlacedProp);
 		SelectNpcPortraitOption(item.GetMeta("logic_npc_portrait", string.Empty).AsString());
 		_logicRequiredFlagEdit.Text = item.GetMeta("logic_required_flag", string.Empty).AsString();
 		_logicSetFlagEdit.Text = item.GetMeta("logic_set_flag", string.Empty).AsString();
 		_logicTriggerModeOption.Select(GetTriggerModeIndex(item.GetMeta("logic_trigger_mode", "none").AsString()));
 		_logicOneShotCheck.ButtonPressed = item.GetMeta("logic_once", false).AsBool();
 		_logicNotesEdit.Text = item.GetMeta("logic_notes", string.Empty).AsString();
+		_logicRoleOption.Disabled = isPlacedProp;
 		_isUpdatingLogicUi = false;
 		RefreshValidationReport();
 	}
@@ -985,6 +1120,9 @@ public partial class MissionSceneBuilder : Node2D
 		_logicRoleOption.Disabled = !enabled;
 		_logicLabelEdit.Editable = enabled;
 		_logicTargetIdEdit.Editable = enabled;
+		_logicPropDefinitionPathEdit.Editable = enabled;
+		_logicPropDefinitionOption.Disabled = !enabled;
+		_logicPropDefinitionRefreshButton.Disabled = !enabled;
 		_logicNpcPortraitOption.Disabled = !enabled;
 		_logicRequiredFlagEdit.Editable = enabled;
 		_logicSetFlagEdit.Editable = enabled;
@@ -1002,14 +1140,16 @@ public partial class MissionSceneBuilder : Node2D
 
 		bool isMarker = !string.IsNullOrEmpty(_selectedPlacedSprite.GetMeta("marker_id", "").AsString());
 		bool isLogicProp = IsLogicCapableSprite(_selectedPlacedSprite);
-		if (!isMarker && !isLogicProp)
+		bool isPlacedProp = IsPlacedPropSprite(_selectedPlacedSprite);
+		if (!isMarker && !isLogicProp && !isPlacedProp)
 		{
 			return;
 		}
 
-		_selectedPlacedSprite.SetMeta("logic_role", GetLogicRoleValue(_logicRoleOption.Selected, isMarker));
+		_selectedPlacedSprite.SetMeta("logic_role", isPlacedProp ? "prop" : GetLogicRoleValue(_logicRoleOption.Selected, isMarker));
 		_selectedPlacedSprite.SetMeta("logic_label", _logicLabelEdit.Text.StripEdges());
 		_selectedPlacedSprite.SetMeta("logic_target_id", _logicTargetIdEdit.Text.StripEdges());
+		_selectedPlacedSprite.SetMeta("prop_definition_path", _logicPropDefinitionPathEdit.Text.StripEdges());
 		_selectedPlacedSprite.SetMeta("logic_npc_portrait", _logicNpcPortraitOption.GetItemMetadata(_logicNpcPortraitOption.Selected).AsString());
 		_selectedPlacedSprite.SetMeta("logic_required_flag", _logicRequiredFlagEdit.Text.StripEdges());
 		_selectedPlacedSprite.SetMeta("logic_set_flag", _logicSetFlagEdit.Text.StripEdges());
@@ -1018,6 +1158,204 @@ public partial class MissionSceneBuilder : Node2D
 		_selectedPlacedSprite.SetMeta("logic_notes", _logicNotesEdit.Text.StripEdges());
 		UpdateMarkerCaption(_selectedPlacedSprite);
 		RefreshValidationReport();
+	}
+
+	private void OnPropDefinitionPathChanged(string newText)
+	{
+		if (_isUpdatingLogicUi)
+		{
+			return;
+		}
+
+		RefreshPropDefinitionOptions(newText);
+		UpdateTargetIdFieldContextForCurrentSelection();
+	}
+
+	private void OnPropDefinitionOptionSelected(long selectedIndex)
+	{
+		if (_isUpdatingLogicUi || _logicPropDefinitionOption == null)
+		{
+			return;
+		}
+
+		string selectedPath = _logicPropDefinitionOption.GetItemMetadata((int)selectedIndex).AsString();
+		_isUpdatingLogicUi = true;
+		_logicPropDefinitionPathEdit.Text = selectedPath;
+		_isUpdatingLogicUi = false;
+		UpdatePropDefinitionPreview(selectedPath);
+		ApplyLogicFieldChanges();
+	}
+
+	private void RefreshPropDefinitionOptions()
+	{
+		_propDefinitionPreviewCache.Clear();
+		RefreshPropDefinitionOptions(_logicPropDefinitionPathEdit?.Text ?? string.Empty);
+	}
+
+	private void RefreshPropDefinitionOptions(string selectedPath)
+	{
+		if (_logicPropDefinitionOption == null)
+		{
+			return;
+		}
+
+		string normalizedPath = selectedPath?.StripEdges() ?? string.Empty;
+		List<string> propDefinitionPaths = GetAvailablePropDefinitionPaths();
+
+		_logicPropDefinitionOption.Clear();
+		_logicPropDefinitionOption.AddItem("None", 0);
+		_logicPropDefinitionOption.SetItemMetadata(0, string.Empty);
+
+		int selectedIndex = 0;
+		for (int i = 0; i < propDefinitionPaths.Count; i++)
+		{
+			string path = propDefinitionPaths[i];
+			PropDefinitionPreview preview = GetPropDefinitionPreview(path);
+			int itemIndex = i + 1;
+			_logicPropDefinitionOption.AddItem(preview.DisplayName, itemIndex);
+			_logicPropDefinitionOption.SetItemMetadata(itemIndex, path);
+			if (preview.Icon != null)
+			{
+				_logicPropDefinitionOption.SetItemIcon(itemIndex, preview.Icon);
+			}
+			if (path == normalizedPath)
+			{
+				selectedIndex = itemIndex;
+			}
+		}
+
+		if (!string.IsNullOrEmpty(normalizedPath) && selectedIndex == 0)
+		{
+			PropDefinitionPreview preview = GetPropDefinitionPreview(normalizedPath);
+			selectedIndex = _logicPropDefinitionOption.ItemCount;
+			_logicPropDefinitionOption.AddItem($"Custom: {preview.DisplayName}", selectedIndex);
+			_logicPropDefinitionOption.SetItemMetadata(selectedIndex, normalizedPath);
+			if (preview.Icon != null)
+			{
+				_logicPropDefinitionOption.SetItemIcon(selectedIndex, preview.Icon);
+			}
+		}
+
+		_logicPropDefinitionOption.Select(selectedIndex);
+		UpdatePropDefinitionPreview(normalizedPath);
+	}
+
+	private void UpdateTargetIdFieldContextForCurrentSelection()
+	{
+		if (_selectedPlacedSprite == null)
+		{
+			_logicTargetIdEdit.PlaceholderText = string.Empty;
+			if (_logicTargetIdHelpLabel != null)
+			{
+				_logicTargetIdHelpLabel.Text = "Target ID meaning depends on the selected marker or prop.";
+			}
+			return;
+		}
+
+		bool isMarker = !string.IsNullOrEmpty(_selectedPlacedSprite.GetMeta("marker_id", string.Empty).AsString());
+		bool isPlacedProp = IsPlacedPropSprite(_selectedPlacedSprite);
+		UpdateTargetIdFieldContext(_selectedPlacedSprite, isMarker, isPlacedProp);
+	}
+
+	private void UpdateTargetIdFieldContext(Sprite2D item, bool isMarker, bool isPlacedProp)
+	{
+		if (item == null || _logicTargetIdEdit == null || _logicTargetIdHelpLabel == null)
+		{
+			return;
+		}
+
+		string placeholderText = string.Empty;
+		string helpText = "Target ID meaning depends on the selected marker or prop.";
+		string markerId = item.GetMeta("marker_id", string.Empty).AsString();
+		string logicRole = item.GetMeta("logic_role", string.Empty).AsString();
+		PropDefinition definition = ResolveTargetIdContextDefinition(item, isPlacedProp);
+
+		if (isMarker)
+		{
+			if (markerId == "trigger_dialogue")
+			{
+				placeholderText = "Dialogue ID";
+				helpText = "Dialogue trigger markers expect a dialogue id like `trigger_dialogue` or `smuggler_exchange_dialogue`.";
+			}
+			else if (markerId.StartsWith("trigger_"))
+			{
+				placeholderText = "Trigger target key";
+				helpText = "Trigger markers use Target ID as a mission-specific routing key, such as a dialogue id or custom event id.";
+			}
+			else if (markerId.StartsWith("spawn_"))
+			{
+				placeholderText = "Spawn marker key";
+				helpText = "Spawn markers usually keep their built-in ids. Change this only if another system needs a custom spawn key.";
+			}
+			else
+			{
+				placeholderText = "Objective or marker key";
+				helpText = "Use Target ID to give this marker a stable mission-facing identifier.";
+			}
+		}
+		else if (definition != null)
+		{
+			switch (definition.InteractionType)
+			{
+				case PropInteractionType.Dialogue:
+					placeholderText = "Dialogue ID";
+					helpText = "Dialogue props open the dialogue id in Target ID. Leave it blank to fall back to the prop definition or mission template default.";
+					break;
+				case PropInteractionType.DoorControl:
+					placeholderText = "door_alpha,door_beta";
+					helpText = "Door-control props accept one or more door ids, separated by commas, semicolons, pipes, or new lines.";
+					break;
+				case PropInteractionType.Loot:
+					placeholderText = "relay_archive_cache";
+					helpText = "Loot props use Target ID as an optional loot preset id, such as `relay_archive_cache` or `smuggler_contraband_cache`.";
+					break;
+				default:
+					placeholderText = "Prop-specific target id";
+					helpText = "This prop can interpret Target ID in a custom way at runtime.";
+					break;
+			}
+		}
+		else if (logicRole == "door")
+		{
+			placeholderText = "door_bulkhead_a";
+			helpText = "Door tiles use Target ID as their door id. Terminals and other props can reference this id later.";
+		}
+		else if (logicRole == "terminal")
+		{
+			placeholderText = "door_bulkhead_a";
+			helpText = "Terminal tiles usually point at one linked door id unless a Prop Definition overrides that behavior.";
+		}
+
+		_logicTargetIdEdit.PlaceholderText = placeholderText;
+		_logicTargetIdHelpLabel.Text = helpText;
+	}
+
+	private PropDefinition ResolveTargetIdContextDefinition(Sprite2D item, bool isPlacedProp)
+	{
+		if (item == null)
+		{
+			return null;
+		}
+
+		string propDefinitionPath = item.GetMeta("prop_definition_path", string.Empty).AsString();
+		if (!string.IsNullOrWhiteSpace(propDefinitionPath) && ResourceLoader.Exists(propDefinitionPath))
+		{
+			return GD.Load<PropDefinition>(propDefinitionPath);
+		}
+
+		if (isPlacedProp)
+		{
+			return null;
+		}
+
+		string tileId = item.GetMeta("tile_id", string.Empty).AsString();
+		string defaultPropPath = GetDefaultPropDefinitionPath(tileId);
+		if (!string.IsNullOrWhiteSpace(defaultPropPath) && ResourceLoader.Exists(defaultPropPath))
+		{
+			return GD.Load<PropDefinition>(defaultPropPath);
+		}
+
+		return null;
 	}
 
 	private Sprite2D CreateSprite(MissionTileDefinition definition, int column, int row)
@@ -1041,6 +1379,30 @@ public partial class MissionSceneBuilder : Node2D
 		sprite.SetMeta("rotation_degrees", 0f);
 		sprite.SetMeta("base_modulate", Colors.White);
 		ApplyDefaultTileLogic(sprite, definition, column, row);
+		sprite.AddChild(CreateSelectionOutline(GetSpriteBoundsSize(sprite)));
+		return sprite;
+	}
+
+	private Sprite2D CreatePlacedPropSprite(string propDefinitionPath, int column, int row)
+	{
+		PropDefinitionPreview preview = GetPropDefinitionPreview(propDefinitionPath);
+		Texture2D texture = preview.Icon ?? GetFallbackPropPreviewTexture();
+		Sprite2D sprite = new Sprite2D
+		{
+			Texture = texture,
+			Position = IsoGridHelper.GridToWorld(column, row, _tileStep, _gridOrigin),
+			Scale = GetPlacedPropPreviewScale(texture)
+		};
+		sprite.SetMeta("tile_id", string.Empty);
+		sprite.SetMeta("item_type", "placed_prop");
+		sprite.SetMeta("layer", "prop");
+		sprite.SetMeta("column", column);
+		sprite.SetMeta("row", row);
+		sprite.SetMeta("offset_x", 0f);
+		sprite.SetMeta("offset_y", 0f);
+		sprite.SetMeta("rotation_degrees", 0f);
+		sprite.SetMeta("base_modulate", preview.Exists ? Colors.White : new Color(1f, 0.76f, 0.76f, 1f));
+		ApplyDefaultPlacedPropLogic(sprite, preview, propDefinitionPath);
 		sprite.AddChild(CreateSelectionOutline(GetSpriteBoundsSize(sprite)));
 		return sprite;
 	}
@@ -1071,6 +1433,7 @@ public partial class MissionSceneBuilder : Node2D
 		sprite.SetMeta("logic_trigger_mode", defaultTriggerMode);
 		sprite.SetMeta("logic_once", false);
 		sprite.SetMeta("logic_notes", string.Empty);
+		sprite.SetMeta("prop_definition_path", GetDefaultPropDefinitionPath(definition.Id));
 	}
 
 	private Sprite2D CreateMarker(MissionMarkerDefinition definition, int column, int row)
@@ -1119,6 +1482,87 @@ public partial class MissionSceneBuilder : Node2D
 		sprite.SetMeta("logic_trigger_mode", definition.Category == MissionMarkerCategory.Trigger ? "enter" : "none");
 		sprite.SetMeta("logic_once", definition.Category == MissionMarkerCategory.Trigger);
 		sprite.SetMeta("logic_notes", string.Empty);
+		sprite.SetMeta("prop_definition_path", GetDefaultPropDefinitionPath(definition.Id));
+	}
+
+	private void ApplyDefaultPlacedPropLogic(Sprite2D sprite, PropDefinitionPreview preview, string propDefinitionPath)
+	{
+		sprite.SetMeta("logic_role", "prop");
+		sprite.SetMeta("logic_label", preview.DisplayName);
+		sprite.SetMeta("logic_target_id", string.Empty);
+		sprite.SetMeta("logic_npc_portrait", string.Empty);
+		sprite.SetMeta("logic_required_flag", string.Empty);
+		sprite.SetMeta("logic_set_flag", string.Empty);
+		sprite.SetMeta("logic_trigger_mode", "interact");
+		sprite.SetMeta("logic_once", false);
+		sprite.SetMeta("logic_notes", preview.Description);
+		sprite.SetMeta("prop_definition_path", propDefinitionPath);
+		ApplyMissionSpecificPlacedPropDefaults(sprite, propDefinitionPath);
+	}
+
+	private void ApplyMissionSpecificPlacedPropDefaults(Sprite2D sprite, string propDefinitionPath)
+	{
+		if (sprite == null || string.IsNullOrWhiteSpace(propDefinitionPath) || !ResourceLoader.Exists(propDefinitionPath))
+		{
+			return;
+		}
+
+		MissionTemplate missionTemplate = GetMissionTemplateForCurrentLayout();
+		if (missionTemplate == null)
+		{
+			return;
+		}
+
+		PropDefinition definition = GD.Load<PropDefinition>(propDefinitionPath);
+		if (definition == null)
+		{
+			return;
+		}
+
+		string suggestedTargetId = PropPlacementOverrides.GetSuggestedTargetId(missionTemplate, definition);
+		if (!string.IsNullOrWhiteSpace(suggestedTargetId))
+		{
+			sprite.SetMeta("logic_target_id", suggestedTargetId);
+		}
+
+		string suggestedNotes = PropPlacementOverrides.GetSuggestedNotes(missionTemplate, definition);
+		if (!string.IsNullOrWhiteSpace(suggestedNotes))
+		{
+			sprite.SetMeta("logic_notes", suggestedNotes);
+		}
+	}
+
+	private MissionTemplate GetMissionTemplateForCurrentLayout()
+	{
+		string currentLayoutPath = GetCurrentLayoutResourcePath();
+		if (string.IsNullOrWhiteSpace(currentLayoutPath))
+		{
+			return null;
+		}
+
+		const string missionTemplateDirectory = "res://Data/Missions/Templates";
+		foreach (string file in DirAccess.GetFilesAt(missionTemplateDirectory).Where(name => name.EndsWith(".tres") || name.EndsWith(".res")))
+		{
+			string resourcePath = $"{missionTemplateDirectory}/{file}";
+			MissionTemplate template = GD.Load<MissionTemplate>(resourcePath);
+			if (template != null && string.Equals(template.LayoutResourcePath, currentLayoutPath, System.StringComparison.OrdinalIgnoreCase))
+			{
+				return template;
+			}
+		}
+
+		return null;
+	}
+
+	private string GetCurrentLayoutResourcePath()
+	{
+		string layoutName = _layoutNameEdit?.Text.StripEdges() ?? string.Empty;
+		if (string.IsNullOrEmpty(layoutName))
+		{
+			layoutName = "black_site_relay_builder";
+		}
+
+		return $"res://Data/MissionLayouts/{layoutName}.json";
 	}
 
 	private void UpdateMarkerCaption(Sprite2D sprite)
@@ -1293,6 +1737,7 @@ public partial class MissionSceneBuilder : Node2D
 					item["logic_trigger_mode"] = sprite.GetMeta("logic_trigger_mode", "none").AsString();
 					item["logic_once"] = sprite.GetMeta("logic_once", false).AsBool();
 					item["logic_notes"] = sprite.GetMeta("logic_notes", string.Empty).AsString();
+					item["prop_definition_path"] = sprite.GetMeta("prop_definition_path", string.Empty).AsString();
 				}
 				else
 				{
@@ -1306,6 +1751,7 @@ public partial class MissionSceneBuilder : Node2D
 					item["logic_trigger_mode"] = sprite.GetMeta("logic_trigger_mode", "none").AsString();
 					item["logic_once"] = sprite.GetMeta("logic_once", false).AsBool();
 					item["logic_notes"] = sprite.GetMeta("logic_notes", string.Empty).AsString();
+					item["prop_definition_path"] = sprite.GetMeta("prop_definition_path", string.Empty).AsString();
 				}
 
 				items.Add(item);
@@ -1381,10 +1827,36 @@ public partial class MissionSceneBuilder : Node2D
 				marker.SetMeta("logic_trigger_mode", tile.TryGetValue("logic_trigger_mode", out Variant logicTriggerVariant) ? logicTriggerVariant.AsString() : marker.GetMeta("logic_trigger_mode", "none").AsString());
 				marker.SetMeta("logic_once", tile.TryGetValue("logic_once", out Variant logicOnceVariant) ? logicOnceVariant.AsBool() : marker.GetMeta("logic_once", false).AsBool());
 				marker.SetMeta("logic_notes", tile.TryGetValue("logic_notes", out Variant logicNotesVariant) ? logicNotesVariant.AsString() : string.Empty);
+				marker.SetMeta("prop_definition_path", tile.TryGetValue("prop_definition_path", out Variant propDefinitionVariant) ? propDefinitionVariant.AsString() : string.Empty);
 				marker.RotationDegrees = rotationDegrees;
 				MoveSpriteToCell(marker, column, row);
 				UpdateMarkerCaption(marker);
 				GetPlacementLayer(BuilderLayer.Marker).AddChild(marker);
+				continue;
+			}
+
+			if (itemType == "placed_prop" || (string.IsNullOrEmpty(tileId) && tile.TryGetValue("prop_definition_path", out Variant placedPropPathVariant) && !string.IsNullOrEmpty(placedPropPathVariant.AsString())))
+			{
+				string placedPropDefinitionPath = tile.TryGetValue("prop_definition_path", out Variant placedPropDefinitionVariant)
+					? placedPropDefinitionVariant.AsString()
+					: string.Empty;
+				Sprite2D placedPropSprite = CreatePlacedPropSprite(placedPropDefinitionPath, column, row);
+				placedPropSprite.SetMeta("offset_x", offsetX);
+				placedPropSprite.SetMeta("offset_y", offsetY);
+				placedPropSprite.SetMeta("rotation_degrees", rotationDegrees);
+				placedPropSprite.SetMeta("logic_role", tile.TryGetValue("logic_role", out Variant placedPropLogicRoleVariant) ? placedPropLogicRoleVariant.AsString() : "prop");
+				placedPropSprite.SetMeta("logic_label", tile.TryGetValue("logic_label", out Variant placedPropLogicLabelVariant) ? placedPropLogicLabelVariant.AsString() : placedPropSprite.GetMeta("logic_label", GetPropDefinitionPreview(placedPropDefinitionPath).DisplayName).AsString());
+				placedPropSprite.SetMeta("logic_target_id", tile.TryGetValue("logic_target_id", out Variant placedPropLogicTargetVariant) ? placedPropLogicTargetVariant.AsString() : string.Empty);
+				placedPropSprite.SetMeta("logic_npc_portrait", tile.TryGetValue("logic_npc_portrait", out Variant placedPropLogicPortraitVariant) ? placedPropLogicPortraitVariant.AsString() : string.Empty);
+				placedPropSprite.SetMeta("logic_required_flag", tile.TryGetValue("logic_required_flag", out Variant placedPropLogicRequiredVariant) ? placedPropLogicRequiredVariant.AsString() : string.Empty);
+				placedPropSprite.SetMeta("logic_set_flag", tile.TryGetValue("logic_set_flag", out Variant placedPropLogicSetVariant) ? placedPropLogicSetVariant.AsString() : string.Empty);
+				placedPropSprite.SetMeta("logic_trigger_mode", tile.TryGetValue("logic_trigger_mode", out Variant placedPropLogicTriggerVariant) ? placedPropLogicTriggerVariant.AsString() : "interact");
+				placedPropSprite.SetMeta("logic_once", tile.TryGetValue("logic_once", out Variant placedPropLogicOnceVariant) ? placedPropLogicOnceVariant.AsBool() : false);
+				placedPropSprite.SetMeta("logic_notes", tile.TryGetValue("logic_notes", out Variant placedPropLogicNotesVariant) ? placedPropLogicNotesVariant.AsString() : string.Empty);
+				placedPropSprite.SetMeta("prop_definition_path", placedPropDefinitionPath);
+				placedPropSprite.RotationDegrees = rotationDegrees;
+				MoveSpriteToCell(placedPropSprite, column, row);
+				GetPlacementLayer(BuilderLayer.Prop).AddChild(placedPropSprite);
 				continue;
 			}
 
@@ -1406,6 +1878,7 @@ public partial class MissionSceneBuilder : Node2D
 			sprite.SetMeta("logic_trigger_mode", tile.TryGetValue("logic_trigger_mode", out Variant tileLogicTriggerVariant) ? tileLogicTriggerVariant.AsString() : sprite.GetMeta("logic_trigger_mode", "none").AsString());
 			sprite.SetMeta("logic_once", tile.TryGetValue("logic_once", out Variant tileLogicOnceVariant) ? tileLogicOnceVariant.AsBool() : sprite.GetMeta("logic_once", false).AsBool());
 			sprite.SetMeta("logic_notes", tile.TryGetValue("logic_notes", out Variant tileLogicNotesVariant) ? tileLogicNotesVariant.AsString() : string.Empty);
+			sprite.SetMeta("prop_definition_path", tile.TryGetValue("prop_definition_path", out Variant tilePropDefinitionVariant) ? tilePropDefinitionVariant.AsString() : string.Empty);
 			sprite.RotationDegrees = rotationDegrees;
 			MoveSpriteToCell(sprite, column, row);
 			GetPlacementLayer(GetLayerForTile(definition)).AddChild(sprite);
@@ -1554,6 +2027,7 @@ public partial class MissionSceneBuilder : Node2D
 			string triggerMode = marker.GetMeta("logic_trigger_mode", "none").AsString();
 			string targetId = marker.GetMeta("logic_target_id", string.Empty).AsString();
 			string markerLabel = marker.GetMeta("logic_label", markerId).AsString();
+			string propDefinitionPath = marker.GetMeta("prop_definition_path", string.Empty).AsString();
 
 			if (markerId.StartsWith("trigger_"))
 			{
@@ -1566,6 +2040,16 @@ public partial class MissionSceneBuilder : Node2D
 				{
 					issues.Add($"{markerLabel} should use Enter or Interact trigger mode.");
 				}
+
+				if (triggerMode == "interact" && string.IsNullOrEmpty(propDefinitionPath))
+				{
+					issues.Add($"{markerLabel} uses Interact mode but has no Prop Definition Path assigned.");
+				}
+			}
+
+			if (!string.IsNullOrEmpty(propDefinitionPath) && !ResourceLoader.Exists(propDefinitionPath))
+			{
+				issues.Add($"{markerLabel} points to missing prop definition {propDefinitionPath}.");
 			}
 		}
 
@@ -1576,9 +2060,16 @@ public partial class MissionSceneBuilder : Node2D
 		HashSet<string> doorIds = new HashSet<string>();
 		foreach (Sprite2D prop in logicProps)
 		{
+			string itemType = prop.GetMeta("item_type", "tile").AsString();
 			string logicRole = prop.GetMeta("logic_role", string.Empty).AsString();
 			string label = prop.GetMeta("logic_label", GetItemDisplayId(prop)).AsString();
 			string targetId = prop.GetMeta("logic_target_id", string.Empty).AsString();
+			string propDefinitionPath = prop.GetMeta("prop_definition_path", string.Empty).AsString();
+
+			if (itemType == "placed_prop" && string.IsNullOrEmpty(propDefinitionPath))
+			{
+				issues.Add($"{label} is a placed prop but has no Prop Definition Path assigned.");
+			}
 
 			if (logicRole == "door")
 			{
@@ -1589,6 +2080,23 @@ public partial class MissionSceneBuilder : Node2D
 				else if (!doorIds.Add(targetId))
 				{
 					issues.Add($"Door ID {targetId} is used more than once.");
+				}
+			}
+			else if (logicRole == "terminal" && string.IsNullOrEmpty(propDefinitionPath))
+			{
+				issues.Add($"{label} needs a Prop Definition Path to spawn a runtime terminal prop.");
+			}
+
+			if (!string.IsNullOrEmpty(propDefinitionPath) && !ResourceLoader.Exists(propDefinitionPath))
+			{
+				issues.Add($"{label} points to missing prop definition {propDefinitionPath}.");
+			}
+			else if (itemType == "placed_prop" && !string.IsNullOrEmpty(propDefinitionPath))
+			{
+				PropDefinition definition = GD.Load<PropDefinition>(propDefinitionPath);
+				if (definition != null && string.IsNullOrWhiteSpace(definition.ScenePath))
+				{
+					issues.Add($"{label} uses {definition.DisplayName} but that prop definition has no ScenePath.");
 				}
 			}
 		}
@@ -1698,10 +2206,147 @@ public partial class MissionSceneBuilder : Node2D
 		return IsDoorTileId(tileId) || IsTerminalTileId(tileId);
 	}
 
+	private static string GetDefaultPropDefinitionPath(string itemId)
+	{
+		return itemId switch
+		{
+			"trigger_dialogue" => "res://Data/Missions/Props/Definitions/dialogue_terminal.tres",
+			"objective_archive" => "res://Data/Missions/Props/Definitions/smuggler_cache_crate.tres",
+			_ when IsTerminalTileId(itemId) => "res://Data/Missions/Props/Definitions/door_control_terminal.tres",
+			_ => string.Empty
+		};
+	}
+
+	private PropDefinitionPreview GetPropDefinitionPreview(string path)
+	{
+		string normalizedPath = path?.StripEdges() ?? string.Empty;
+		if (_propDefinitionPreviewCache.TryGetValue(normalizedPath, out PropDefinitionPreview cached))
+		{
+			return cached;
+		}
+
+		PropDefinitionPreview preview = BuildPropDefinitionPreview(normalizedPath);
+		_propDefinitionPreviewCache[normalizedPath] = preview;
+		return preview;
+	}
+
+	private PropDefinitionPreview BuildPropDefinitionPreview(string path)
+	{
+		if (string.IsNullOrEmpty(path))
+		{
+			return new PropDefinitionPreview
+			{
+				Path = string.Empty,
+				DisplayName = "None",
+				Description = "No prop definition selected.",
+				Exists = true
+			};
+		}
+
+		bool exists = ResourceLoader.Exists(path);
+		PropDefinition definition = exists ? GD.Load<PropDefinition>(path) : null;
+		Texture2D icon = null;
+		if (definition != null && !string.IsNullOrEmpty(definition.SpriteTexturePath) && ResourceLoader.Exists(definition.SpriteTexturePath))
+		{
+			icon = GD.Load<Texture2D>(definition.SpriteTexturePath);
+		}
+
+		string fallbackName = System.IO.Path.GetFileNameWithoutExtension(path);
+		string displayName = definition?.DisplayName;
+		if (string.IsNullOrEmpty(displayName))
+		{
+			displayName = string.IsNullOrEmpty(fallbackName) ? "Unnamed" : fallbackName.Replace('_', ' ');
+		}
+
+		string description = definition?.Description ?? string.Empty;
+		if (!exists)
+		{
+			description = $"Missing prop resource.\n{path}";
+		}
+		else if (string.IsNullOrEmpty(description))
+		{
+			description = path;
+		}
+
+		return new PropDefinitionPreview
+		{
+			Path = path,
+			DisplayName = displayName,
+			Description = description,
+			Icon = icon,
+			Exists = exists
+		};
+	}
+
+	private void UpdatePropDefinitionPreview(string path)
+	{
+		if (_logicPropDefinitionPreviewLabel == null || _logicPropDefinitionPreviewIcon == null)
+		{
+			return;
+		}
+
+		PropDefinitionPreview preview = GetPropDefinitionPreview(path);
+		_logicPropDefinitionPreviewIcon.Texture = preview.Icon;
+		_logicPropDefinitionPreviewIcon.Visible = preview.Icon != null;
+		_logicPropDefinitionPreviewLabel.Text = string.IsNullOrEmpty(preview.Path)
+			? "No prop definition selected."
+			: $"{preview.DisplayName}\n{preview.Description}";
+	}
+
+	private static List<string> GetAvailablePropDefinitionPaths()
+	{
+		const string propDefinitionsDirectory = "res://Data/Missions/Props/Definitions";
+		return DirAccess.GetFilesAt(propDefinitionsDirectory)
+			.Where(file => file.EndsWith(".tres") || file.EndsWith(".res"))
+			.OrderBy(file => file)
+			.Select(file => $"{propDefinitionsDirectory}/{file}")
+			.ToList();
+	}
+
+	private static Texture2D GetFallbackPropPreviewTexture()
+	{
+		Image image = Image.CreateEmpty(84, 84, false, Image.Format.Rgba8);
+		Color frame = new Color(0.47f, 0.86f, 0.92f, 1f);
+		Color fill = new Color(0.13f, 0.22f, 0.28f, 0.85f);
+		for (int y = 0; y < 84; y++)
+		{
+			for (int x = 0; x < 84; x++)
+			{
+				bool border = x < 6 || x >= 78 || y < 6 || y >= 78;
+				image.SetPixel(x, y, border ? frame : fill);
+			}
+		}
+
+		return ImageTexture.CreateFromImage(image);
+	}
+
+	private static Vector2 GetPlacedPropPreviewScale(Texture2D texture)
+	{
+		if (texture == null)
+		{
+			return Vector2.One;
+		}
+
+		Vector2 size = texture.GetSize();
+		float maxDimension = Mathf.Max(size.X, size.Y);
+		if (maxDimension <= 0f)
+		{
+			return Vector2.One;
+		}
+
+		float scale = maxDimension > 132f ? 132f / maxDimension : 1f;
+		return new Vector2(scale, scale);
+	}
+
 	private static bool IsLogicCapableSprite(Sprite2D sprite)
 	{
 		string tileId = sprite?.GetMeta("tile_id", string.Empty).AsString() ?? string.Empty;
 		return !string.IsNullOrEmpty(tileId) && IsLogicCapableTileId(tileId);
+	}
+
+	private static bool IsPlacedPropSprite(Sprite2D sprite)
+	{
+		return sprite?.GetMeta("item_type", string.Empty).AsString() == "placed_prop";
 	}
 
 	private BuilderLayer GetLayerForTile(MissionTileDefinition definition)
@@ -1747,6 +2392,11 @@ public partial class MissionSceneBuilder : Node2D
 		if (!string.IsNullOrEmpty(markerId))
 		{
 			return markerId;
+		}
+
+		if (IsPlacedPropSprite(sprite))
+		{
+			return GetPropDefinitionPreview(sprite.GetMeta("prop_definition_path", string.Empty).AsString()).DisplayName;
 		}
 
 		return sprite.GetMeta("tile_id", "").AsString();

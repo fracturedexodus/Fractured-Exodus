@@ -266,6 +266,7 @@ public class PlanetSaveData
 	public bool HasBeenScanned { get; set; }
 	public bool HasBeenSalvaged { get; set; }
 	public bool IsBlackSiteRelaySite { get; set; }
+	public string MissionInteractionKey { get; set; } = string.Empty;
 
 	public static PlanetSaveData FromRuntime(PlanetData planet)
 	{
@@ -280,7 +281,8 @@ public class PlanetSaveData
 			StartingAngle = planet.StartingAngle,
 			HasBeenScanned = planet.HasBeenScanned,
 			HasBeenSalvaged = planet.HasBeenSalvaged,
-			IsBlackSiteRelaySite = planet.IsBlackSiteRelaySite
+			IsBlackSiteRelaySite = planet.IsBlackSiteRelaySite,
+			MissionInteractionKey = planet.MissionInteractionKey
 		};
 	}
 
@@ -297,7 +299,8 @@ public class PlanetSaveData
 			StartingAngle = StartingAngle,
 			HasBeenScanned = HasBeenScanned,
 			HasBeenSalvaged = HasBeenSalvaged,
-			IsBlackSiteRelaySite = IsBlackSiteRelaySite
+			IsBlackSiteRelaySite = IsBlackSiteRelaySite,
+			MissionInteractionKey = MissionInteractionKey
 		};
 	}
 
@@ -314,7 +317,8 @@ public class PlanetSaveData
 			StartingAngle = dict.ContainsKey("StartingAngle") ? (float)dict["StartingAngle"] : 0f,
 			HasBeenScanned = dict.ContainsKey("HasBeenScanned") && (bool)dict["HasBeenScanned"],
 			HasBeenSalvaged = dict.ContainsKey("HasBeenSalvaged") && (bool)dict["HasBeenSalvaged"],
-			IsBlackSiteRelaySite = dict.ContainsKey("IsBlackSiteRelaySite") && (bool)dict["IsBlackSiteRelaySite"]
+			IsBlackSiteRelaySite = dict.ContainsKey("IsBlackSiteRelaySite") && (bool)dict["IsBlackSiteRelaySite"],
+			MissionInteractionKey = dict.ContainsKey("MissionInteractionKey") ? (string)dict["MissionInteractionKey"] : string.Empty
 		};
 	}
 
@@ -331,7 +335,8 @@ public class PlanetSaveData
 			{ "StartingAngle", StartingAngle },
 			{ "HasBeenScanned", HasBeenScanned },
 			{ "HasBeenSalvaged", HasBeenSalvaged },
-			{ "IsBlackSiteRelaySite", IsBlackSiteRelaySite }
+			{ "IsBlackSiteRelaySite", IsBlackSiteRelaySite },
+			{ "MissionInteractionKey", MissionInteractionKey }
 		};
 	}
 }
@@ -341,6 +346,7 @@ public class OutpostSaveData
 	public string Name { get; set; } = string.Empty;
 	public Vector2ISaveData HexPosition { get; set; } = new Vector2ISaveData();
 	public string SpritePath { get; set; } = string.Empty;
+	public string MissionInteractionKey { get; set; } = string.Empty;
 
 	public static OutpostSaveData FromRuntime(OutpostData outpost)
 	{
@@ -348,7 +354,8 @@ public class OutpostSaveData
 		{
 			Name = outpost.Name,
 			HexPosition = Vector2ISaveData.FromVector2I(outpost.HexPosition),
-			SpritePath = outpost.SpritePath
+			SpritePath = outpost.SpritePath,
+			MissionInteractionKey = outpost.MissionInteractionKey
 		};
 	}
 
@@ -358,7 +365,8 @@ public class OutpostSaveData
 		{
 			Name = Name,
 			HexPosition = HexPosition.ToVector2I(),
-			SpritePath = SpritePath
+			SpritePath = SpritePath,
+			MissionInteractionKey = MissionInteractionKey
 		};
 	}
 
@@ -372,7 +380,8 @@ public class OutpostSaveData
 				{ "Q", dict.ContainsKey("Q") ? dict["Q"] : 0 },
 				{ "R", dict.ContainsKey("R") ? dict["R"] : 0 }
 			}),
-			SpritePath = dict.ContainsKey("SpritePath") ? (string)dict["SpritePath"] : string.Empty
+			SpritePath = dict.ContainsKey("SpritePath") ? (string)dict["SpritePath"] : string.Empty,
+			MissionInteractionKey = dict.ContainsKey("MissionInteractionKey") ? (string)dict["MissionInteractionKey"] : string.Empty
 		};
 	}
 
@@ -383,7 +392,8 @@ public class OutpostSaveData
 			{ "Name", Name },
 			{ "Q", HexPosition.Q },
 			{ "R", HexPosition.R },
-			{ "SpritePath", SpritePath }
+			{ "SpritePath", SpritePath },
+			{ "MissionInteractionKey", MissionInteractionKey }
 		};
 	}
 }
@@ -554,8 +564,13 @@ public class CampaignSaveData
 	public List<string> PendingDowntimeEvents { get; set; } = new List<string>();
 	public string CurrentMissionID { get; set; } = string.Empty;
 	public string CurrentMissionTitle { get; set; } = string.Empty;
+	public string CurrentMissionScenePath { get; set; } = string.Empty;
+	public string CurrentMissionTemplatePath { get; set; } = string.Empty;
 	public string MissionReturnScenePath { get; set; } = string.Empty;
 	public string MissionSourceEncounterName { get; set; } = string.Empty;
+	public string MissionSourceNodeType { get; set; } = string.Empty;
+	public string MissionSourceNodeID { get; set; } = string.Empty;
+	public string MissionSourceInteractionKey { get; set; } = string.Empty;
 	public List<string> SelectedMissionOfficerShipNames { get; set; } = new List<string>();
 	public List<string> SelectedMissionOfficerIDs { get; set; } = new List<string>();
 	public List<string> CompletedMissionIDs { get; set; } = new List<string>();
@@ -584,8 +599,13 @@ public class CampaignSaveData
 			PendingDowntimeEvents = (globalData.PendingDowntimeEvents ?? new List<string>()).ToList(),
 			CurrentMissionID = globalData.CurrentMissionID,
 			CurrentMissionTitle = globalData.CurrentMissionTitle,
+			CurrentMissionScenePath = globalData.CurrentMissionScenePath,
+			CurrentMissionTemplatePath = globalData.CurrentMissionTemplatePath,
 			MissionReturnScenePath = globalData.MissionReturnScenePath,
 			MissionSourceEncounterName = globalData.MissionSourceEncounterName,
+			MissionSourceNodeType = globalData.MissionSourceNodeType,
+			MissionSourceNodeID = globalData.MissionSourceNodeID,
+			MissionSourceInteractionKey = globalData.MissionSourceInteractionKey,
 			SelectedMissionOfficerShipNames = (globalData.SelectedMissionOfficerShipNames ?? new List<string>()).ToList(),
 			SelectedMissionOfficerIDs = (globalData.SelectedMissionOfficerIDs ?? new List<string>()).ToList(),
 			CompletedMissionIDs = (globalData.CompletedMissionIDs ?? new List<string>()).ToList(),
@@ -619,8 +639,13 @@ public class CampaignSaveData
 		globalData.PendingDowntimeEvents = PendingDowntimeEvents.ToList();
 		globalData.CurrentMissionID = CurrentMissionID;
 		globalData.CurrentMissionTitle = CurrentMissionTitle;
+		globalData.CurrentMissionScenePath = CurrentMissionScenePath;
+		globalData.CurrentMissionTemplatePath = CurrentMissionTemplatePath;
 		globalData.MissionReturnScenePath = MissionReturnScenePath;
 		globalData.MissionSourceEncounterName = MissionSourceEncounterName;
+		globalData.MissionSourceNodeType = MissionSourceNodeType;
+		globalData.MissionSourceNodeID = MissionSourceNodeID;
+		globalData.MissionSourceInteractionKey = MissionSourceInteractionKey;
 		globalData.SelectedMissionOfficerShipNames = SelectedMissionOfficerShipNames.ToList();
 		globalData.SelectedMissionOfficerIDs = SelectedMissionOfficerIDs.ToList();
 		globalData.CompletedMissionIDs = CompletedMissionIDs.ToList();
@@ -680,8 +705,13 @@ public class CampaignSaveData
 			{ "PendingDowntimeEvents", ToVariantArray(PendingDowntimeEvents) },
 			{ "CurrentMissionID", CurrentMissionID },
 			{ "CurrentMissionTitle", CurrentMissionTitle },
+			{ "CurrentMissionScenePath", CurrentMissionScenePath },
+			{ "CurrentMissionTemplatePath", CurrentMissionTemplatePath },
 			{ "MissionReturnScenePath", MissionReturnScenePath },
 			{ "MissionSourceEncounterName", MissionSourceEncounterName },
+			{ "MissionSourceNodeType", MissionSourceNodeType },
+			{ "MissionSourceNodeID", MissionSourceNodeID },
+			{ "MissionSourceInteractionKey", MissionSourceInteractionKey },
 			{ "SelectedMissionOfficerShipNames", ToVariantArray(SelectedMissionOfficerShipNames) },
 			{ "SelectedMissionOfficerIDs", ToVariantArray(SelectedMissionOfficerIDs) },
 			{ "CompletedMissionIDs", ToVariantArray(CompletedMissionIDs) },
@@ -712,8 +742,13 @@ public class CampaignSaveData
 			PendingDowntimeEvents = FromStringArray(dict.ContainsKey("PendingDowntimeEvents") ? (Godot.Collections.Array)dict["PendingDowntimeEvents"] : new Godot.Collections.Array()),
 			CurrentMissionID = dict.ContainsKey("CurrentMissionID") ? (string)dict["CurrentMissionID"] : string.Empty,
 			CurrentMissionTitle = dict.ContainsKey("CurrentMissionTitle") ? (string)dict["CurrentMissionTitle"] : string.Empty,
+			CurrentMissionScenePath = dict.ContainsKey("CurrentMissionScenePath") ? (string)dict["CurrentMissionScenePath"] : string.Empty,
+			CurrentMissionTemplatePath = dict.ContainsKey("CurrentMissionTemplatePath") ? (string)dict["CurrentMissionTemplatePath"] : string.Empty,
 			MissionReturnScenePath = dict.ContainsKey("MissionReturnScenePath") ? (string)dict["MissionReturnScenePath"] : string.Empty,
 			MissionSourceEncounterName = dict.ContainsKey("MissionSourceEncounterName") ? (string)dict["MissionSourceEncounterName"] : string.Empty,
+			MissionSourceNodeType = dict.ContainsKey("MissionSourceNodeType") ? (string)dict["MissionSourceNodeType"] : string.Empty,
+			MissionSourceNodeID = dict.ContainsKey("MissionSourceNodeID") ? (string)dict["MissionSourceNodeID"] : string.Empty,
+			MissionSourceInteractionKey = dict.ContainsKey("MissionSourceInteractionKey") ? (string)dict["MissionSourceInteractionKey"] : string.Empty,
 			SelectedMissionOfficerShipNames = FromStringArray(dict.ContainsKey("SelectedMissionOfficerShipNames") ? (Godot.Collections.Array)dict["SelectedMissionOfficerShipNames"] : new Godot.Collections.Array()),
 			SelectedMissionOfficerIDs = FromStringArray(dict.ContainsKey("SelectedMissionOfficerIDs") ? (Godot.Collections.Array)dict["SelectedMissionOfficerIDs"] : new Godot.Collections.Array()),
 			CompletedMissionIDs = FromStringArray(dict.ContainsKey("CompletedMissionIDs") ? (Godot.Collections.Array)dict["CompletedMissionIDs"] : new Godot.Collections.Array()),

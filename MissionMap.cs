@@ -4,7 +4,7 @@ using System.Linq;
 
 public partial class MissionMap : Node2D
 {
-	private const string MissionId = "black_site_relay";
+	private const string DefaultMissionId = "black_site_relay";
 	private const float DefaultZoom = 0.52f;
 	private const float MinZoom = 0.75f;
 	private const float MaxZoom = 2.00f;
@@ -15,6 +15,7 @@ public partial class MissionMap : Node2D
 	private GlobalData _globalData;
 	private MissionService _missionService;
 	private MissionRuntimeState _missionState;
+	private MissionTemplate _missionTemplate;
 	private MissionUI _missionUi;
 	private DialogueUI _dialogueUi;
 	private Node2D _isoWorld;
@@ -24,6 +25,8 @@ public partial class MissionMap : Node2D
 	private TextureRect _backgroundBackdrop;
 	private Sprite2D _backgroundFeatureSprite;
 	private readonly List<OfficerPawn> _officerPawns = new List<OfficerPawn>();
+	private readonly Dictionary<Vector2I, MissionProp> _missionPropsByCell = new Dictionary<Vector2I, MissionProp>();
+	private readonly Dictionary<string, MissionRoomBuilder.MarkerPlacement> _propPlacementsByInstanceId = new Dictionary<string, MissionRoomBuilder.MarkerPlacement>();
 	private readonly HashSet<string> _consumedTriggerKeys = new HashSet<string>();
 	private readonly HashSet<Vector2I> _exploredCells = new HashSet<Vector2I>();
 	private readonly HashSet<Vector2I> _visibleCells = new HashSet<Vector2I>();
@@ -32,6 +35,7 @@ public partial class MissionMap : Node2D
 	private Vector2 _lastMouseScreenPosition;
 	private string _pendingInteractionKey = string.Empty;
 	private string _pendingInteractionOfficerId = string.Empty;
+	private string _pendingPropInstanceId = string.Empty;
 
 	public override void _Ready()
 	{
@@ -48,10 +52,14 @@ public partial class MissionMap : Node2D
 
 		if (_missionState == null || string.IsNullOrEmpty(_missionState.MissionID))
 		{
-			_missionState = _missionService.PrepareMission(MissionId, "res://exploration_battle.tscn", "Black Site Relay Beacon");
+			_missionState = _missionService.PrepareMission(DefaultMissionId, "res://exploration_battle.tscn", "Black Site Relay Beacon");
 		}
 
+		_missionTemplate = _missionService.GetTemplate(GetActiveMissionId());
+		ApplyMissionTemplateToRoomBuilder();
+
 		_roomBuilder?.BuildRoom();
+		SpawnMissionProps();
 		ApplyMissionBackground();
 		ConfigureMissionView();
 		SpawnMissionOfficers();
@@ -421,13 +429,24 @@ public partial class MissionMap : Node2D
 		}
 
 		string title = _missionState?.MissionTitle ?? "Away Mission";
+		string objective = string.IsNullOrWhiteSpace(_missionTemplate?.ObjectiveText)
+			? "OBJECTIVE: Investigate the relay, assess the survivors, and decide what to save."
+			: _missionTemplate.ObjectiveText;
+		string prompt = string.IsNullOrWhiteSpace(_missionTemplate?.PromptText)
+			? "Controls: left click an officer to select, left click a floor tile to move, TAB or 1-2 to switch officers, middle mouse drag or WASD to pan, mouse wheel or +/- to zoom, ESC to return."
+			: _missionTemplate.PromptText;
 		_missionUi.SetMissionText(
 			title.ToUpper(),
-			"OBJECTIVE: Investigate the relay, assess the survivors, and decide what to save.",
-			"Controls: left click an officer to select, left click a floor tile to move, TAB or 1-2 to switch officers, middle mouse drag or WASD to pan, mouse wheel or +/- to zoom, ESC to return.");
+			objective,
+			prompt);
+		_missionUi.SetActionButtonText(
+			string.IsNullOrWhiteSpace(_missionTemplate?.PrimaryActionText) ? "SAVE SURVIVORS" : _missionTemplate.PrimaryActionText,
+			string.IsNullOrWhiteSpace(_missionTemplate?.SecondaryActionText) ? "SECURE ARCHIVE" : _missionTemplate.SecondaryActionText);
 
-		_missionUi.SaveSurvivorsButton.Pressed += () => CompleteMission(BuildOutcome("survivors_saved"));
-		_missionUi.SecureArchiveButton.Pressed += () => CompleteMission(BuildOutcome("archive_secured"));
+		_missionUi.SaveSurvivorsButton.Pressed += () => CompleteMission(BuildOutcome(
+			GetPrimaryOutcomeId()));
+		_missionUi.SecureArchiveButton.Pressed += () => CompleteMission(BuildOutcome(
+			GetSecondaryOutcomeId()));
 		_missionUi.ReturnButton.Pressed += ReturnWithoutOutcome;
 	}
 
@@ -487,9 +506,10 @@ public partial class MissionMap : Node2D
 
 	private MissionOutcome BuildOutcome(string outcomeId)
 	{
+		string missionId = GetActiveMissionId();
 		MissionOutcome outcome = new MissionOutcome
 		{
-			MissionID = MissionId,
+			MissionID = missionId,
 			OutcomeID = outcomeId,
 			IsSuccess = true
 		};
@@ -498,6 +518,45 @@ public partial class MissionMap : Node2D
 			.Select(shipName => _globalData?.ShipOfficers != null && _globalData.ShipOfficers.TryGetValue(shipName, out OfficerState officer) ? officer : null)
 			.Where(officer => officer != null)
 			.ToList();
+
+		if (missionId == "outpost_smuggler_exchange")
+		{
+			if (outcomeId == "deal_cut")
+			{
+				outcome.Reward.RawMaterials = 35;
+				outcome.Reward.EnergyCores = 1;
+				outcome.Reward.AncientTech = 2;
+				outcome.FlagsToSet.Add("smuggler_exchange_deal_cut");
+
+				foreach (OfficerState officer in officers)
+				{
+					int delta = 0;
+					if (officer.Ideology == "TechnoReclamation") delta += 1;
+					if (officer.Archetype == "Pragmatist") delta += 1;
+					if (officer.Archetype == "Scholar") delta += 1;
+					if (officer.Ideology == "Humanitarian") delta -= 1;
+					if (delta != 0) outcome.ApprovalChanges[officer.OfficerID] = delta;
+				}
+			}
+			else
+			{
+				outcome.Reward.RawMaterials = 90;
+				outcome.Reward.EnergyCores = 2;
+				outcome.FlagsToSet.Add("smuggler_exchange_contraband_seized");
+
+				foreach (OfficerState officer in officers)
+				{
+					int delta = 0;
+					if (officer.Archetype == "Pragmatist") delta += 1;
+					if (officer.Specialty == "Security") delta += 1;
+					if (officer.Ideology == "Humanitarian") delta -= 1;
+					if (officer.Archetype == "Idealist") delta -= 1;
+					if (delta != 0) outcome.ApprovalChanges[officer.OfficerID] = delta;
+				}
+			}
+
+			return outcome;
+		}
 
 		if (outcomeId == "survivors_saved")
 		{
@@ -535,6 +594,34 @@ public partial class MissionMap : Node2D
 		}
 
 		return outcome;
+	}
+
+	private string GetActiveMissionId()
+	{
+		return string.IsNullOrEmpty(_missionState?.MissionID) ? DefaultMissionId : _missionState.MissionID;
+	}
+
+	private void ApplyMissionTemplateToRoomBuilder()
+	{
+		if (_roomBuilder == null || _missionTemplate == null)
+		{
+			return;
+		}
+
+		if (!string.IsNullOrWhiteSpace(_missionTemplate.LayoutResourcePath))
+		{
+			_roomBuilder.LayoutResourcePath = _missionTemplate.LayoutResourcePath;
+		}
+	}
+
+	private string GetPrimaryOutcomeId()
+	{
+		return string.IsNullOrWhiteSpace(_missionTemplate?.PrimaryOutcomeId) ? "survivors_saved" : _missionTemplate.PrimaryOutcomeId;
+	}
+
+	private string GetSecondaryOutcomeId()
+	{
+		return string.IsNullOrWhiteSpace(_missionTemplate?.SecondaryOutcomeId) ? "archive_secured" : _missionTemplate.SecondaryOutcomeId;
 	}
 
 	private void CompleteMission(MissionOutcome outcome)
@@ -631,10 +718,16 @@ public partial class MissionMap : Node2D
 		}
 
 		Vector2I clickedCell = _roomBuilder.GetNearestCell(_isoWorld.ToLocal(GetGlobalMousePosition()));
+		if (TryHandlePropInteractionClick(officer, clickedCell))
+		{
+			return true;
+		}
+
 		List<MissionRoomBuilder.MarkerPlacement> interactions = _roomBuilder.GetInteractPlacementsAtCell(clickedCell)
 			.Where(placement => string.Equals(placement.TriggerMode, "interact", System.StringComparison.OrdinalIgnoreCase)
 				|| placement.LogicRole == "door"
 				|| placement.LogicRole == "terminal")
+			.Where(placement => !HasRuntimePropForPlacement(placement))
 			.ToList();
 		if (interactions.Count == 0)
 		{
@@ -658,6 +751,28 @@ public partial class MissionMap : Node2D
 			_pendingInteractionKey = BuildInteractionKey(interaction);
 			_pendingInteractionOfficerId = officer.OfficerID;
 			return true;
+		}
+
+		return true;
+	}
+
+	private bool TryHandlePropInteractionClick(OfficerPawn officer, Vector2I clickedCell)
+	{
+		if (!_missionPropsByCell.TryGetValue(clickedCell, out MissionProp prop) || prop == null)
+		{
+			return false;
+		}
+
+		if (CanOfficerExecutePropInteraction(officer, prop))
+		{
+			ExecutePropInteraction(officer, prop);
+			return true;
+		}
+
+		if (TryMoveOfficerToCell(officer, clickedCell))
+		{
+			_pendingPropInstanceId = prop.PropInstanceId;
+			_pendingInteractionOfficerId = officer.OfficerID;
 		}
 
 		return true;
@@ -773,7 +888,7 @@ public partial class MissionMap : Node2D
 		if (interaction.MarkerId == "trigger_dialogue")
 		{
 			_dialogueUi.StartConversation(
-				string.IsNullOrEmpty(interaction.TargetId) ? interaction.MarkerId : interaction.TargetId,
+				ResolveDialogueTargetId(interaction),
 				officer.OfficerName,
 				officer.PortraitPath,
 				interaction.NpcPortraitPath);
@@ -782,6 +897,36 @@ public partial class MissionMap : Node2D
 				_consumedTriggerKeys.Add(interactionKey);
 			}
 		}
+	}
+
+	private bool CanOfficerExecutePropInteraction(OfficerPawn officer, MissionProp prop)
+	{
+		if (officer == null || prop == null)
+		{
+			return false;
+		}
+
+		Vector2I propCell = GetPropCell(prop);
+		int interactionRange = Mathf.Max(1, prop.Definition?.InteractionRange ?? 1);
+		int distance = Mathf.Abs(officer.CurrentCell.X - propCell.X) + Mathf.Abs(officer.CurrentCell.Y - propCell.Y);
+		return distance <= interactionRange;
+	}
+
+	private void ExecutePropInteraction(OfficerPawn officer, MissionProp prop)
+	{
+		if (officer == null || prop == null)
+		{
+			return;
+		}
+
+		PropInteractionContext context = BuildPropInteractionContext(officer, prop);
+		PropInteractionResult result = prop.Interact(context);
+		if (result == null || !result.Success)
+		{
+			return;
+		}
+
+		ApplyPropInteractionResult(prop, result, context);
 	}
 
 	private void ToggleDoorInteraction(MissionRoomBuilder.MarkerPlacement interaction)
@@ -894,12 +1039,27 @@ public partial class MissionMap : Node2D
 			}
 
 			_dialogueUi.StartConversation(
-				string.IsNullOrEmpty(marker.TargetId) ? marker.MarkerId : marker.TargetId,
+				ResolveDialogueTargetId(marker),
 				officer.OfficerName,
 				officer.PortraitPath,
 				marker.NpcPortraitPath);
 			break;
 		}
+	}
+
+	private string ResolveDialogueTargetId(MissionRoomBuilder.MarkerPlacement marker)
+	{
+		if (!string.IsNullOrEmpty(marker.TargetId))
+		{
+			return marker.TargetId;
+		}
+
+		if (marker.MarkerId == "trigger_dialogue" && !string.IsNullOrWhiteSpace(_missionTemplate?.DefaultDialogueId))
+		{
+			return _missionTemplate.DefaultDialogueId;
+		}
+
+		return marker.MarkerId;
 	}
 
 	private void OnMissionConversationEnded()
@@ -915,7 +1075,24 @@ public partial class MissionMap : Node2D
 
 	private void OnOfficerReachedCell(OfficerPawn pawn, Vector2I cell)
 	{
-		if (pawn == null || pawn.OfficerID != _pendingInteractionOfficerId || string.IsNullOrEmpty(_pendingInteractionKey))
+		if (pawn == null || pawn.OfficerID != _pendingInteractionOfficerId)
+		{
+			return;
+		}
+
+		if (!string.IsNullOrEmpty(_pendingPropInstanceId))
+		{
+			MissionProp pendingProp = _missionPropsByCell.Values.FirstOrDefault(prop => prop != null && prop.PropInstanceId == _pendingPropInstanceId);
+			_pendingPropInstanceId = string.Empty;
+			_pendingInteractionOfficerId = string.Empty;
+			if (pendingProp != null && CanOfficerExecutePropInteraction(pawn, pendingProp))
+			{
+				ExecutePropInteraction(pawn, pendingProp);
+			}
+			return;
+		}
+
+		if (string.IsNullOrEmpty(_pendingInteractionKey))
 		{
 			return;
 		}
@@ -927,6 +1104,172 @@ public partial class MissionMap : Node2D
 		if (interaction != null && CanOfficerExecuteInteraction(pawn, interaction))
 		{
 			ExecuteInteraction(pawn, interaction);
+		}
+	}
+
+	private void SpawnMissionProps()
+	{
+		_missionPropsByCell.Clear();
+		_propPlacementsByInstanceId.Clear();
+		if (_roomBuilder == null || _isoWorld == null)
+		{
+			return;
+		}
+
+		Node2D runtimePropLayer = _isoWorld.GetNodeOrNull<Node2D>("RuntimePropLayer");
+		if (runtimePropLayer == null)
+		{
+			runtimePropLayer = new Node2D
+			{
+				Name = "RuntimePropLayer",
+				ZIndex = 6
+			};
+			_isoWorld.AddChild(runtimePropLayer);
+		}
+
+		foreach (Node child in runtimePropLayer.GetChildren())
+		{
+			runtimePropLayer.RemoveChild(child);
+			child.QueueFree();
+		}
+
+		foreach (MissionRoomBuilder.MarkerPlacement placement in _roomBuilder.GetMarkerPlacements())
+		{
+			PropDefinition definition = ResolvePropDefinitionForPlacement(placement);
+			if (definition == null || string.IsNullOrWhiteSpace(definition.ScenePath))
+			{
+				continue;
+			}
+
+			PackedScene propScene = GD.Load<PackedScene>(definition.ScenePath);
+			if (propScene == null)
+			{
+				continue;
+			}
+
+			MissionProp prop = propScene.Instantiate<MissionProp>();
+			if (prop == null)
+			{
+				continue;
+			}
+
+			prop.Definition = definition;
+			prop.Name = $"{definition.PropId}_{placement.Cell.X}_{placement.Cell.Y}";
+			prop.PropInstanceId = BuildPropInstanceId(placement, definition);
+			prop.Position = _roomBuilder.GetCellWorldPosition(placement.Cell.X, placement.Cell.Y);
+			runtimePropLayer.AddChild(prop);
+			_missionPropsByCell[placement.Cell] = prop;
+			_propPlacementsByInstanceId[prop.PropInstanceId] = placement;
+		}
+	}
+
+	private PropDefinition ResolvePropDefinitionForPlacement(MissionRoomBuilder.MarkerPlacement placement)
+	{
+		if (placement == null)
+		{
+			return null;
+		}
+
+		if (!string.IsNullOrWhiteSpace(placement.PropDefinitionPath))
+		{
+			PropDefinition baseDefinition = GD.Load<PropDefinition>(placement.PropDefinitionPath);
+			if (baseDefinition == null)
+			{
+				return null;
+			}
+
+			PropDefinition resolvedDefinition = baseDefinition.Duplicate(true) as PropDefinition ?? baseDefinition;
+			PropPlacementOverrides.ApplyRuntimeOverrides(resolvedDefinition, placement, _missionTemplate);
+			return resolvedDefinition;
+		}
+
+		return null;
+	}
+
+	private bool HasRuntimePropForPlacement(MissionRoomBuilder.MarkerPlacement placement)
+	{
+		return placement != null && _missionPropsByCell.ContainsKey(placement.Cell) && ResolvePropDefinitionForPlacement(placement) != null;
+	}
+
+	private Vector2I GetPropCell(MissionProp prop)
+	{
+		foreach (KeyValuePair<Vector2I, MissionProp> kvp in _missionPropsByCell)
+		{
+			if (kvp.Value == prop)
+			{
+				return kvp.Key;
+			}
+		}
+
+		return Vector2I.Zero;
+	}
+
+	private string BuildPropInstanceId(MissionRoomBuilder.MarkerPlacement placement, PropDefinition definition)
+	{
+		string key = !string.IsNullOrWhiteSpace(placement.MarkerId)
+			? placement.MarkerId
+			: !string.IsNullOrWhiteSpace(placement.LogicRole)
+				? placement.LogicRole
+				: definition.PropId;
+		return $"{definition.PropId}:{key}:{placement.Cell.X},{placement.Cell.Y}:{placement.TargetId}";
+	}
+
+	private PropInteractionContext BuildPropInteractionContext(OfficerPawn officer, MissionProp prop)
+	{
+		return new PropInteractionContext
+		{
+			MissionMap = this,
+			GlobalData = _globalData,
+			MissionState = _missionState,
+			MissionTemplate = _missionTemplate,
+			DialogueUI = _dialogueUi,
+			Officer = officer,
+			TargetCell = GetPropCell(prop),
+			PropInstanceId = prop.PropInstanceId,
+			SourceInteractionKey = _missionState?.SourceInteractionKey ?? string.Empty,
+			NpcPortraitPath = _propPlacementsByInstanceId.TryGetValue(prop.PropInstanceId, out MissionRoomBuilder.MarkerPlacement placement)
+				? placement.NpcPortraitPath
+				: string.Empty
+		};
+	}
+
+	private void ApplyPropInteractionResult(MissionProp prop, PropInteractionResult result, PropInteractionContext context)
+	{
+		if (prop == null || result == null || !result.Success)
+		{
+			return;
+		}
+
+		foreach (string doorId in result.DoorIdsToToggle ?? new List<string>())
+		{
+			if (string.IsNullOrWhiteSpace(doorId))
+			{
+				continue;
+			}
+
+			bool nextOpenState = !_roomBuilder.IsDoorOpen(doorId);
+			_roomBuilder.TrySetDoorOpen(doorId, nextOpenState, true);
+		}
+
+		prop.CommitInteractionResult(result, context);
+		UpdateFogOfWar();
+
+		if (prop.IsConsumed && prop.Definition?.HideWhenConsumed == true)
+		{
+			Vector2I propCell = GetPropCell(prop);
+			if (_missionPropsByCell.ContainsKey(propCell) && _missionPropsByCell[propCell] == prop)
+			{
+				_missionPropsByCell.Remove(propCell);
+			}
+		}
+
+		if (!string.IsNullOrWhiteSpace(result.DialogueId) && _dialogueUi != null)
+		{
+			_dialogueUi.StartConversation(
+				result.DialogueId,
+				context.Officer?.OfficerName ?? "Officer",
+				context.Officer?.PortraitPath ?? string.Empty,
+				context.NpcPortraitPath ?? string.Empty);
 		}
 	}
 

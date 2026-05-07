@@ -18,6 +18,7 @@ config/icon="res://Assets/UI/icon.svg"
 [autoload]
 
 GlobalData="*uid://bv6iljy86vn5r"
+MissionManager="*res://Scripts/Autoload/MissionManager.cs"
 SceneTransition="*uid://dcfebsd22nwhn"
 
 [display]

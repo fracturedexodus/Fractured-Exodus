@@ -19,6 +19,7 @@ public class PlanetData
 	public bool HasBeenScanned { get; set; } = false;
 	public bool HasBeenSalvaged { get; set; } = false;
 	public bool IsBlackSiteRelaySite { get; set; } = false;
+	public string MissionInteractionKey { get; set; } = string.Empty;
 }
 
 public class OutpostData
@@ -26,6 +27,7 @@ public class OutpostData
 	public string Name { get; set; }
 	public Vector2I HexPosition { get; set; }
 	public string SpritePath { get; set; }
+	public string MissionInteractionKey { get; set; } = string.Empty;
 }
 
 public class SystemData 
@@ -68,9 +70,14 @@ public class MissionRuntimeState
 {
 	public string MissionID { get; set; } = string.Empty;
 	public string MissionTitle { get; set; } = string.Empty;
+	public string ScenePath { get; set; } = string.Empty;
+	public string TemplateResourcePath { get; set; } = string.Empty;
 	public string ReturnScenePath { get; set; } = string.Empty;
 	public string SourceSystem { get; set; } = string.Empty;
 	public string SourceEncounterName { get; set; } = string.Empty;
+	public string SourceNodeType { get; set; } = string.Empty;
+	public string SourceNodeID { get; set; } = string.Empty;
+	public string SourceInteractionKey { get; set; } = string.Empty;
 	public List<string> ParticipatingShipNames { get; set; } = new List<string>();
 	public List<string> ParticipatingOfficerIDs { get; set; } = new List<string>();
 }
@@ -177,8 +184,13 @@ public partial class GlobalData : Node
 	public List<string> PendingDowntimeEvents { get; set; } = new List<string>();
 	public string CurrentMissionID { get; set; } = string.Empty;
 	public string CurrentMissionTitle { get; set; } = string.Empty;
+	public string CurrentMissionScenePath { get; set; } = string.Empty;
+	public string CurrentMissionTemplatePath { get; set; } = string.Empty;
 	public string MissionReturnScenePath { get; set; } = string.Empty;
 	public string MissionSourceEncounterName { get; set; } = string.Empty;
+	public string MissionSourceNodeType { get; set; } = string.Empty;
+	public string MissionSourceNodeID { get; set; } = string.Empty;
+	public string MissionSourceInteractionKey { get; set; } = string.Empty;
 	public List<string> SelectedMissionOfficerShipNames { get; set; } = new List<string>();
 	public List<string> SelectedMissionOfficerIDs { get; set; } = new List<string>();
 	public List<string> CompletedMissionIDs { get; set; } = new List<string>();
@@ -218,9 +230,14 @@ public partial class GlobalData : Node
 		{
 			MissionID = CurrentMissionID,
 			MissionTitle = CurrentMissionTitle,
+			ScenePath = CurrentMissionScenePath,
+			TemplateResourcePath = CurrentMissionTemplatePath,
 			ReturnScenePath = MissionReturnScenePath,
 			SourceSystem = SavedSystem,
 			SourceEncounterName = MissionSourceEncounterName,
+			SourceNodeType = MissionSourceNodeType,
+			SourceNodeID = MissionSourceNodeID,
+			SourceInteractionKey = MissionSourceInteractionKey,
 			ParticipatingShipNames = new List<string>(SelectedMissionOfficerShipNames ?? new List<string>()),
 			ParticipatingOfficerIDs = new List<string>(SelectedMissionOfficerIDs ?? new List<string>())
 		};
@@ -230,8 +247,13 @@ public partial class GlobalData : Node
 	{
 		CurrentMissionID = state?.MissionID ?? string.Empty;
 		CurrentMissionTitle = state?.MissionTitle ?? string.Empty;
+		CurrentMissionScenePath = state?.ScenePath ?? string.Empty;
+		CurrentMissionTemplatePath = state?.TemplateResourcePath ?? string.Empty;
 		MissionReturnScenePath = state?.ReturnScenePath ?? string.Empty;
 		MissionSourceEncounterName = state?.SourceEncounterName ?? string.Empty;
+		MissionSourceNodeType = state?.SourceNodeType ?? string.Empty;
+		MissionSourceNodeID = state?.SourceNodeID ?? string.Empty;
+		MissionSourceInteractionKey = state?.SourceInteractionKey ?? string.Empty;
 		SelectedMissionOfficerShipNames = state?.ParticipatingShipNames != null ? new List<string>(state.ParticipatingShipNames) : new List<string>();
 		SelectedMissionOfficerIDs = state?.ParticipatingOfficerIDs != null ? new List<string>(state.ParticipatingOfficerIDs) : new List<string>();
 	}
@@ -240,8 +262,13 @@ public partial class GlobalData : Node
 	{
 		CurrentMissionID = string.Empty;
 		CurrentMissionTitle = string.Empty;
+		CurrentMissionScenePath = string.Empty;
+		CurrentMissionTemplatePath = string.Empty;
 		MissionReturnScenePath = string.Empty;
 		MissionSourceEncounterName = string.Empty;
+		MissionSourceNodeType = string.Empty;
+		MissionSourceNodeID = string.Empty;
+		MissionSourceInteractionKey = string.Empty;
 		SelectedMissionOfficerShipNames.Clear();
 		SelectedMissionOfficerIDs.Clear();
 	}

@@ -125,6 +125,7 @@ public static class MapSpawner
 
 		SystemData currentSystem = globalData.ExploredSystems[globalData.SavedSystem];
 		EnsureBlackSiteRelayAssigned(globalData, currentSystem);
+		EnsureSmugglerExchangeAssigned(globalData, currentSystem);
 		Vector2I basePlanetLocation = new Vector2I(2, -1); 
 		
 		int currentOrbitRing = 2; 
@@ -144,7 +145,13 @@ public static class MapSpawner
 			currentOrbitRing += 3; 
 			string pTypeStr = GetPlanetTypeString(pData.TypeIndex);
 			string pTex = GetTexturePathForType(pTypeStr);
-			MapEntity planetEntity = new MapEntity { Name = pData.Name, Type = GameConstants.EntityTypes.Planet, Details = $"Biome Class: {pTypeStr.ToUpper()}\nHab: {pData.Habitability}" };
+			MapEntity planetEntity = new MapEntity
+			{
+				Name = pData.Name,
+				Type = GameConstants.EntityTypes.Planet,
+				Details = $"Biome Class: {pTypeStr.ToUpper()}\nHab: {pData.Habitability}",
+				MissionInteractionKey = pData.MissionInteractionKey ?? string.Empty
+			};
 			SpawnEntityAtHex(spawnHex, pTex, planetEntity, pData.Scale, hexSize, hexGrid, hexContents, entityLayer);
 			
 			if (GodotObject.IsInstanceValid(planetEntity.VisualSprite))
@@ -492,6 +499,21 @@ public static class MapSpawner
 			system?.Planets != null && system.Planets.Any(planet => planet != null && planet.IsBlackSiteRelaySite));
 		if (alreadyAssigned)
 		{
+			foreach (SystemData system in globalData.ExploredSystems.Values)
+			{
+				if (system?.Planets == null)
+				{
+					continue;
+				}
+
+				foreach (PlanetData planet in system.Planets)
+				{
+					if (planet != null && planet.IsBlackSiteRelaySite && string.IsNullOrWhiteSpace(planet.MissionInteractionKey))
+					{
+						planet.MissionInteractionKey = "planet:black_site_relay";
+					}
+				}
+			}
 			return;
 		}
 
@@ -500,6 +522,33 @@ public static class MapSpawner
 		if (targetPlanet != null)
 		{
 			targetPlanet.IsBlackSiteRelaySite = true;
+			targetPlanet.MissionInteractionKey = "planet:black_site_relay";
+		}
+	}
+
+	private static void EnsureSmugglerExchangeAssigned(GlobalData globalData, SystemData currentSystem)
+	{
+		if (globalData == null || currentSystem?.Outposts == null || currentSystem.Outposts.Count == 0)
+		{
+			return;
+		}
+
+		bool alreadyAssigned = globalData.ExploredSystems.Values.Any(system =>
+			system?.Outposts != null && system.Outposts.Any(outpost =>
+				outpost != null && outpost.MissionInteractionKey == "outpost:smuggler_exchange"));
+		if (alreadyAssigned)
+		{
+			return;
+		}
+
+		OutpostData targetOutpost = currentSystem.Outposts.FirstOrDefault(outpost =>
+			outpost != null
+			&& !string.IsNullOrWhiteSpace(outpost.SpritePath)
+			&& outpost.SpritePath.Contains("BlackMarketAsteroidExchangeSprite"));
+		targetOutpost ??= currentSystem.Outposts.FirstOrDefault(outpost => outpost != null);
+		if (targetOutpost != null)
+		{
+			targetOutpost.MissionInteractionKey = "outpost:smuggler_exchange";
 		}
 	}
 }

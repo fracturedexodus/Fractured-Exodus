@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="PropDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://Scripts/Missions/Props/PropDefinition.cs" id="1_prop_definition"]
+
+[resource]
+script = ExtResource("1_prop_definition")
+PropId = "sealed_cache_crate"
+DisplayName = "Sealed Cache Crate"
+Description = "A one-shot loot prop that awards resources and can set story flags."
+InteractionType = 1
+ScenePath = "res://Scenes/Missions/Props/LootCrateProp.tscn"
+SpriteTexturePath = "res://Assets/Missions/BlackSiteRelay/AlignedGrid226/props/crate_medium.png"
+InteractionRange = 1
+OneShot = true
+HideWhenConsumed = true
+SuccessMessage = "Cache contents secured."
+RewardRawMaterials = 20
+RewardEnergyCores = 1

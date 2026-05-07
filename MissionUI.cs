@@ -28,6 +28,13 @@ public partial class MissionUI : CanvasLayer
 		if (PromptLabel != null) PromptLabel.Text = prompt;
 	}
 
+	public void SetActionButtonText(string primaryText, string secondaryText, string returnText = "RETURN TO FLEET")
+	{
+		if (SaveSurvivorsButton != null) SaveSurvivorsButton.Text = primaryText;
+		if (SecureArchiveButton != null) SecureArchiveButton.Text = secondaryText;
+		if (ReturnButton != null) ReturnButton.Text = returnText;
+	}
+
 	public void SetSelectedOfficer(string officerName, string shipName, string specialty)
 	{
 		if (SelectedOfficerLabel == null)

@@ -1,6 +1,16 @@
 using Godot;
 using System.Collections.Generic;
 
+public class MissionInteractionContext
+{
+	public string InteractionKey { get; set; } = string.Empty;
+	public string SourceNodeType { get; set; } = string.Empty;
+	public string SourceNodeID { get; set; } = string.Empty;
+	public string SourceEncounterName { get; set; } = string.Empty;
+	public MissionDefinition Definition { get; set; }
+	public MapEntity SourceEntity { get; set; }
+}
+
 public class ShipMenuState
 {
 	public string Title { get; set; }
@@ -21,11 +31,13 @@ public class ShipMenuState
 	public string SalvageText { get; set; }
 	public bool ShowMission { get; set; }
 	public string MissionText { get; set; }
+	public string MissionInteractionKey { get; set; }
 }
 
 public class ShipContextService
 {
 	private readonly GlobalData _globalData;
+	private MissionManager _missionManager;
 
 	public ShipContextService(GlobalData globalData)
 	{
@@ -41,9 +53,7 @@ public class ShipContextService
 
 		bool isPlayer = ship.Type == GameConstants.EntityTypes.PlayerFleet;
 		PlanetData adjacentPlanetData = GetAdjacentPlanetData(ship, hexContents);
-		bool hasAdjacentBlackSiteMission = adjacentPlanetData != null
-			&& adjacentPlanetData.IsBlackSiteRelaySite
-			&& (_globalData?.CompletedMissionIDs?.Contains("black_site_relay") != true);
+		MissionInteractionContext missionContext = GetAdjacentMissionContext(ship, hexContents);
 		bool hasAdjacentOutpost = HasAdjacentOutpost(ship, hexContents);
 
 		return new ShipMenuState
@@ -64,26 +74,40 @@ public class ShipContextService
 			ShowSalvage = isPlayer && !inCombat && adjacentPlanetData != null && (ship.Name == "The Relic Harvester" || ship.Name == "The Neptune Forge"),
 			DisableSalvage = adjacentPlanetData == null || adjacentPlanetData.HasBeenSalvaged || ship.CurrentActions < 1,
 			SalvageText = adjacentPlanetData != null && adjacentPlanetData.HasBeenSalvaged ? "SALVAGED" : "SALVAGE",
-			ShowMission = isPlayer && !inCombat && hasAdjacentBlackSiteMission,
-			MissionText = "BLACK SITE MISSION"
+			ShowMission = isPlayer && !inCombat && missionContext != null,
+			MissionText = missionContext?.Definition != null ? missionContext.Definition.Title.ToUpper() : "MISSION",
+			MissionInteractionKey = missionContext?.InteractionKey ?? string.Empty
 		};
 	}
 
-	public MapEntity GetAdjacentBlackSitePlanet(MapEntity ship, Dictionary<Vector2I, MapEntity> hexContents)
+	public MissionInteractionContext GetAdjacentMissionContext(MapEntity ship, Dictionary<Vector2I, MapEntity> hexContents)
 	{
-		MapEntity planet = GetAdjacentPlanet(ship, hexContents);
-		PlanetData planetData = planet == null ? null : GetPlanetData(planet.Name);
-		if (planet == null || planetData == null || !planetData.IsBlackSiteRelaySite)
+		MapEntity entity = GetAdjacentMissionEntity(ship, hexContents);
+		if (entity == null || string.IsNullOrWhiteSpace(entity.MissionInteractionKey))
 		{
 			return null;
 		}
 
-		if (_globalData?.CompletedMissionIDs?.Contains("black_site_relay") == true)
+		MissionManager missionManager = ResolveMissionManager();
+		if (missionManager == null || !missionManager.TryGetTemplateForInteraction(entity.MissionInteractionKey, out MissionTemplate template))
 		{
 			return null;
 		}
 
-		return planet;
+		if (missionManager.HasCompletedMission(template.MissionId))
+		{
+			return null;
+		}
+
+		return new MissionInteractionContext
+		{
+			InteractionKey = entity.MissionInteractionKey,
+			SourceNodeType = entity.Type,
+			SourceNodeID = entity.Name,
+			SourceEncounterName = entity.Name,
+			Definition = template.ToDefinition(),
+			SourceEntity = entity
+		};
 	}
 
 	public MapEntity GetAdjacentPlanet(MapEntity ship, Dictionary<Vector2I, MapEntity> hexContents)
@@ -127,6 +151,27 @@ public class ShipContextService
 		return null;
 	}
 
+	private MapEntity GetAdjacentMissionEntity(MapEntity ship, Dictionary<Vector2I, MapEntity> hexContents)
+	{
+		Vector2I shipHex = GetShipHex(ship, hexContents);
+		foreach (Vector2I dir in HexMath.Directions)
+		{
+			Vector2I neighbor = shipHex + dir;
+			if (!hexContents.ContainsKey(neighbor))
+			{
+				continue;
+			}
+
+			MapEntity entity = hexContents[neighbor];
+			if (entity != null && !string.IsNullOrWhiteSpace(entity.MissionInteractionKey))
+			{
+				return entity;
+			}
+		}
+
+		return null;
+	}
+
 	private PlanetData GetPlanetData(string planetName)
 	{
 		if (_globalData == null || string.IsNullOrEmpty(_globalData.SavedSystem) || !_globalData.ExploredSystems.ContainsKey(_globalData.SavedSystem))
@@ -157,5 +202,17 @@ public class ShipContextService
 		}
 
 		return Vector2I.Zero;
+	}
+
+	private MissionManager ResolveMissionManager()
+	{
+		if (_missionManager != null && GodotObject.IsInstanceValid(_missionManager))
+		{
+			return _missionManager;
+		}
+
+		SceneTree tree = Engine.GetMainLoop() as SceneTree;
+		_missionManager = tree?.Root?.GetNodeOrNull<MissionManager>("/root/MissionManager");
+		return _missionManager;
 	}
 }

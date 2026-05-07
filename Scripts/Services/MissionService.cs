@@ -1,139 +1,65 @@
 using Godot;
-using System.Collections.Generic;
-using System.Linq;
 
 public class MissionService
 {
 	private readonly GlobalData _globalData;
-	private readonly OfficerService _officerService;
-
-	private static readonly Dictionary<string, MissionDefinition> MissionDefinitions = new Dictionary<string, MissionDefinition>
-	{
-		{
-			"black_site_relay",
-			new MissionDefinition
-			{
-				MissionID = "black_site_relay",
-				ScenePath = "res://black_site_relay.tscn",
-				Title = "Black Site Relay",
-				Description = "Investigate a failing Custodian relay and decide whether to save the survivors or secure the archive core.",
-				DefaultReturnScenePath = "res://exploration_battle.tscn",
-				RecommendedOfficerCount = 2
-			}
-		}
-	};
+	private MissionManager _missionManager;
 
 	public MissionService(GlobalData globalData)
 	{
 		_globalData = globalData;
-		_officerService = globalData != null ? new OfficerService(globalData) : null;
+		_missionManager = ResolveMissionManager();
 	}
 
 	public MissionDefinition GetDefinition(string missionId)
 	{
-		if (string.IsNullOrEmpty(missionId))
-		{
-			return null;
-		}
+		return ResolveMissionManager()?.GetDefinition(missionId);
+	}
 
-		return MissionDefinitions.TryGetValue(missionId, out MissionDefinition definition) ? definition : null;
+	public MissionTemplate GetTemplate(string missionId)
+	{
+		return ResolveMissionManager()?.GetTemplate(missionId);
 	}
 
 	public MissionRuntimeState PrepareMission(string missionId, string returnScenePath = "", string sourceEncounterName = "")
 	{
-		if (_globalData == null)
-		{
-			return null;
-		}
-
-		MissionDefinition definition = GetDefinition(missionId);
-		if (definition == null)
-		{
-			return null;
-		}
-
-		List<string> participatingShips = (_globalData.SelectedPlayerFleet ?? new List<string>())
-			.Where(shipName => _officerService?.GetOfficerForShip(shipName) != null)
-			.Take(definition.RecommendedOfficerCount)
-			.ToList();
-
-		List<string> participatingOfficerIds = participatingShips
-			.Select(shipName => _officerService?.GetOfficerForShip(shipName)?.OfficerID ?? string.Empty)
-			.Where(officerId => !string.IsNullOrEmpty(officerId))
-			.ToList();
-
-		MissionRuntimeState state = new MissionRuntimeState
-		{
-			MissionID = definition.MissionID,
-			MissionTitle = definition.Title,
-			ReturnScenePath = string.IsNullOrEmpty(returnScenePath) ? definition.DefaultReturnScenePath : returnScenePath,
-			SourceSystem = _globalData.SavedSystem,
-			SourceEncounterName = sourceEncounterName,
-			ParticipatingShipNames = participatingShips,
-			ParticipatingOfficerIDs = participatingOfficerIds
-		};
-
-		_globalData.SetCurrentMissionState(state);
-		return state;
+		return ResolveMissionManager()?.PrepareMission(missionId, returnScenePath, sourceEncounterName);
 	}
 
 	public MissionRuntimeState GetCurrentMissionState()
 	{
-		return _globalData?.GetCurrentMissionState();
+		return ResolveMissionManager()?.GetCurrentMissionState() ?? _globalData?.GetCurrentMissionState();
 	}
 
 	public void ApplyOutcome(MissionOutcome outcome)
 	{
-		if (_globalData == null || outcome == null || string.IsNullOrEmpty(outcome.MissionID))
-		{
-			return;
-		}
-
-		_globalData.FleetResources[GameConstants.ResourceKeys.RawMaterials] =
-			_globalData.FleetResources[GameConstants.ResourceKeys.RawMaterials].AsSingle() + outcome.Reward.RawMaterials;
-		_globalData.FleetResources[GameConstants.ResourceKeys.EnergyCores] =
-			_globalData.FleetResources[GameConstants.ResourceKeys.EnergyCores].AsSingle() + outcome.Reward.EnergyCores;
-		_globalData.FleetResources[GameConstants.ResourceKeys.AncientTech] =
-			_globalData.FleetResources[GameConstants.ResourceKeys.AncientTech].AsSingle() + outcome.Reward.AncientTech;
-
-		_officerService?.ApplyDirectApprovalChanges(outcome.ApprovalChanges);
-
-		foreach (string flag in outcome.FlagsToSet ?? new List<string>())
-		{
-			if (!_globalData.StoryFlags.Contains(flag))
-			{
-				_globalData.StoryFlags.Add(flag);
-			}
-		}
-
-		if (!_globalData.CompletedMissionIDs.Contains(outcome.MissionID))
-		{
-			_globalData.CompletedMissionIDs.Add(outcome.MissionID);
-		}
-
-		_globalData.MissionOutcomes[outcome.MissionID] = outcome.OutcomeID;
-		_globalData.ClearCurrentMissionState();
+		ResolveMissionManager()?.ApplyOutcome(outcome);
 	}
 
 	public void ReturnToMissionSource(Node caller)
 	{
-		if (caller == null || _globalData == null)
+		ResolveMissionManager()?.ReturnToMissionSource(caller);
+	}
+
+	public MissionRuntimeState PrepareMissionFromInteraction(string interactionKey, string returnScenePath = "", string sourceEncounterName = "", string sourceNodeType = "", string sourceNodeId = "")
+	{
+		return ResolveMissionManager()?.PrepareMissionFromInteraction(interactionKey, returnScenePath, sourceEncounterName, sourceNodeType, sourceNodeId);
+	}
+
+	public bool LaunchMissionFromInteraction(Node caller, string interactionKey, string returnScenePath = "", string sourceEncounterName = "", string sourceNodeType = "", string sourceNodeId = "")
+	{
+		return ResolveMissionManager()?.LaunchMissionFromInteraction(caller, interactionKey, returnScenePath, sourceEncounterName, sourceNodeType, sourceNodeId) == true;
+	}
+
+	private MissionManager ResolveMissionManager()
+	{
+		if (_missionManager != null && GodotObject.IsInstanceValid(_missionManager))
 		{
-			return;
+			return _missionManager;
 		}
 
-		string returnScenePath = string.IsNullOrEmpty(_globalData.MissionReturnScenePath)
-			? "res://exploration_battle.tscn"
-			: _globalData.MissionReturnScenePath;
-
-		SceneTransition transitioner = caller.GetNodeOrNull<SceneTransition>("/root/SceneTransition");
-		if (transitioner != null)
-		{
-			transitioner.ChangeScene(returnScenePath);
-		}
-		else
-		{
-			caller.GetTree().ChangeSceneToFile(returnScenePath);
-		}
+		SceneTree tree = Engine.GetMainLoop() as SceneTree;
+		_missionManager = tree?.Root?.GetNodeOrNull<MissionManager>("/root/MissionManager");
+		return _missionManager;
 	}
 }

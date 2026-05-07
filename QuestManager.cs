@@ -101,6 +101,48 @@ public static class QuestManager
 					}
 				}
 			}
+		},
+		{
+			"smuggler_exchange_dialogue", new Dictionary<string, DialogueNode>
+			{
+				{
+					"Start", new DialogueNode
+					{
+						SpeakerName = "Broker Veil",
+						Text = "You made it past the false manifests and dead channels. The crate vault is open, but Customs patrols are closing in. Take the data cache, take the contraband, or make this disappear before anyone can trace it.",
+						Options = new Dictionary<string, string>
+						{
+							{ "What's in the cache?", "Cache" },
+							{ "Who's coming for this place?", "Threat" },
+							{ "We understand. We'll decide what leaves with us.", "End" }
+						}
+					}
+				},
+				{
+					"Cache", new DialogueNode
+					{
+						SpeakerName = "Broker Veil",
+						Text = "Navigation fragments, embargo ledgers, and old gate-route access stamps. Worth a fortune if you know who to sell them to. Worth a firing line if you don't.",
+						Options = new Dictionary<string, string>
+						{
+							{ "Back to the vault.", "Start" },
+							{ "We'll take what matters and move.", "End" }
+						}
+					}
+				},
+				{
+					"Threat", new DialogueNode
+					{
+						SpeakerName = "Broker Veil",
+						Text = "Patrol cutters and hired reclaimers. If they board the station first, they'll scrub every ledger and vent anyone still breathing in here. You have minutes, not hours.",
+						Options = new Dictionary<string, string>
+						{
+							{ "Back to the decision.", "Start" },
+							{ "Then we move now.", "End" }
+						}
+					}
+				}
+			}
 		}
 	};
 

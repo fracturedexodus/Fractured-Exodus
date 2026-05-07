@@ -1,6 +1,6 @@
 [
 	{
-		"background_id": "surface_arid_canyons",
+		"background_id": "outpost_black_market",
 		"item_type": "background"
 	},
 	{
@@ -3130,6 +3130,7 @@
 		"logic_target_id": "objective_archive",
 		"logic_trigger_mode": "interact",
 		"marker_id": "objective_archive",
+		"prop_definition_path": "res://Data/Missions/Props/Definitions/smuggler_cache_crate.tres",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
 		"rotation_degrees": 0.0,

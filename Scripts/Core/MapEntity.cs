@@ -20,6 +20,7 @@ public class MapEntity
 	public int InitiativeBonus;
 	public int CurrentInitiativeRoll;
 	public bool IsDead = false;
+	public string MissionInteractionKey = string.Empty;
 
 	public Sprite2D VisualSprite; 
 	public float BaseRotationOffset; 
