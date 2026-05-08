@@ -1,10 +1,13 @@
 using Godot;
 using System.Collections.Generic;
+using System.Linq;
 
 public partial class DialogueUI : CanvasLayer
 {
 	[Signal]
 	public delegate void ConversationEndedEventHandler();
+	[Signal]
+	public delegate void DialogueStateChangedEventHandler();
 
 	[Export] public Label SpeakerNameLabel;
 	[Export] public RichTextLabel DialogueTextDisplay;
@@ -46,13 +49,15 @@ public partial class DialogueUI : CanvasLayer
 
 	private void LoadDialogueNode(string nodeId)
 	{
-		DialogueNode nodeData = QuestManager.GetDialogue(_currentNpcId, nodeId);
+		DialogueNode nodeData = DialogueRegistry.GetDialogue(_currentNpcId, nodeId);
 
-		if (nodeData == null)
+		if (nodeData == null || !AreFlagConditionsSatisfied(nodeData.RequiredFlags, nodeData.BlockedFlags))
 		{
 			EndConversation();
 			return;
 		}
+
+		ApplyDialogueEffects(nodeData.SetFlags, nodeData.QuestToTrigger);
 
 		// Update the visual text
 		SpeakerNameLabel.Text = nodeData.SpeakerName;
@@ -60,12 +65,6 @@ public partial class DialogueUI : CanvasLayer
 		if (NpcNameLabel != null)
 		{
 			NpcNameLabel.Text = nodeData.SpeakerName;
-		}
-
-		// Check if this node triggers a quest
-		if (!string.IsNullOrEmpty(nodeData.QuestToTrigger))
-		{
-			QuestManager.AcceptQuest(_globalData, nodeData.QuestToTrigger);
 		}
 
 		// Clear out the old buttons
@@ -77,19 +76,33 @@ public partial class DialogueUI : CanvasLayer
 		// Create new buttons for the player's options
 		if (nodeData.Options != null)
 		{
-			foreach (var option in nodeData.Options)
+			List<DialogueOption> availableOptions = nodeData.Options
+				.Where(option => option != null && AreFlagConditionsSatisfied(option.RequiredFlags, option.BlockedFlags))
+				.ToList();
+			foreach (DialogueOption option in availableOptions)
 			{
 				Button optionBtn = new Button();
-				optionBtn.Text = option.Key;
+				optionBtn.Text = option.Text;
 				
 				// When clicked, load the next node (or end if it says "End")
 				optionBtn.Pressed += () => 
 				{
-					if (option.Value == "End") EndConversation();
-					else LoadDialogueNode(option.Value);
+					ApplyDialogueEffects(option.SetFlags, option.QuestToTrigger);
+					if (option.NextNodeId == "End") EndConversation();
+					else LoadDialogueNode(option.NextNodeId);
 				};
 				
 				OptionsContainer.AddChild(optionBtn);
+			}
+
+			if (availableOptions.Count == 0)
+			{
+				Button closeButton = new Button
+				{
+					Text = "End Conversation"
+				};
+				closeButton.Pressed += EndConversation;
+				OptionsContainer.AddChild(closeButton);
 			}
 		}
 	}
@@ -124,6 +137,59 @@ public partial class DialogueUI : CanvasLayer
 		if (NpcNameLabel != null && string.IsNullOrEmpty(NpcNameLabel.Text))
 		{
 			NpcNameLabel.Text = "Contact";
+		}
+	}
+
+	private bool AreFlagConditionsSatisfied(System.Collections.Generic.IEnumerable<string> requiredFlags, System.Collections.Generic.IEnumerable<string> blockedFlags)
+	{
+		if (_globalData?.StoryFlags == null)
+		{
+			return !(requiredFlags?.Any() ?? false);
+		}
+
+		foreach (string requiredFlag in requiredFlags ?? Enumerable.Empty<string>())
+		{
+			if (!string.IsNullOrWhiteSpace(requiredFlag) && !_globalData.StoryFlags.Contains(requiredFlag))
+			{
+				return false;
+			}
+		}
+
+		foreach (string blockedFlag in blockedFlags ?? Enumerable.Empty<string>())
+		{
+			if (!string.IsNullOrWhiteSpace(blockedFlag) && _globalData.StoryFlags.Contains(blockedFlag))
+			{
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	private void ApplyDialogueEffects(System.Collections.Generic.IEnumerable<string> setFlags, string questToTrigger)
+	{
+		bool changedState = false;
+		if (_globalData?.StoryFlags != null)
+		{
+			foreach (string flag in setFlags ?? Enumerable.Empty<string>())
+			{
+				if (!string.IsNullOrWhiteSpace(flag) && !_globalData.StoryFlags.Contains(flag))
+				{
+					_globalData.StoryFlags.Add(flag);
+					changedState = true;
+				}
+			}
+		}
+
+		if (!string.IsNullOrEmpty(questToTrigger))
+		{
+			QuestManager.AcceptQuest(_globalData, questToTrigger);
+			changedState = true;
+		}
+
+		if (changedState)
+		{
+			EmitSignal(SignalName.DialogueStateChanged);
 		}
 	}
 }

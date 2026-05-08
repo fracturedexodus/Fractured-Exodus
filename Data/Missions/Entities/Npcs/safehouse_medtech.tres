@@ -12,7 +12,5 @@ SpriteTexturePath = "res://Assets/Missions/Characters/Operative01/operative_ne.p
 VisualScaleMultiplier = 0.11
 AccentColor = Color(0.533333, 0.921569, 0.72549, 1)
 ShowNameLabel = true
-SetFlags = PackedStringArray("smuggler_survivors_secured")
-SuccessMessage = "The medtech tags the wounded for immediate extraction."
 DefaultDialogueId = "smuggler_exchange_survivors"
 Notes = "Ambient support NPC for the medbay wing."

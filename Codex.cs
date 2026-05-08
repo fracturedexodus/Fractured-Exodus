@@ -1,6 +1,7 @@
 using Godot;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 public partial class Codex : Control
 {
@@ -86,6 +87,10 @@ public partial class Codex : Control
 		Button btnEnemy = CreateMenuButton("HOSTILE INTEL");
 		btnEnemy.Pressed += LoadEnemyShips;
 		_mainMenuContainer.AddChild(btnEnemy);
+
+		Button btnMissionIntel = CreateMenuButton("MISSION INTEL");
+		btnMissionIntel.Pressed += LoadMissionIntel;
+		_mainMenuContainer.AddChild(btnMissionIntel);
 
 		// --- NEW: VISITED SYSTEMS BUTTON ---
 		Button btnVisited = CreateMenuButton("VISITED SYSTEMS");
@@ -339,6 +344,37 @@ public partial class Codex : Control
 		}
 	}
 
+	private void LoadMissionIntel()
+	{
+		_mainMenuContainer.Visible = false;
+		_listContainer.Visible = true;
+		foreach (Node child in _itemList.GetChildren()) child.QueueFree();
+
+		List<CodexIntelEntry> entries = (_globalData?.UnlockedCodexEntryIDs ?? new List<string>())
+			.Select(CodexIntelRegistry.GetEntry)
+			.Where(entry => entry != null)
+			.OrderBy(entry => entry.Category)
+			.ThenBy(entry => entry.Title)
+			.ToList();
+
+		if (entries.Count == 0)
+		{
+			Label noneLabel = new Label();
+			noneLabel.Text = "No mission intel archived yet.\nRecover datapads, route ledgers, and tactical files in away missions.";
+			noneLabel.HorizontalAlignment = HorizontalAlignment.Center;
+			noneLabel.AddThemeColorOverride("font_color", new Color(1f, 0.4f, 0.4f));
+			_itemList.AddChild(noneLabel);
+			return;
+		}
+
+		foreach (CodexIntelEntry entry in entries)
+		{
+			Button button = CreateMenuButton(entry.Title.ToUpper());
+			button.Pressed += () => ShowMissionIntelDetails(entry);
+			_itemList.AddChild(button);
+		}
+	}
+
 	// ==========================================
 	// DETAIL RENDERING
 	// ==========================================
@@ -472,6 +508,25 @@ public partial class Codex : Control
 		}
 
 		_detailText.Text = info;
+	}
+
+	private void ShowMissionIntelDetails(CodexIntelEntry entry)
+	{
+		if (entry == null)
+		{
+			return;
+		}
+
+		_detailTitle.Text = entry.Title.ToUpper();
+		_detailImage.Texture = !string.IsNullOrWhiteSpace(entry.ImagePath) && ResourceLoader.Exists(entry.ImagePath)
+			? GD.Load<Texture2D>(entry.ImagePath)
+			: null;
+		_detailBlueprintImage.Texture = null;
+		_detailBlueprintImage.Visible = false;
+		_detailText.Text =
+			$"[center][color=#7cffc6]--- {entry.Category.ToUpper()} ---[/color][/center]\n\n" +
+			$"[b]SUMMARY:[/b] {entry.Summary}\n\n" +
+			$"{entry.DetailText}";
 	}
 
 	private void ReturnToGame()

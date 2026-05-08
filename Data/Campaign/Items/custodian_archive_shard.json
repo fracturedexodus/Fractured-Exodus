@@ -1,0 +1,8 @@
+{
+	"item_id": "custodian_archive_shard",
+	"display_name": "Custodian Archive Shard",
+	"description": "A dense relay memory shard holding partial Custodian maintenance doctrine and archived command fragments.",
+	"category": "Recovered Artifact",
+	"stackable": false,
+	"codex_entry_id": "custodian_archive_shard"
+}

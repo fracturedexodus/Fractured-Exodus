@@ -106,11 +106,16 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 		return result;
 	}
 
-	public void CommitInteractionResult(PropInteractionResult result)
+	public void CommitInteractionResult(PropInteractionResult result, PropInteractionContext context)
 	{
 		if (result?.Success != true)
 		{
 			return;
+		}
+
+		if (context?.GlobalData != null && result.Reward != null)
+		{
+			new CampaignRewardService(context.GlobalData).ApplyReward(result.Reward, context.Officer?.OfficerID ?? string.Empty);
 		}
 
 		if (result.ConsumeProp)

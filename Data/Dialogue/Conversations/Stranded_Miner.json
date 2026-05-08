@@ -1,0 +1,33 @@
+{
+	"conversation_id": "Stranded_Miner",
+	"nodes": [
+		{
+			"id": "Start",
+			"speaker_name": "Unknown Signal",
+			"text": "Mayday... is anyone out there? Our reactor is dead. We need 50 Energy Cores or we're going to freeze.",
+			"options": [
+				{ "text": "We can spare the cores. (Give 50 Energy Cores)", "next": "Give_Cores" },
+				{ "text": "Who are you?", "next": "Ask_Info" },
+				{ "text": "We can't help you. (Leave)", "next": "End" }
+			]
+		},
+		{
+			"id": "Ask_Info",
+			"speaker_name": "Stranded Miner",
+			"text": "We're an independent surveying crew. Please, the temperature is dropping rapidly.",
+			"options": [
+				{ "text": "Fine, take the cores.", "next": "Give_Cores" },
+				{ "text": "Sorry, we need them for our own survival. (Leave)", "next": "End" }
+			]
+		},
+		{
+			"id": "Give_Cores",
+			"speaker_name": "Stranded Miner",
+			"text": "Thank you! You saved our lives. Here, we found these coordinates before our ship died. It's an untouched Ancient Tech cache.",
+			"quest_to_trigger": "Quest_Ancient_Cache",
+			"options": [
+				{ "text": "Upload coordinates to the ship's nav-computer. (End)", "next": "End" }
+			]
+		}
+	]
+}

@@ -18,3 +18,4 @@ SuccessMessage = "Route ledgers extracted from the vault core."
 RewardRawMaterials = 10
 RewardEnergyCores = 1
 RewardAncientTech = 3
+RewardFleetItemIds = PackedStringArray("smuggler_route_ledgers")

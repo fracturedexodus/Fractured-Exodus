@@ -1,0 +1,8 @@
+{
+	"item_id": "smuggler_route_ledgers",
+	"display_name": "Smuggler Route Ledgers",
+	"description": "Embargo lane ledgers and dead-drop keys seized from the exchange vault.",
+	"category": "Mission Documents",
+	"stackable": false,
+	"codex_entry_id": "smuggler_route_ledgers"
+}

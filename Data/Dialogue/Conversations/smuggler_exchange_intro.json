@@ -1,0 +1,44 @@
+{
+	"conversation_id": "smuggler_exchange_intro",
+	"nodes": [
+		{
+			"id": "Start",
+			"speaker_name": "Broker Veil",
+			"text": "You found the uplink before the patrols cut it. Good. The vault can be unsealed from the override console, but only if you understand the price: my wounded are boxed into the medbay, and every ledger in the vault can put a dozen routes to the torch.",
+			"options": [
+				{ "text": "What does the vault actually hold?", "next": "Vault" },
+				{ "text": "Who is trapped in the medbay?", "next": "Medbay" },
+				{ "text": "Enough. We'll move through the station and decide.", "next": "End", "set_flags": ["smuggler_broker_briefed"] }
+			]
+		},
+		{
+			"id": "Vault",
+			"speaker_name": "Broker Veil",
+			"text": "Route ledgers, hush-pay manifests, and keys to old embargo lanes. Take them and you'll own the corridor for a season. Lose them and the patrols own every ship that ever trusted me.",
+			"options": [
+				{ "text": "And the medbay?", "next": "Medbay" },
+				{ "text": "Back to the uplink.", "next": "Start" },
+				{ "text": "We'll handle the station from here.", "next": "End", "set_flags": ["smuggler_broker_briefed"] }
+			]
+		},
+		{
+			"id": "Medbay",
+			"speaker_name": "Broker Veil",
+			"text": "Couriers, cutters, a pair of civilians that happened to be buying medicine when the station sealed. They don't care about ledgers or contracts. They just need a ship willing to take them before the burners arrive.",
+			"options": [
+				{ "text": "Back to the uplink.", "next": "Start" },
+				{ "text": "We know enough. Hold this channel.", "next": "End", "set_flags": ["smuggler_broker_briefed"] },
+				{ "text": "The vault is already open. What does that change?", "next": "Vault_Open", "required_flags": ["smuggler_vault_unsealed"] }
+			]
+		},
+		{
+			"id": "Vault_Open",
+			"speaker_name": "Broker Veil",
+			"text": "Then every second counts twice. If you keep the route cache, the patrols will know exactly what vanished. If you walk out with my wounded instead, I can still erase your silhouette from the manifests.",
+			"options": [
+				{ "text": "Understood. Keep the channel open.", "next": "End", "set_flags": ["smuggler_broker_briefed"] },
+				{ "text": "Back to the medbay question.", "next": "Medbay" }
+			]
+		}
+	]
+}

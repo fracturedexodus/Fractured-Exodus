@@ -16,3 +16,4 @@ HideWhenConsumed = false
 SetFlags = PackedStringArray("smuggler_broker_briefed")
 DialogueId = "smuggler_exchange_intro"
 SuccessMessage = "Veil's uplink spills the broker's terms into your tac-net."
+RewardCodexEntryIds = PackedStringArray("broker_veil_dossier")

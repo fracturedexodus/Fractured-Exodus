@@ -212,12 +212,7 @@ public partial class MissionManager : Node
 			return;
 		}
 
-		_globalData.FleetResources[GameConstants.ResourceKeys.RawMaterials] =
-			_globalData.FleetResources[GameConstants.ResourceKeys.RawMaterials].AsSingle() + outcome.Reward.RawMaterials;
-		_globalData.FleetResources[GameConstants.ResourceKeys.EnergyCores] =
-			_globalData.FleetResources[GameConstants.ResourceKeys.EnergyCores].AsSingle() + outcome.Reward.EnergyCores;
-		_globalData.FleetResources[GameConstants.ResourceKeys.AncientTech] =
-			_globalData.FleetResources[GameConstants.ResourceKeys.AncientTech].AsSingle() + outcome.Reward.AncientTech;
+		new CampaignRewardService(_globalData).ApplyReward(outcome.Reward);
 
 		_officerService?.ApplyDirectApprovalChanges(outcome.ApprovalChanges);
 

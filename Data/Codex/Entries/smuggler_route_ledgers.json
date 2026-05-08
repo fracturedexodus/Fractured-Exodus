@@ -1,0 +1,8 @@
+{
+	"entry_id": "smuggler_route_ledgers",
+	"title": "Smuggler Route Ledgers",
+	"category": "Mission Intel",
+	"summary": "Embargo corridor ledgers, hush-pay records, and dead-drop keys extracted from the vault.",
+	"detail_text": "The route cache confirms which corridors still function outside official patrol charts, who was paid to keep them quiet, and which captains trusted the exchange to move medicine and contraband alike. Possessing the ledgers is equivalent to holding a season's worth of leverage over the corridor.",
+	"image_path": ""
+}

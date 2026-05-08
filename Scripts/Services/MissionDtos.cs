@@ -15,6 +15,9 @@ public class MissionReward
 	public int RawMaterials { get; set; }
 	public int EnergyCores { get; set; }
 	public int AncientTech { get; set; }
+	public List<string> FleetItemIds { get; set; } = new List<string>();
+	public List<string> OfficerItemIds { get; set; } = new List<string>();
+	public List<string> CodexEntryIds { get; set; } = new List<string>();
 }
 
 public class MissionOutcome

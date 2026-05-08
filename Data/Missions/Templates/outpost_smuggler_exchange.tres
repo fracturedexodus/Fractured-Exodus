@@ -21,6 +21,5 @@ SecondaryActionText = "SEIZE CONTRABAND"
 SecondaryOutcomeId = "contraband_seized"
 SecondaryOutcomeRequiredFlags = PackedStringArray("smuggler_vault_unsealed", "smuggler_route_cache_secured", "smuggler_patrol_feed_scrubbed")
 DefaultDialogueId = "smuggler_exchange_dialogue"
-SpawnDefinitionPaths = PackedStringArray("res://Data/Missions/Spawns/outpost_player_a.tres", "res://Data/Missions/Spawns/outpost_player_b.tres")
 InteractionKeys = PackedStringArray("outpost:smuggler_exchange")
 IsEnabled = true

@@ -1,0 +1,33 @@
+{
+	"conversation_id": "smuggler_exchange_survivors",
+	"nodes": [
+		{
+			"id": "Start",
+			"speaker_name": "Safehouse Medic",
+			"text": "Three runners are stable enough to move, two civilians are in shock, and the station's auto-doc is cycling on stolen power. Give us a corridor and we'll reach your shuttle under our own legs.",
+			"options": [
+				{ "text": "You're coming with us. Be ready to move.", "next": "End", "set_flags": ["smuggler_survivors_secured"] },
+				{ "text": "What happens if we leave you here?", "next": "Risk" },
+				{ "text": "The vault is already open. Can you still move now?", "next": "Vault_Tension", "required_flags": ["smuggler_vault_unsealed"] }
+			]
+		},
+		{
+			"id": "Risk",
+			"speaker_name": "Safehouse Medic",
+			"text": "Patrol evidence teams don't take witnesses. They'll call it contamination control and vent this room into the black. If you're offering extraction, say it plain so I can keep these people breathing until the doors open.",
+			"options": [
+				{ "text": "Understood. Prepare them for evac.", "next": "End", "set_flags": ["smuggler_survivors_secured"] },
+				{ "text": "Hold for a few more minutes.", "next": "Start" }
+			]
+		},
+		{
+			"id": "Vault_Tension",
+			"speaker_name": "Safehouse Medic",
+			"text": "If the vault is open, then the station is already screaming across every patrol net in range. We can still move, but not if you wait for a cleaner answer than that.",
+			"options": [
+				{ "text": "Then get your people ready. We extract now.", "next": "End", "set_flags": ["smuggler_survivors_secured"] },
+				{ "text": "Back to the casualty report.", "next": "Start" }
+			]
+		}
+	]
+}

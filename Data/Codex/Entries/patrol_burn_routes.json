@@ -1,0 +1,8 @@
+{
+	"entry_id": "patrol_burn_routes",
+	"title": "Patrol Burn Routes",
+	"category": "Mission Intel",
+	"summary": "Scrubbed evidence-burner approach lanes and timing windows captured from the exchange network.",
+	"detail_text": "The reclaimed patrol package maps the evidence-burner vectors used when embargo stations are condemned. Boarding corridors are synchronized to blind spots in station lighting and pressure shutters. The feed confirms how little time remains once a burn order is issued.",
+	"image_path": ""
+}

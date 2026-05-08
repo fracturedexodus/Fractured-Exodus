@@ -19,6 +19,5 @@ PrimaryOutcomeId = "survivors_saved"
 SecondaryActionText = "SECURE ARCHIVE"
 SecondaryOutcomeId = "archive_secured"
 DefaultDialogueId = "trigger_dialogue"
-SpawnDefinitionPaths = PackedStringArray("res://Data/Missions/Spawns/black_site_player_a.tres", "res://Data/Missions/Spawns/black_site_player_b.tres")
 InteractionKeys = PackedStringArray("black_site_relay", "planet:black_site_relay")
 IsEnabled = true

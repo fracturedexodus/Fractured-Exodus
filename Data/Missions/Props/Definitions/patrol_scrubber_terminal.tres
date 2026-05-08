@@ -16,3 +16,4 @@ HideWhenConsumed = false
 SetFlags = PackedStringArray("smuggler_patrol_feed_scrubbed")
 DialogueId = "smuggler_exchange_patrols"
 SuccessMessage = "Patrol schedules and reclaim paths are cached to your suit display."
+RewardOfficerItemIds = PackedStringArray("patrol_feed_cache")

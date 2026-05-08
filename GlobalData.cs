@@ -118,6 +118,7 @@ public class OfficerState
 	public string PersonalQuestID { get; set; } = string.Empty;
 	public List<string> Flags { get; set; } = new List<string>();
 	public List<string> CompletedScenes { get; set; } = new List<string>();
+	public List<string> PersonalInventoryItemIDs { get; set; } = new List<string>();
 }
 
 // --- NEW: EQUIPMENT AND LOADOUT CLASSES ---
@@ -177,6 +178,8 @@ public partial class GlobalData : Node
 	// --- NEW: INVENTORY MEMORY ---
 	// Stores ItemIDs of gear you own but haven't equipped yet
 	public List<string> UnequippedInventory { get; set; } = new List<string>(); 
+	public List<string> FleetCargoItemIDs { get; set; } = new List<string>();
+	public List<string> UnlockedCodexEntryIDs { get; set; } = new List<string>();
 	
 	// Maps a Ship's Name to its specific loadout
 	public Dictionary<string, ShipLoadout> FleetLoadouts { get; set; } = new Dictionary<string, ShipLoadout>();
@@ -279,7 +282,7 @@ public partial class GlobalData : Node
 		SelectedBasePlanetHexCoords = Vector2.Zero; SelectedPlayerFleet.Clear(); SelectedFleetCapacity = 0;
 		ExploredSystems.Clear(); CurrentSectorStars.Clear();
 		CurrentTurn = 1; InCombat = false; CurrentQueueIndex = 0; JustJumped = false; 
-		SavedFleetState.Clear(); UnequippedInventory.Clear(); FleetLoadouts.Clear(); ShipOfficers.Clear(); PendingDowntimeEvents.Clear();
+		SavedFleetState.Clear(); UnequippedInventory.Clear(); FleetCargoItemIDs.Clear(); UnlockedCodexEntryIDs.Clear(); FleetLoadouts.Clear(); ShipOfficers.Clear(); PendingDowntimeEvents.Clear();
 		ClearCurrentMissionState(); CompletedMissionIDs.Clear(); MissionOutcomes.Clear(); StoryFlags.Clear();
 		
 		FleetResources = new Godot.Collections.Dictionary<string, Variant> {

@@ -1,0 +1,8 @@
+{
+	"item_id": "patrol_feed_cache",
+	"display_name": "Patrol Feed Cache",
+	"description": "A scrubbed burst of reclaim patrol vectors and burn-route timings copied off the exchange relay grid.",
+	"category": "Mission Intel",
+	"stackable": false,
+	"codex_entry_id": "patrol_burn_routes"
+}

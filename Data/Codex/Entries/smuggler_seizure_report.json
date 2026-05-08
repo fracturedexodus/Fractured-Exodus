@@ -1,0 +1,8 @@
+{
+	"entry_id": "smuggler_seizure_report",
+	"title": "Smuggler Seizure Report",
+	"category": "Mission Intel",
+	"summary": "A field summary of the exchange contraband seizure and its downstream leverage.",
+	"detail_text": "Seizing the exchange cache yields more than materials. The recovered manifests map supply lanes, hush-accounts, and broker dependencies across the region. Even stripped of sentiment, the seizure creates a fresh balance of fear and opportunity in every system that relied on the exchange.",
+	"image_path": ""
+}

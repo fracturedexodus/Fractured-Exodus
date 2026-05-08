@@ -1,0 +1,33 @@
+{
+	"conversation_id": "trigger_dialogue",
+	"nodes": [
+		{
+			"id": "Start",
+			"speaker_name": "Relay Survivor",
+			"text": "Hold there. If you're hearing this, then the relay still has visitors left in the galaxy. The archive vault is destabilizing and the shelter seals are failing. We do not have time for both.",
+			"options": [
+				{ "text": "Tell me about the survivors.", "next": "Survivors" },
+				{ "text": "Tell me about the archive.", "next": "Archive" },
+				{ "text": "We understand. We'll decide what to save.", "next": "End" }
+			]
+		},
+		{
+			"id": "Survivors",
+			"speaker_name": "Relay Survivor",
+			"text": "Three cryo-pods still cycle in the shelter wing. If power drops again, they die with the station. Save them first and the archive will likely be lost to cascade failure.",
+			"options": [
+				{ "text": "Understood. Back to the relay schematic.", "next": "Start" },
+				{ "text": "We'll move for the shelter.", "next": "End" }
+			]
+		},
+		{
+			"id": "Archive",
+			"speaker_name": "Relay Survivor",
+			"text": "The archive core contains intact Custodian route-logic and pre-collapse relay logs. If you cut auxiliary power to stabilize it, the life-support reserves in the shelter will not hold much longer.",
+			"options": [
+				{ "text": "Understood. Show me the tradeoff again.", "next": "Start" },
+				{ "text": "We'll secure the archive.", "next": "End" }
+			]
+		}
+	]
+}

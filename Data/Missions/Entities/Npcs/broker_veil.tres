@@ -12,7 +12,5 @@ SpriteTexturePath = "res://Assets/Missions/Characters/Operative01/operative_nw.p
 VisualScaleMultiplier = 0.11
 AccentColor = Color(0.984314, 0.815686, 0.486275, 1)
 ShowNameLabel = true
-SetFlags = PackedStringArray("smuggler_broker_briefed")
-SuccessMessage = "Veil commits the broker's terms and vault access brief to your tac-net."
 DefaultDialogueId = "smuggler_exchange_intro"
 Notes = "Primary broker contact for the outpost mission."

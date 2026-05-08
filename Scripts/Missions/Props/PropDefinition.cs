@@ -23,4 +23,7 @@ public partial class PropDefinition : Resource
 	[Export] public int RewardRawMaterials { get; set; } = 0;
 	[Export] public int RewardEnergyCores { get; set; } = 0;
 	[Export] public int RewardAncientTech { get; set; } = 0;
+	[Export] public Godot.Collections.Array<string> RewardFleetItemIds { get; set; } = new Godot.Collections.Array<string>();
+	[Export] public Godot.Collections.Array<string> RewardOfficerItemIds { get; set; } = new Godot.Collections.Array<string>();
+	[Export] public Godot.Collections.Array<string> RewardCodexEntryIds { get; set; } = new Godot.Collections.Array<string>();
 }

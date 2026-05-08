@@ -1,4 +1,5 @@
 using Godot;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -11,6 +12,8 @@ public partial class MissionSceneBuilder : Node2D
 	private const float CameraPanSpeed = 780f;
 	private const float TileNudgeStep = 10f;
 	private const float TileRotateStep = 15f;
+	private const int GridPreviewColumns = 20;
+	private const int GridPreviewRows = 20;
 
 	private enum BuilderLayer
 	{
@@ -26,6 +29,7 @@ public partial class MissionSceneBuilder : Node2D
 	private Node2D _propLayer;
 	private Node2D _markerLayer;
 	private VBoxContainer _paletteContainer;
+	private LineEdit _paletteSearchEdit;
 	private Label _statusLabel;
 	private LineEdit _layoutNameEdit;
 	private OptionButton _backgroundOption;
@@ -57,6 +61,27 @@ public partial class MissionSceneBuilder : Node2D
 	private TextEdit _logicNotesEdit;
 	private RichTextLabel _validationReport;
 	private OptionButton _validationFilterOption;
+	private Label _dialogueSelectionContextLabel;
+	private OptionButton _dialogueConversationOption;
+	private Button _dialogueConversationRefreshButton;
+	private Button _dialogueConversationNewButton;
+	private Button _dialogueConversationLoadSelectedButton;
+	private Button _dialogueConversationAssignSelectedButton;
+	private LineEdit _dialogueConversationIdEdit;
+	private OptionButton _dialogueNodeOption;
+	private Button _dialogueNodeNewButton;
+	private Button _dialogueNodeDeleteButton;
+	private LineEdit _dialogueNodeIdEdit;
+	private LineEdit _dialogueSpeakerEdit;
+	private LineEdit _dialogueQuestTriggerEdit;
+	private LineEdit _dialogueRequiredFlagsEdit;
+	private LineEdit _dialogueBlockedFlagsEdit;
+	private LineEdit _dialogueSetFlagsEdit;
+	private TextEdit _dialogueTextEdit;
+	private VBoxContainer _dialogueOptionsContainer;
+	private Button _dialogueAddOptionButton;
+	private Button _dialogueSaveButton;
+	private Label _dialogueEditorStatusLabel;
 	private MissionTileDefinition _selectedTile;
 	private MissionMarkerDefinition _selectedMarker;
 	private string _selectedPropDefinitionPath = string.Empty;
@@ -66,19 +91,24 @@ public partial class MissionSceneBuilder : Node2D
 	private bool _isPanning;
 	private bool _isUpdatingBackgroundUi;
 	private bool _isUpdatingLogicUi;
+	private bool _isUpdatingDialogueUi;
 	private Vector2 _lastMouseScreenPosition;
 	private readonly List<Line2D> _gridLines = new List<Line2D>();
 	private readonly Dictionary<string, PropDefinitionPreview> _propDefinitionPreviewCache = new Dictionary<string, PropDefinitionPreview>();
 	private readonly Dictionary<string, NpcDefinitionPreview> _npcDefinitionPreviewCache = new Dictionary<string, NpcDefinitionPreview>();
 	private readonly List<ValidationIssueEntry> _validationEntries = new List<ValidationIssueEntry>();
 	private readonly Dictionary<string, Texture2D> _markerIconCache = new Dictionary<string, Texture2D>();
+	private readonly Dictionary<string, bool> _paletteSectionExpanded = new Dictionary<string, bool>();
 	private Polygon2D _hoverDiamond;
 	private readonly Vector2 _tileStep = MissionFloorTextureFactory.TileSize;
 	private readonly Vector2 _gridOrigin = new Vector2(0f, -20f);
 	private string _selectedBackgroundId = MissionBackgroundCatalog.DefaultId;
+	private string _paletteSearchQuery = string.Empty;
 	private Texture2D _fallbackPropPreviewTexture;
 	private bool _placedMapCenterDirty = true;
 	private Vector2 _cachedPlacedMapCenter = Vector2.Zero;
+	private DialogueConversationData _activeDialogueConversation;
+	private string _activeDialogueNodeId = string.Empty;
 
 	private sealed class PropDefinitionPreview
 	{
@@ -121,6 +151,22 @@ public partial class MissionSceneBuilder : Node2D
 		InfoOnly
 	}
 
+	private enum DialogueBindingKind
+	{
+		None,
+		LayoutTargetId,
+		NpcDefinition
+	}
+
+	private sealed class DialogueBindingInfo
+	{
+		public DialogueBindingKind Kind { get; init; } = DialogueBindingKind.None;
+		public Sprite2D Sprite { get; init; }
+		public string ConversationId { get; init; } = string.Empty;
+		public string Description { get; init; } = string.Empty;
+		public string NpcDefinitionPath { get; init; } = string.Empty;
+	}
+
 	public override void _Ready()
 	{
 		_camera = GetNode<Camera2D>("Camera2D");
@@ -143,7 +189,7 @@ public partial class MissionSceneBuilder : Node2D
 		WireUi();
 		ApplyZoom(DefaultZoom);
 		UpdateSelectedLabel();
-		SetStatus("Left click to place/select. Drag items to move. Right click deletes. Mouse wheel zooms.");
+		SetStatus("Build floors and walls on the left, add mission markers and props, then wire logic and dialogue on the right. Right click deletes, middle mouse pans, wheel zooms.");
 		LoadLayout();
 	}
 
@@ -308,7 +354,11 @@ public partial class MissionSceneBuilder : Node2D
 		GetNode<Button>("UILayer/TopBar/Margin/TopRow/LoadButton").Pressed += LoadLayout;
 		Button validateButton = new Button { Text = "Validate" };
 		validateButton.Pressed += ValidateLayout;
-		GetNode<HBoxContainer>("UILayer/TopBar/Margin/TopRow").AddChild(validateButton);
+		HBoxContainer topRow = GetNode<HBoxContainer>("UILayer/TopBar/Margin/TopRow");
+		topRow.AddChild(validateButton);
+		Button frameMapButton = new Button { Text = "Frame Map" };
+		frameMapButton.Pressed += FramePlacedMap;
+		topRow.AddChild(frameMapButton);
 		GetNode<Button>("UILayer/TopBar/Margin/TopRow/ClearButton").Pressed += ClearLayout;
 		GetNode<Button>("UILayer/TopBar/Margin/TopRow/ExitButton").Pressed += ExitBuilder;
 	}
@@ -515,13 +565,32 @@ public partial class MissionSceneBuilder : Node2D
 		margin.AddThemeConstantOverride("margin_bottom", 12);
 		panel.AddChild(margin);
 
+		ScrollContainer scroll = new ScrollContainer
+		{
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+			SizeFlagsVertical = Control.SizeFlags.ExpandFill,
+			HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled
+		};
+		margin.AddChild(scroll);
+
 		VBoxContainer root = new VBoxContainer();
 		root.AddThemeConstantOverride("separation", 10);
-		margin.AddChild(root);
+		root.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+		scroll.AddChild(root);
 
 		Label title = new Label { Text = "MISSION LOGIC" };
 		title.AddThemeFontSizeOverride("font_size", 20);
 		root.AddChild(title);
+
+		Label workflowLabel = new Label
+		{
+			Text = "Workflow: build floors and walls on the left, place props and markers, then wire mission logic and dialogue here.",
+			AutowrapMode = TextServer.AutowrapMode.WordSmart
+		};
+		workflowLabel.AddThemeColorOverride("font_color", new Color(0.78f, 0.85f, 0.94f, 0.95f));
+		root.AddChild(workflowLabel);
+
+		AddPanelSectionHeader(root, "Selection & Mission Binding");
 
 		_logicSelectionLabel = new Label
 		{
@@ -613,6 +682,8 @@ public partial class MissionSceneBuilder : Node2D
 		}
 		_logicNpcPortraitOption.ItemSelected += _ => ApplyLogicFieldChanges();
 		root.AddChild(_logicNpcPortraitOption);
+
+		AddPanelSectionHeader(root, "Mission State & Trigger Rules");
 		_logicRequiredFlagEdit = AddInspectorField(root, "Required Flag");
 		_logicRequiredFlagHelpLabel = new Label
 		{
@@ -681,8 +752,11 @@ public partial class MissionSceneBuilder : Node2D
 		_validationReport.MetaClicked += OnValidationReportMetaClicked;
 		root.AddChild(_validationReport);
 
+		BuildDialogueEditor(root);
+
 		RefreshPropDefinitionOptions();
 		RefreshNpcDefinitionOptions();
+		RefreshDialogueConversationOptions();
 		UpdateLogicInspector();
 	}
 
@@ -695,6 +769,1252 @@ public partial class MissionSceneBuilder : Node2D
 		return lineEdit;
 	}
 
+	private static void AddPanelSectionHeader(VBoxContainer root, string title, string helpText = "")
+	{
+		root.AddChild(new HSeparator());
+
+		Label titleLabel = new Label { Text = title };
+		titleLabel.AddThemeFontSizeOverride("font_size", 16);
+		root.AddChild(titleLabel);
+
+		if (!string.IsNullOrWhiteSpace(helpText))
+		{
+			Label helpLabel = new Label
+			{
+				Text = helpText,
+				AutowrapMode = TextServer.AutowrapMode.WordSmart
+			};
+			helpLabel.AddThemeColorOverride("font_color", new Color(0.74f, 0.8f, 0.9f, 0.9f));
+			root.AddChild(helpLabel);
+		}
+	}
+
+	private void OnPaletteSearchChanged(string newText)
+	{
+		string normalizedQuery = newText?.StripEdges() ?? string.Empty;
+		if (_paletteSearchQuery == normalizedQuery)
+		{
+			return;
+		}
+
+		_paletteSearchQuery = normalizedQuery;
+		BuildPalette();
+	}
+
+	private bool IsPaletteSectionExpanded(string key)
+	{
+		return !_paletteSectionExpanded.TryGetValue(key, out bool expanded) || expanded;
+	}
+
+	private void TogglePaletteSection(string key)
+	{
+		_paletteSectionExpanded[key] = !IsPaletteSectionExpanded(key);
+		BuildPalette();
+	}
+
+	private void AddPaletteSectionHeader(string title, string helpText)
+	{
+		_paletteContainer.AddChild(new HSeparator());
+
+		Label titleLabel = new Label { Text = title };
+		titleLabel.AddThemeFontSizeOverride("font_size", 16);
+		_paletteContainer.AddChild(titleLabel);
+
+		Label helpLabel = new Label
+		{
+			Text = helpText,
+			AutowrapMode = TextServer.AutowrapMode.WordSmart
+		};
+		helpLabel.AddThemeColorOverride("font_color", new Color(0.74f, 0.8f, 0.9f, 0.9f));
+		_paletteContainer.AddChild(helpLabel);
+	}
+
+	private void AddPaletteCollapsibleSection(string key, string title, string helpText, Func<VBoxContainer, int> populateContent)
+	{
+		VBoxContainer content = new VBoxContainer();
+		content.AddThemeConstantOverride("separation", 6);
+		int itemCount = populateContent(content);
+		if (itemCount <= 0 && !string.IsNullOrWhiteSpace(_paletteSearchQuery))
+		{
+			content.QueueFree();
+			return;
+		}
+
+		AddPaletteSectionHeader(title, helpText);
+
+		bool forceExpanded = !string.IsNullOrWhiteSpace(_paletteSearchQuery);
+		bool expanded = forceExpanded || IsPaletteSectionExpanded(key);
+		Button toggleButton = new Button
+		{
+			Text = expanded ? "Collapse Section" : "Expand Section",
+			Alignment = HorizontalAlignment.Center,
+			CustomMinimumSize = new Vector2(0f, 32f),
+			Disabled = forceExpanded
+		};
+		toggleButton.Pressed += () => TogglePaletteSection(key);
+		_paletteContainer.AddChild(toggleButton);
+
+		content.Visible = expanded;
+		_paletteContainer.AddChild(content);
+	}
+
+	private int BuildMapTilesPaletteContent(VBoxContainer content)
+	{
+		int itemCount = 0;
+		foreach (MissionTileCategory category in new[] { MissionTileCategory.Floor, MissionTileCategory.Wall, MissionTileCategory.Prop })
+		{
+			List<MissionTileDefinition> definitions = MissionTileCatalog.All
+				.Where(def => def.Category == category && def.VisibleInPalette && PaletteMatchesSearch(def.DisplayName, def.Id))
+				.ToList();
+			if (definitions.Count == 0)
+			{
+				continue;
+			}
+
+			AddPaletteSubsectionLabel(content, category switch
+			{
+				MissionTileCategory.Floor => "Floors",
+				MissionTileCategory.Wall => "Walls",
+				_ => "Visual Props"
+			});
+
+			foreach (MissionTileDefinition definition in definitions)
+			{
+				content.AddChild(CreatePaletteTileButton(definition));
+				itemCount++;
+			}
+		}
+
+		return itemCount;
+	}
+
+	private int BuildMarkerPaletteContent(VBoxContainer content)
+	{
+		int itemCount = 0;
+		foreach (MissionMarkerCategory category in new[] { MissionMarkerCategory.Spawn, MissionMarkerCategory.Objective, MissionMarkerCategory.Trigger })
+		{
+			List<MissionMarkerDefinition> definitions = MissionMarkerCatalog.All
+				.Where(def => def.Category == category && PaletteMatchesSearch(def.DisplayName, def.Id))
+				.ToList();
+			if (definitions.Count == 0)
+			{
+				continue;
+			}
+
+			AddPaletteSubsectionLabel(content, category switch
+			{
+				MissionMarkerCategory.Spawn => "Spawn Markers",
+				MissionMarkerCategory.Objective => "Objective Markers",
+				_ => "Trigger Markers"
+			});
+
+			foreach (MissionMarkerDefinition definition in definitions)
+			{
+				content.AddChild(CreatePaletteMarkerButton(definition));
+				itemCount++;
+			}
+		}
+
+		return itemCount;
+	}
+
+	private int BuildRuntimePropPaletteContent(VBoxContainer content)
+	{
+		int itemCount = 0;
+		foreach (string propDefinitionPath in GetAvailablePropDefinitionPaths())
+		{
+			PropDefinitionPreview preview = GetPropDefinitionPreview(propDefinitionPath);
+			if (!PaletteMatchesSearch(preview.DisplayName, propDefinitionPath, preview.Description))
+			{
+				continue;
+			}
+
+			content.AddChild(CreatePaletteRuntimePropButton(propDefinitionPath, preview));
+			itemCount++;
+		}
+
+		return itemCount;
+	}
+
+	private static void AddPaletteSubsectionLabel(VBoxContainer content, string labelText)
+	{
+		Label label = new Label { Text = labelText };
+		label.AddThemeFontSizeOverride("font_size", 14);
+		content.AddChild(label);
+	}
+
+	private Button CreatePaletteTileButton(MissionTileDefinition definition)
+	{
+		Button button = new Button
+		{
+			Text = definition.DisplayName,
+			Icon = GetTileIconTexture(definition),
+			Alignment = HorizontalAlignment.Left,
+			ExpandIcon = true,
+			CustomMinimumSize = new Vector2(0f, 40f),
+			TooltipText = definition.Id
+		};
+		button.Pressed += () =>
+		{
+			_selectedTile = definition;
+			_selectedMarker = null;
+			_selectedPropDefinitionPath = string.Empty;
+			ClearPlacedSelection();
+			UpdateSelectedLabel();
+			UpdateLogicInspector();
+		};
+		return button;
+	}
+
+	private Button CreatePaletteMarkerButton(MissionMarkerDefinition definition)
+	{
+		Button button = new Button
+		{
+			Text = definition.DisplayName,
+			Icon = GetMarkerIconTexture(definition),
+			Alignment = HorizontalAlignment.Left,
+			ExpandIcon = true,
+			CustomMinimumSize = new Vector2(0f, 40f),
+			TooltipText = definition.Id
+		};
+		button.Pressed += () =>
+		{
+			_selectedTile = null;
+			_selectedMarker = definition;
+			_selectedPropDefinitionPath = string.Empty;
+			ClearPlacedSelection();
+			UpdateSelectedLabel();
+			UpdateLogicInspector();
+		};
+		return button;
+	}
+
+	private Button CreatePaletteRuntimePropButton(string propDefinitionPath, PropDefinitionPreview preview)
+	{
+		Button button = new Button
+		{
+			Text = preview.DisplayName,
+			Icon = preview.Icon,
+			Alignment = HorizontalAlignment.Left,
+			ExpandIcon = true,
+			CustomMinimumSize = new Vector2(0f, 40f),
+			TooltipText = string.IsNullOrWhiteSpace(preview.Description) ? propDefinitionPath : $"{preview.Description}\n{propDefinitionPath}"
+		};
+		button.Pressed += () =>
+		{
+			_selectedTile = null;
+			_selectedMarker = null;
+			_selectedPropDefinitionPath = propDefinitionPath;
+			ClearPlacedSelection();
+			UpdateSelectedLabel();
+			UpdateLogicInspector();
+		};
+		return button;
+	}
+
+	private bool PaletteMatchesSearch(params string[] values)
+	{
+		if (string.IsNullOrWhiteSpace(_paletteSearchQuery))
+		{
+			return true;
+		}
+
+		string query = _paletteSearchQuery.Trim();
+		return values.Any(value => !string.IsNullOrWhiteSpace(value)
+			&& value.Contains(query, StringComparison.OrdinalIgnoreCase));
+	}
+
+	private void BuildDialogueEditor(VBoxContainer root)
+	{
+		root.AddChild(new HSeparator());
+
+		Label title = new Label { Text = "Dialogue Editor" };
+		title.AddThemeFontSizeOverride("font_size", 18);
+		root.AddChild(title);
+
+		_dialogueSelectionContextLabel = new Label
+		{
+			Text = "Select a dialogue trigger, dialogue prop, or NPC spawn to bind a conversation.",
+			AutowrapMode = TextServer.AutowrapMode.WordSmart
+		};
+		_dialogueSelectionContextLabel.AddThemeColorOverride("font_color", new Color(0.72f, 0.78f, 0.88f, 0.95f));
+		root.AddChild(_dialogueSelectionContextLabel);
+
+		root.AddChild(new Label { Text = "Conversation Library" });
+		HBoxContainer conversationLibraryRow = new HBoxContainer();
+		conversationLibraryRow.AddThemeConstantOverride("separation", 8);
+		_dialogueConversationOption = new OptionButton
+		{
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+		};
+		_dialogueConversationOption.ItemSelected += OnDialogueConversationOptionSelected;
+		conversationLibraryRow.AddChild(_dialogueConversationOption);
+		_dialogueConversationRefreshButton = new Button { Text = "Refresh" };
+		_dialogueConversationRefreshButton.Pressed += RefreshDialogueConversationOptions;
+		conversationLibraryRow.AddChild(_dialogueConversationRefreshButton);
+		root.AddChild(conversationLibraryRow);
+
+		HBoxContainer conversationActionRow = new HBoxContainer();
+		conversationActionRow.AddThemeConstantOverride("separation", 8);
+		_dialogueConversationNewButton = new Button
+		{
+			Text = "New Conversation",
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+		};
+		_dialogueConversationNewButton.Pressed += CreateNewDialogueConversation;
+		conversationActionRow.AddChild(_dialogueConversationNewButton);
+		_dialogueConversationLoadSelectedButton = new Button
+		{
+			Text = "Load Selected Binding",
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+		};
+		_dialogueConversationLoadSelectedButton.Pressed += LoadDialogueConversationFromSelection;
+		conversationActionRow.AddChild(_dialogueConversationLoadSelectedButton);
+		root.AddChild(conversationActionRow);
+
+		HBoxContainer conversationBindRow = new HBoxContainer();
+		conversationBindRow.AddThemeConstantOverride("separation", 8);
+		_dialogueConversationAssignSelectedButton = new Button
+		{
+			Text = "Assign Current To Selection",
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+		};
+		_dialogueConversationAssignSelectedButton.Pressed += AssignActiveDialogueConversationToSelection;
+		conversationBindRow.AddChild(_dialogueConversationAssignSelectedButton);
+		root.AddChild(conversationBindRow);
+
+		root.AddChild(new Label { Text = "Conversation ID" });
+		_dialogueConversationIdEdit = new LineEdit
+		{
+			PlaceholderText = "smuggler_exchange_intro"
+		};
+		_dialogueConversationIdEdit.TextChanged += OnDialogueConversationIdChanged;
+		root.AddChild(_dialogueConversationIdEdit);
+
+		root.AddChild(new Label { Text = "Node Library" });
+		HBoxContainer nodeLibraryRow = new HBoxContainer();
+		nodeLibraryRow.AddThemeConstantOverride("separation", 8);
+		_dialogueNodeOption = new OptionButton
+		{
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+		};
+		_dialogueNodeOption.ItemSelected += OnDialogueNodeOptionSelected;
+		nodeLibraryRow.AddChild(_dialogueNodeOption);
+		_dialogueNodeNewButton = new Button { Text = "New Node" };
+		_dialogueNodeNewButton.Pressed += AddDialogueNode;
+		nodeLibraryRow.AddChild(_dialogueNodeNewButton);
+		_dialogueNodeDeleteButton = new Button { Text = "Delete Node" };
+		_dialogueNodeDeleteButton.Pressed += DeleteActiveDialogueNode;
+		nodeLibraryRow.AddChild(_dialogueNodeDeleteButton);
+		root.AddChild(nodeLibraryRow);
+
+		root.AddChild(new Label { Text = "Node ID" });
+		_dialogueNodeIdEdit = new LineEdit
+		{
+			PlaceholderText = "Start"
+		};
+		_dialogueNodeIdEdit.TextChanged += OnDialogueNodeIdChanged;
+		root.AddChild(_dialogueNodeIdEdit);
+
+		root.AddChild(new Label { Text = "Speaker" });
+		_dialogueSpeakerEdit = new LineEdit();
+		_dialogueSpeakerEdit.TextChanged += _ => OnDialogueNodeFieldsChanged();
+		root.AddChild(_dialogueSpeakerEdit);
+
+		root.AddChild(new Label { Text = "Text" });
+		_dialogueTextEdit = new TextEdit
+		{
+			CustomMinimumSize = new Vector2(0f, 130f),
+			WrapMode = TextEdit.LineWrappingMode.Boundary
+		};
+		_dialogueTextEdit.TextChanged += OnDialogueNodeFieldsChanged;
+		root.AddChild(_dialogueTextEdit);
+
+		root.AddChild(new Label { Text = "Quest Trigger" });
+		_dialogueQuestTriggerEdit = new LineEdit
+		{
+			PlaceholderText = "Optional quest id"
+		};
+		_dialogueQuestTriggerEdit.TextChanged += _ => OnDialogueNodeFieldsChanged();
+		root.AddChild(_dialogueQuestTriggerEdit);
+
+		root.AddChild(new Label { Text = "Required Flags" });
+		_dialogueRequiredFlagsEdit = new LineEdit
+		{
+			PlaceholderText = "flag_a, flag_b"
+		};
+		_dialogueRequiredFlagsEdit.TextChanged += _ => OnDialogueNodeFieldsChanged();
+		root.AddChild(_dialogueRequiredFlagsEdit);
+
+		root.AddChild(new Label { Text = "Blocked Flags" });
+		_dialogueBlockedFlagsEdit = new LineEdit
+		{
+			PlaceholderText = "flag_c"
+		};
+		_dialogueBlockedFlagsEdit.TextChanged += _ => OnDialogueNodeFieldsChanged();
+		root.AddChild(_dialogueBlockedFlagsEdit);
+
+		root.AddChild(new Label { Text = "Set Flags" });
+		_dialogueSetFlagsEdit = new LineEdit
+		{
+			PlaceholderText = "flag_rewarded"
+		};
+		_dialogueSetFlagsEdit.TextChanged += _ => OnDialogueNodeFieldsChanged();
+		root.AddChild(_dialogueSetFlagsEdit);
+
+		root.AddChild(new Label { Text = "Options" });
+		_dialogueOptionsContainer = new VBoxContainer();
+		_dialogueOptionsContainer.AddThemeConstantOverride("separation", 10);
+		root.AddChild(_dialogueOptionsContainer);
+
+		_dialogueAddOptionButton = new Button
+		{
+			Text = "Add Option",
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+		};
+		_dialogueAddOptionButton.Pressed += AddDialogueOption;
+		root.AddChild(_dialogueAddOptionButton);
+
+		_dialogueSaveButton = new Button
+		{
+			Text = "Save Conversation",
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+		};
+		_dialogueSaveButton.Pressed += SaveActiveDialogueConversation;
+		root.AddChild(_dialogueSaveButton);
+
+		_dialogueEditorStatusLabel = new Label
+		{
+			Text = "Load a conversation or create a new one to start authoring dialogue.",
+			AutowrapMode = TextServer.AutowrapMode.WordSmart
+		};
+		_dialogueEditorStatusLabel.AddThemeColorOverride("font_color", new Color(0.74f, 0.87f, 0.9f, 0.95f));
+		root.AddChild(_dialogueEditorStatusLabel);
+
+		UpdateDialogueSelectionContext();
+		UpdateDialogueEditorUi();
+	}
+
+	private void RefreshDialogueConversationOptions()
+	{
+		RefreshDialogueConversationOptions(_activeDialogueConversation?.ConversationId ?? string.Empty);
+	}
+
+	private void RefreshDialogueConversationOptions(string selectedConversationId)
+	{
+		if (_dialogueConversationOption == null)
+		{
+			return;
+		}
+
+		string normalizedId = selectedConversationId?.StripEdges() ?? string.Empty;
+		List<string> conversationIds = DialogueRegistry.GetConversationIds().ToList();
+		if (!string.IsNullOrEmpty(normalizedId) && !conversationIds.Contains(normalizedId))
+		{
+			conversationIds.Add(normalizedId);
+			conversationIds = conversationIds.OrderBy(id => id).ToList();
+		}
+
+		_isUpdatingDialogueUi = true;
+		_dialogueConversationOption.Clear();
+		_dialogueConversationOption.AddItem("None", 0);
+		_dialogueConversationOption.SetItemMetadata(0, string.Empty);
+		int selectedIndex = 0;
+		for (int i = 0; i < conversationIds.Count; i++)
+		{
+			string conversationId = conversationIds[i];
+			int itemIndex = i + 1;
+			string label = conversationId == normalizedId && !DialogueRegistry.GetConversationIds().Contains(conversationId)
+				? $"{conversationId} (unsaved)"
+				: conversationId;
+			_dialogueConversationOption.AddItem(label, itemIndex);
+			_dialogueConversationOption.SetItemMetadata(itemIndex, conversationId);
+			if (conversationId == normalizedId)
+			{
+				selectedIndex = itemIndex;
+			}
+		}
+		_dialogueConversationOption.Select(selectedIndex);
+		_isUpdatingDialogueUi = false;
+	}
+
+	private void OnDialogueConversationOptionSelected(long selectedIndex)
+	{
+		if (_isUpdatingDialogueUi || _dialogueConversationOption == null)
+		{
+			return;
+		}
+
+		string conversationId = _dialogueConversationOption.GetItemMetadata((int)selectedIndex).AsString();
+		if (string.IsNullOrWhiteSpace(conversationId))
+		{
+			_activeDialogueConversation = null;
+			_activeDialogueNodeId = string.Empty;
+			SetDialogueEditorStatus("Dialogue editor cleared.");
+			UpdateDialogueEditorUi();
+			return;
+		}
+
+		LoadDialogueConversation(conversationId);
+	}
+
+	private void LoadDialogueConversation(string conversationId)
+	{
+		string normalizedId = conversationId?.StripEdges() ?? string.Empty;
+		if (string.IsNullOrWhiteSpace(normalizedId))
+		{
+			_activeDialogueConversation = null;
+			_activeDialogueNodeId = string.Empty;
+			UpdateDialogueEditorUi();
+			return;
+		}
+
+		DialogueConversationData conversation = DialogueRegistry.LoadConversationData(normalizedId) ?? CreateDefaultDialogueConversation(normalizedId);
+		_activeDialogueConversation = conversation;
+		EnsureDialogueConversationHasNodes();
+		_activeDialogueNodeId = _activeDialogueConversation.Nodes.FirstOrDefault()?.Id ?? string.Empty;
+		RefreshDialogueConversationOptions(_activeDialogueConversation.ConversationId);
+		UpdateDialogueEditorUi();
+		SetDialogueEditorStatus($"Loaded conversation `{_activeDialogueConversation.ConversationId}`.");
+	}
+
+	private void CreateNewDialogueConversation()
+	{
+		string suggestedId = GenerateUniqueDialogueConversationId(GetSuggestedDialogueConversationId());
+		_activeDialogueConversation = CreateDefaultDialogueConversation(suggestedId);
+		_activeDialogueNodeId = _activeDialogueConversation.Nodes[0].Id;
+		RefreshDialogueConversationOptions(_activeDialogueConversation.ConversationId);
+		UpdateDialogueEditorUi();
+		SetDialogueEditorStatus($"Created draft conversation `{suggestedId}`. Save when you're ready.");
+	}
+
+	private static DialogueConversationData CreateDefaultDialogueConversation(string conversationId)
+	{
+		return new DialogueConversationData
+		{
+			ConversationId = conversationId,
+			Nodes = new List<DialogueNode>
+			{
+				new DialogueNode
+				{
+					Id = "Start",
+					SpeakerName = string.Empty,
+					Text = string.Empty,
+					Options = new List<DialogueOption>
+					{
+						new DialogueOption
+						{
+							Text = "End conversation",
+							NextNodeId = "End"
+						}
+					}
+				}
+			}
+		};
+	}
+
+	private void EnsureDialogueConversationHasNodes()
+	{
+		if (_activeDialogueConversation == null)
+		{
+			return;
+		}
+
+		_activeDialogueConversation.Nodes ??= new List<DialogueNode>();
+		if (_activeDialogueConversation.Nodes.Count == 0)
+		{
+			_activeDialogueConversation.Nodes.Add(new DialogueNode
+			{
+				Id = "Start",
+				Options = new List<DialogueOption>()
+			});
+		}
+
+		foreach (DialogueNode node in _activeDialogueConversation.Nodes)
+		{
+			node.Options ??= new List<DialogueOption>();
+			node.RequiredFlags ??= new List<string>();
+			node.BlockedFlags ??= new List<string>();
+			node.SetFlags ??= new List<string>();
+		}
+	}
+
+	private void OnDialogueConversationIdChanged(string newText)
+	{
+		if (_isUpdatingDialogueUi || _activeDialogueConversation == null)
+		{
+			return;
+		}
+
+		_activeDialogueConversation.ConversationId = SanitizeDialogueId(newText);
+		RefreshDialogueConversationOptions(_activeDialogueConversation.ConversationId);
+		UpdateDialogueSelectionContext();
+		SetDialogueEditorStatus("Conversation ID updated. Save to write the JSON file.");
+	}
+
+	private void RefreshDialogueNodeOptions()
+	{
+		if (_dialogueNodeOption == null)
+		{
+			return;
+		}
+
+		_isUpdatingDialogueUi = true;
+		_dialogueNodeOption.Clear();
+		_dialogueNodeOption.AddItem("None", 0);
+		_dialogueNodeOption.SetItemMetadata(0, string.Empty);
+		int selectedIndex = 0;
+		if (_activeDialogueConversation != null)
+		{
+			for (int i = 0; i < _activeDialogueConversation.Nodes.Count; i++)
+			{
+				DialogueNode node = _activeDialogueConversation.Nodes[i];
+				int itemIndex = i + 1;
+				string label = string.IsNullOrWhiteSpace(node.SpeakerName)
+					? node.Id
+					: $"{node.Id} ({node.SpeakerName})";
+				_dialogueNodeOption.AddItem(label, itemIndex);
+				_dialogueNodeOption.SetItemMetadata(itemIndex, node.Id);
+				if (node.Id == _activeDialogueNodeId)
+				{
+					selectedIndex = itemIndex;
+				}
+			}
+		}
+		_dialogueNodeOption.Select(selectedIndex);
+		_isUpdatingDialogueUi = false;
+	}
+
+	private void OnDialogueNodeOptionSelected(long selectedIndex)
+	{
+		if (_isUpdatingDialogueUi || _dialogueNodeOption == null)
+		{
+			return;
+		}
+
+		_activeDialogueNodeId = _dialogueNodeOption.GetItemMetadata((int)selectedIndex).AsString();
+		UpdateDialogueEditorUi();
+	}
+
+	private void AddDialogueNode()
+	{
+		if (_activeDialogueConversation == null)
+		{
+			CreateNewDialogueConversation();
+		}
+
+		EnsureDialogueConversationHasNodes();
+		string nodeId = GenerateUniqueDialogueNodeId();
+		DialogueNode node = new DialogueNode
+		{
+			Id = nodeId,
+			Options = new List<DialogueOption>()
+		};
+		_activeDialogueConversation.Nodes.Add(node);
+		_activeDialogueNodeId = nodeId;
+		RefreshDialogueNodeOptions();
+		UpdateDialogueEditorUi();
+		SetDialogueEditorStatus($"Added node `{nodeId}`.");
+	}
+
+	private void DeleteActiveDialogueNode()
+	{
+		DialogueNode node = GetActiveDialogueNode();
+		if (_activeDialogueConversation == null || node == null)
+		{
+			return;
+		}
+
+		_activeDialogueConversation.Nodes.Remove(node);
+		EnsureDialogueConversationHasNodes();
+		_activeDialogueNodeId = _activeDialogueConversation.Nodes.FirstOrDefault()?.Id ?? string.Empty;
+		RefreshDialogueNodeOptions();
+		UpdateDialogueEditorUi();
+		SetDialogueEditorStatus($"Deleted node `{node.Id}`.");
+	}
+
+	private void OnDialogueNodeIdChanged(string newText)
+	{
+		if (_isUpdatingDialogueUi)
+		{
+			return;
+		}
+
+		DialogueNode node = GetActiveDialogueNode();
+		if (node == null)
+		{
+			return;
+		}
+
+		string sanitizedId = SanitizeDialogueId(newText);
+		if (string.IsNullOrWhiteSpace(sanitizedId))
+		{
+			return;
+		}
+
+		node.Id = sanitizedId;
+		_activeDialogueNodeId = sanitizedId;
+		RefreshDialogueNodeOptions();
+		SetDialogueEditorStatus("Node ID updated. Save to persist it.");
+	}
+
+	private void OnDialogueNodeFieldsChanged()
+	{
+		if (_isUpdatingDialogueUi)
+		{
+			return;
+		}
+
+		DialogueNode node = GetActiveDialogueNode();
+		if (node == null)
+		{
+			return;
+		}
+
+		node.SpeakerName = _dialogueSpeakerEdit?.Text?.StripEdges() ?? string.Empty;
+		node.Text = _dialogueTextEdit?.Text?.StripEdges() ?? string.Empty;
+		node.QuestToTrigger = _dialogueQuestTriggerEdit?.Text?.StripEdges() ?? string.Empty;
+		node.RequiredFlags = ParseDialogueFlagList(_dialogueRequiredFlagsEdit?.Text);
+		node.BlockedFlags = ParseDialogueFlagList(_dialogueBlockedFlagsEdit?.Text);
+		node.SetFlags = ParseDialogueFlagList(_dialogueSetFlagsEdit?.Text);
+		RefreshDialogueNodeOptions();
+		SetDialogueEditorStatus("Updated active node fields.");
+	}
+
+	private void AddDialogueOption()
+	{
+		DialogueNode node = GetActiveDialogueNode();
+		if (node == null)
+		{
+			return;
+		}
+
+		node.Options.Add(new DialogueOption
+		{
+			Text = "New option",
+			NextNodeId = "End"
+		});
+		RebuildDialogueOptionsEditor();
+		SetDialogueEditorStatus("Added a dialogue option.");
+	}
+
+	private void RemoveDialogueOption(int optionIndex)
+	{
+		DialogueNode node = GetActiveDialogueNode();
+		if (node == null || optionIndex < 0 || optionIndex >= node.Options.Count)
+		{
+			return;
+		}
+
+		node.Options.RemoveAt(optionIndex);
+		RebuildDialogueOptionsEditor();
+		SetDialogueEditorStatus("Removed a dialogue option.");
+	}
+
+	private void RebuildDialogueOptionsEditor()
+	{
+		if (_dialogueOptionsContainer == null)
+		{
+			return;
+		}
+
+		foreach (Node child in _dialogueOptionsContainer.GetChildren())
+		{
+			child.QueueFree();
+		}
+
+		DialogueNode node = GetActiveDialogueNode();
+		if (node == null)
+		{
+			_dialogueOptionsContainer.AddChild(new Label
+			{
+				Text = "No node selected.",
+				AutowrapMode = TextServer.AutowrapMode.WordSmart
+			});
+			return;
+		}
+
+		if (node.Options.Count == 0)
+		{
+			_dialogueOptionsContainer.AddChild(new Label
+			{
+				Text = "This node has no options yet. Add one below.",
+				AutowrapMode = TextServer.AutowrapMode.WordSmart
+			});
+			return;
+		}
+
+		for (int i = 0; i < node.Options.Count; i++)
+		{
+			int optionIndex = i;
+			DialogueOption option = node.Options[optionIndex];
+
+			PanelContainer optionPanel = new PanelContainer();
+			_dialogueOptionsContainer.AddChild(optionPanel);
+
+			MarginContainer optionMargin = new MarginContainer();
+			optionMargin.AddThemeConstantOverride("margin_left", 8);
+			optionMargin.AddThemeConstantOverride("margin_top", 8);
+			optionMargin.AddThemeConstantOverride("margin_right", 8);
+			optionMargin.AddThemeConstantOverride("margin_bottom", 8);
+			optionPanel.AddChild(optionMargin);
+
+			VBoxContainer optionRoot = new VBoxContainer();
+			optionRoot.AddThemeConstantOverride("separation", 6);
+			optionMargin.AddChild(optionRoot);
+
+			HBoxContainer optionHeader = new HBoxContainer();
+			optionHeader.AddThemeConstantOverride("separation", 8);
+			Label optionLabel = new Label
+			{
+				Text = $"Option {optionIndex + 1}",
+				SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+			};
+			optionHeader.AddChild(optionLabel);
+			Button removeButton = new Button { Text = "Remove" };
+			removeButton.Pressed += () => RemoveDialogueOption(optionIndex);
+			optionHeader.AddChild(removeButton);
+			optionRoot.AddChild(optionHeader);
+
+			optionRoot.AddChild(new Label { Text = "Text" });
+			LineEdit optionTextEdit = new LineEdit
+			{
+				Text = option.Text
+			};
+			optionTextEdit.TextChanged += value =>
+			{
+				option.Text = value.StripEdges();
+				SetDialogueEditorStatus("Updated option text.");
+			};
+			optionRoot.AddChild(optionTextEdit);
+
+			optionRoot.AddChild(new Label { Text = "Next Node" });
+			LineEdit optionNextEdit = new LineEdit
+			{
+				Text = option.NextNodeId,
+				PlaceholderText = "End"
+			};
+			optionNextEdit.TextChanged += value =>
+			{
+				option.NextNodeId = string.IsNullOrWhiteSpace(value) ? "End" : value.StripEdges();
+				SetDialogueEditorStatus("Updated option destination.");
+			};
+			optionRoot.AddChild(optionNextEdit);
+
+			optionRoot.AddChild(new Label { Text = "Required Flags" });
+			LineEdit optionRequiredEdit = new LineEdit
+			{
+				Text = FormatDialogueFlagList(option.RequiredFlags),
+				PlaceholderText = "flag_a, flag_b"
+			};
+			optionRequiredEdit.TextChanged += value =>
+			{
+				option.RequiredFlags = ParseDialogueFlagList(value);
+				SetDialogueEditorStatus("Updated option required flags.");
+			};
+			optionRoot.AddChild(optionRequiredEdit);
+
+			optionRoot.AddChild(new Label { Text = "Blocked Flags" });
+			LineEdit optionBlockedEdit = new LineEdit
+			{
+				Text = FormatDialogueFlagList(option.BlockedFlags),
+				PlaceholderText = "flag_c"
+			};
+			optionBlockedEdit.TextChanged += value =>
+			{
+				option.BlockedFlags = ParseDialogueFlagList(value);
+				SetDialogueEditorStatus("Updated option blocked flags.");
+			};
+			optionRoot.AddChild(optionBlockedEdit);
+
+			optionRoot.AddChild(new Label { Text = "Set Flags" });
+			LineEdit optionSetEdit = new LineEdit
+			{
+				Text = FormatDialogueFlagList(option.SetFlags),
+				PlaceholderText = "flag_rewarded"
+			};
+			optionSetEdit.TextChanged += value =>
+			{
+				option.SetFlags = ParseDialogueFlagList(value);
+				SetDialogueEditorStatus("Updated option reward flags.");
+			};
+			optionRoot.AddChild(optionSetEdit);
+
+			optionRoot.AddChild(new Label { Text = "Quest Trigger" });
+			LineEdit optionQuestEdit = new LineEdit
+			{
+				Text = option.QuestToTrigger,
+				PlaceholderText = "Optional quest id"
+			};
+			optionQuestEdit.TextChanged += value =>
+			{
+				option.QuestToTrigger = value.StripEdges();
+				SetDialogueEditorStatus("Updated option quest trigger.");
+			};
+			optionRoot.AddChild(optionQuestEdit);
+		}
+	}
+
+	private void UpdateDialogueEditorUi()
+	{
+		if (_dialogueConversationIdEdit == null)
+		{
+			return;
+		}
+
+		EnsureDialogueConversationHasNodes();
+		DialogueNode node = GetActiveDialogueNode();
+		bool hasConversation = _activeDialogueConversation != null;
+		bool hasNode = node != null;
+
+		_isUpdatingDialogueUi = true;
+		_dialogueConversationIdEdit.Editable = hasConversation;
+		_dialogueConversationIdEdit.Text = _activeDialogueConversation?.ConversationId ?? string.Empty;
+		RefreshDialogueNodeOptions();
+		_dialogueNodeIdEdit.Editable = hasNode;
+		_dialogueNodeIdEdit.Text = node?.Id ?? string.Empty;
+		_dialogueSpeakerEdit.Editable = hasNode;
+		_dialogueSpeakerEdit.Text = node?.SpeakerName ?? string.Empty;
+		_dialogueTextEdit.Editable = hasNode;
+		_dialogueTextEdit.Text = node?.Text ?? string.Empty;
+		_dialogueQuestTriggerEdit.Editable = hasNode;
+		_dialogueQuestTriggerEdit.Text = node?.QuestToTrigger ?? string.Empty;
+		_dialogueRequiredFlagsEdit.Editable = hasNode;
+		_dialogueRequiredFlagsEdit.Text = FormatDialogueFlagList(node?.RequiredFlags);
+		_dialogueBlockedFlagsEdit.Editable = hasNode;
+		_dialogueBlockedFlagsEdit.Text = FormatDialogueFlagList(node?.BlockedFlags);
+		_dialogueSetFlagsEdit.Editable = hasNode;
+		_dialogueSetFlagsEdit.Text = FormatDialogueFlagList(node?.SetFlags);
+		_dialogueAddOptionButton.Disabled = !hasNode;
+		_dialogueNodeNewButton.Disabled = !hasConversation;
+		_dialogueNodeDeleteButton.Disabled = !hasNode;
+		_dialogueSaveButton.Disabled = !hasConversation;
+		_isUpdatingDialogueUi = false;
+
+		RebuildDialogueOptionsEditor();
+		UpdateDialogueSelectionContext();
+	}
+
+	private DialogueNode GetActiveDialogueNode()
+	{
+		if (_activeDialogueConversation == null)
+		{
+			return null;
+		}
+
+		DialogueNode node = _activeDialogueConversation.Nodes.FirstOrDefault(item => item.Id == _activeDialogueNodeId);
+		if (node == null)
+		{
+			node = _activeDialogueConversation.Nodes.FirstOrDefault();
+			_activeDialogueNodeId = node?.Id ?? string.Empty;
+		}
+
+		return node;
+	}
+
+	private void SaveActiveDialogueConversation()
+	{
+		if (_activeDialogueConversation == null)
+		{
+			SetDialogueEditorStatus("No active conversation to save.");
+			return;
+		}
+
+		string conversationId = SanitizeDialogueId(_activeDialogueConversation.ConversationId);
+		if (string.IsNullOrWhiteSpace(conversationId))
+		{
+			SetDialogueEditorStatus("Conversation ID cannot be empty.");
+			return;
+		}
+
+		_activeDialogueConversation.ConversationId = conversationId;
+		EnsureDialogueConversationHasNodes();
+		HashSet<string> nodeIds = new HashSet<string>();
+		foreach (DialogueNode node in _activeDialogueConversation.Nodes)
+		{
+			node.Id = SanitizeDialogueId(node.Id);
+			if (string.IsNullOrWhiteSpace(node.Id))
+			{
+				SetDialogueEditorStatus("Every dialogue node needs an ID before saving.");
+				return;
+			}
+
+			if (!nodeIds.Add(node.Id))
+			{
+				SetDialogueEditorStatus($"Duplicate node ID `{node.Id}`. Give each node a unique ID.");
+				return;
+			}
+		}
+
+		if (!DialogueRegistry.SaveConversationData(_activeDialogueConversation))
+		{
+			SetDialogueEditorStatus($"Failed to save `{conversationId}`.");
+			return;
+		}
+
+		RefreshDialogueConversationOptions(conversationId);
+		UpdateDialogueEditorUi();
+		SetDialogueEditorStatus($"Saved conversation `{conversationId}`.");
+	}
+
+	private void LoadDialogueConversationFromSelection()
+	{
+		if (!TryGetSelectedDialogueBinding(out DialogueBindingInfo binding))
+		{
+			SetDialogueEditorStatus("Selected item does not expose a dialogue binding yet.");
+			return;
+		}
+
+		if (string.IsNullOrWhiteSpace(binding.ConversationId))
+		{
+			SetDialogueEditorStatus("Selected item has no dialogue conversation assigned yet. Create a new one first.");
+			return;
+		}
+
+		LoadDialogueConversation(binding.ConversationId);
+	}
+
+	private void AssignActiveDialogueConversationToSelection()
+	{
+		if (_activeDialogueConversation == null || string.IsNullOrWhiteSpace(_activeDialogueConversation.ConversationId))
+		{
+			SetDialogueEditorStatus("Create or load a conversation before assigning it.");
+			return;
+		}
+
+		if (!TryGetSelectedDialogueBinding(out DialogueBindingInfo binding))
+		{
+			SetDialogueEditorStatus("Selected item does not support dialogue binding.");
+			return;
+		}
+
+		switch (binding.Kind)
+		{
+			case DialogueBindingKind.LayoutTargetId:
+				binding.Sprite.SetMeta("logic_target_id", _activeDialogueConversation.ConversationId);
+				UpdateMarkerCaption(binding.Sprite);
+				UpdateLogicInspector();
+				SetDialogueEditorStatus($"Assigned `{_activeDialogueConversation.ConversationId}` to {binding.Description}.");
+				break;
+			case DialogueBindingKind.NpcDefinition:
+				if (string.IsNullOrWhiteSpace(binding.NpcDefinitionPath) || !ResourceLoader.Exists(binding.NpcDefinitionPath))
+				{
+					SetDialogueEditorStatus("Selected NPC definition is missing.");
+					return;
+				}
+
+				MissionNpcDefinition npcDefinition = GD.Load<MissionNpcDefinition>(binding.NpcDefinitionPath);
+				npcDefinition.DefaultDialogueId = _activeDialogueConversation.ConversationId;
+				Error saveResult = ResourceSaver.Save(npcDefinition, binding.NpcDefinitionPath);
+				if (saveResult != Error.Ok)
+				{
+					SetDialogueEditorStatus($"Failed to update NPC definition at `{binding.NpcDefinitionPath}`.");
+					return;
+				}
+
+				_npcDefinitionPreviewCache.Remove(binding.NpcDefinitionPath);
+				UpdateLogicInspector();
+				SetDialogueEditorStatus($"Assigned `{_activeDialogueConversation.ConversationId}` to {binding.Description}.");
+				break;
+			default:
+				SetDialogueEditorStatus("Selected item does not support dialogue binding.");
+				break;
+		}
+	}
+
+	private void UpdateDialogueSelectionContext()
+	{
+		if (_dialogueSelectionContextLabel == null)
+		{
+			return;
+		}
+
+		if (TryGetSelectedDialogueBinding(out DialogueBindingInfo binding))
+		{
+			string conversationText = string.IsNullOrWhiteSpace(binding.ConversationId)
+				? "No conversation assigned yet."
+				: $"Current conversation: `{binding.ConversationId}`.";
+			_dialogueSelectionContextLabel.Text = $"{binding.Description}. {conversationText}";
+			_dialogueConversationLoadSelectedButton.Disabled = string.IsNullOrWhiteSpace(binding.ConversationId);
+			_dialogueConversationAssignSelectedButton.Disabled = _activeDialogueConversation == null || string.IsNullOrWhiteSpace(_activeDialogueConversation.ConversationId);
+			return;
+		}
+
+		_dialogueSelectionContextLabel.Text = "Select a dialogue trigger, dialogue prop, or NPC spawn to bind a conversation.";
+		if (_dialogueConversationLoadSelectedButton != null)
+		{
+			_dialogueConversationLoadSelectedButton.Disabled = true;
+		}
+		if (_dialogueConversationAssignSelectedButton != null)
+		{
+			_dialogueConversationAssignSelectedButton.Disabled = true;
+		}
+	}
+
+	private bool TryGetSelectedDialogueBinding(out DialogueBindingInfo binding)
+	{
+		binding = null;
+		if (!TryGetSelectedPlacedSprite(out Sprite2D selectedSprite))
+		{
+			return false;
+		}
+
+		string markerId = selectedSprite.GetMeta("marker_id", string.Empty).AsString();
+		string npcDefinitionPath = selectedSprite.GetMeta("npc_definition_path", string.Empty).AsString();
+		if (markerId == "npc_spawn" && !string.IsNullOrWhiteSpace(npcDefinitionPath) && ResourceLoader.Exists(npcDefinitionPath))
+		{
+			MissionNpcDefinition definition = GD.Load<MissionNpcDefinition>(npcDefinitionPath);
+			binding = new DialogueBindingInfo
+			{
+				Kind = DialogueBindingKind.NpcDefinition,
+				Sprite = selectedSprite,
+				ConversationId = definition?.DefaultDialogueId ?? string.Empty,
+				Description = $"NPC spawn `{GetItemDisplayId(selectedSprite)}` uses its NPC definition dialogue",
+				NpcDefinitionPath = npcDefinitionPath
+			};
+			return true;
+		}
+
+		bool isPlacedProp = IsPlacedPropSprite(selectedSprite);
+		PropDefinition definitionForItem = ResolveTargetIdContextDefinition(selectedSprite, isPlacedProp);
+		bool isDialogueMarker = markerId == "trigger_dialogue";
+		bool isDialogueProp = definitionForItem?.InteractionType == PropInteractionType.Dialogue;
+		if (!isDialogueMarker && !isDialogueProp)
+		{
+			return false;
+		}
+
+		binding = new DialogueBindingInfo
+		{
+			Kind = DialogueBindingKind.LayoutTargetId,
+			Sprite = selectedSprite,
+			ConversationId = selectedSprite.GetMeta("logic_target_id", string.Empty).AsString(),
+			Description = $"{GetItemDisplayId(selectedSprite)} uses a layout dialogue target id"
+		};
+		return true;
+	}
+
+	private string GetSuggestedDialogueConversationId()
+	{
+		if (TryGetSelectedDialogueBinding(out DialogueBindingInfo binding))
+		{
+			if (!string.IsNullOrWhiteSpace(binding.ConversationId))
+			{
+				return binding.ConversationId;
+			}
+
+			if (binding.Kind == DialogueBindingKind.NpcDefinition && !string.IsNullOrWhiteSpace(binding.NpcDefinitionPath))
+			{
+				string npcFileName = System.IO.Path.GetFileNameWithoutExtension(binding.NpcDefinitionPath);
+				return $"{SanitizeDialogueId(npcFileName)}_dialogue";
+			}
+
+			if (binding.Sprite != null)
+			{
+				string itemId = SanitizeDialogueId(GetItemDisplayId(binding.Sprite));
+				if (!string.IsNullOrWhiteSpace(itemId))
+				{
+					return itemId;
+				}
+			}
+		}
+
+		string layoutId = SanitizeDialogueId(_layoutNameEdit?.Text);
+		return string.IsNullOrWhiteSpace(layoutId) ? "new_dialogue" : $"{layoutId}_dialogue";
+	}
+
+	private string GenerateUniqueDialogueConversationId(string baseId)
+	{
+		string sanitizedBaseId = SanitizeDialogueId(baseId);
+		if (string.IsNullOrWhiteSpace(sanitizedBaseId))
+		{
+			sanitizedBaseId = "new_dialogue";
+		}
+
+		HashSet<string> existingIds = DialogueRegistry.GetConversationIds().ToHashSet();
+		string candidate = sanitizedBaseId;
+		int suffix = 2;
+		while (existingIds.Contains(candidate))
+		{
+			candidate = $"{sanitizedBaseId}_{suffix}";
+			suffix++;
+		}
+
+		return candidate;
+	}
+
+	private string GenerateUniqueDialogueNodeId()
+	{
+		HashSet<string> existingIds = _activeDialogueConversation?.Nodes.Select(node => node.Id).ToHashSet()
+			?? new HashSet<string>();
+		string baseId = "Node";
+		int suffix = 1;
+		string candidate = $"{baseId}_{suffix}";
+		while (existingIds.Contains(candidate))
+		{
+			suffix++;
+			candidate = $"{baseId}_{suffix}";
+		}
+
+		return candidate;
+	}
+
+	private static string SanitizeDialogueId(string value)
+	{
+		if (string.IsNullOrWhiteSpace(value))
+		{
+			return string.Empty;
+		}
+
+		char[] characters = value.Trim().ToLowerInvariant().ToCharArray();
+		for (int i = 0; i < characters.Length; i++)
+		{
+			char current = characters[i];
+			if ((current >= 'a' && current <= 'z') || (current >= '0' && current <= '9') || current == '_')
+			{
+				continue;
+			}
+
+			characters[i] = '_';
+		}
+
+		string sanitized = new string(characters);
+		while (sanitized.Contains("__"))
+		{
+			sanitized = sanitized.Replace("__", "_");
+		}
+
+		return sanitized.Trim('_');
+	}
+
+	private static List<string> ParseDialogueFlagList(string value)
+	{
+		if (string.IsNullOrWhiteSpace(value))
+		{
+			return new List<string>();
+		}
+
+		return value
+			.Split(new[] { ',', ';', '|', '\n', '\r' }, System.StringSplitOptions.RemoveEmptyEntries)
+			.Select(flag => flag.StripEdges())
+			.Where(flag => !string.IsNullOrWhiteSpace(flag))
+			.Distinct()
+			.ToList();
+	}
+
+	private static string FormatDialogueFlagList(IEnumerable<string> flags)
+	{
+		return string.Join(", ", flags?.Where(flag => !string.IsNullOrWhiteSpace(flag)) ?? Enumerable.Empty<string>());
+	}
+
+	private void SetDialogueEditorStatus(string message)
+	{
+		if (_dialogueEditorStatusLabel != null && !string.IsNullOrWhiteSpace(message))
+		{
+			_dialogueEditorStatusLabel.Text = message;
+		}
+	}
+
 	private void BuildPalette()
 	{
 		foreach (Node child in _paletteContainer.GetChildren())
@@ -702,91 +2022,31 @@ public partial class MissionSceneBuilder : Node2D
 			child.QueueFree();
 		}
 
-		foreach (MissionTileCategory category in new[] { MissionTileCategory.Floor, MissionTileCategory.Wall, MissionTileCategory.Prop })
+		Label workflowLabel = new Label
 		{
-			Label categoryLabel = new Label
-			{
-				Text = category.ToString().ToUpper()
-			};
-			_paletteContainer.AddChild(categoryLabel);
+			Text = "Build Order: 1. Floors and walls. 2. Props and terminals. 3. Spawns, objectives, and NPC markers.",
+			AutowrapMode = TextServer.AutowrapMode.WordSmart
+		};
+		workflowLabel.AddThemeColorOverride("font_color", new Color(0.78f, 0.85f, 0.94f, 0.95f));
+		_paletteContainer.AddChild(workflowLabel);
 
-			foreach (MissionTileDefinition definition in MissionTileCatalog.All.Where(def => def.Category == category && def.VisibleInPalette))
-			{
-		Button button = new Button
-				{
-					Text = definition.DisplayName,
-					Icon = GetTileIconTexture(definition),
-					Alignment = HorizontalAlignment.Left,
-					ExpandIcon = true,
-					CustomMinimumSize = new Vector2(0f, 40f)
-				};
-				button.Pressed += () =>
-				{
-					_selectedTile = definition;
-					_selectedMarker = null;
-					_selectedPropDefinitionPath = string.Empty;
-					ClearPlacedSelection();
-					UpdateSelectedLabel();
-					UpdateLogicInspector();
-				};
-				_paletteContainer.AddChild(button);
-			}
-		}
-
-		_paletteContainer.AddChild(new Label { Text = "MARKERS" });
-		foreach (MissionMarkerCategory category in new[] { MissionMarkerCategory.Spawn, MissionMarkerCategory.Objective, MissionMarkerCategory.Trigger })
+		_paletteContainer.AddChild(new Label { Text = "Search" });
+		_paletteSearchEdit = new LineEdit
 		{
-			_paletteContainer.AddChild(new Label { Text = $"  {category.ToString().ToUpper()}" });
-			foreach (MissionMarkerDefinition definition in MissionMarkerCatalog.All.Where(def => def.Category == category))
-			{
-				Button button = new Button
-				{
-					Text = definition.DisplayName,
-					Icon = GetMarkerIconTexture(definition),
-					Alignment = HorizontalAlignment.Left,
-					ExpandIcon = true,
-					CustomMinimumSize = new Vector2(0f, 40f)
-				};
-				button.Pressed += () =>
-				{
-					_selectedTile = null;
-					_selectedMarker = definition;
-					_selectedPropDefinitionPath = string.Empty;
-					ClearPlacedSelection();
-					UpdateSelectedLabel();
-					UpdateLogicInspector();
-				};
-				_paletteContainer.AddChild(button);
-			}
-		}
+			Text = _paletteSearchQuery,
+			PlaceholderText = "Search tiles, markers, and prop definitions..."
+		};
+		_paletteSearchEdit.TextChanged += OnPaletteSearchChanged;
+		_paletteContainer.AddChild(_paletteSearchEdit);
 
-		_paletteContainer.AddChild(new Label { Text = "MISSION PROPS" });
-		foreach (string propDefinitionPath in GetAvailablePropDefinitionPaths())
+		AddPaletteCollapsibleSection("map_tiles", "MAP TILES", "Use floors first to block out rooms, then add walls and visual prop tiles.", BuildMapTilesPaletteContent);
+		AddPaletteCollapsibleSection("mission_markers", "MISSION MARKERS", "Markers define officer insertion, objectives, dialogue triggers, and NPC spawn anchors.", BuildMarkerPaletteContent);
+		AddPaletteCollapsibleSection("runtime_props", "RUNTIME MISSION PROPS", "These spawn real interactable prop definitions in-mission, not just decorative map art.", BuildRuntimePropPaletteContent);
+
+		if (_selectedTile == null && _selectedMarker == null && string.IsNullOrWhiteSpace(_selectedPropDefinitionPath))
 		{
-			PropDefinitionPreview preview = GetPropDefinitionPreview(propDefinitionPath);
-			Button button = new Button
-			{
-				Text = preview.DisplayName,
-				Icon = preview.Icon,
-				Alignment = HorizontalAlignment.Left,
-				ExpandIcon = true,
-				CustomMinimumSize = new Vector2(0f, 40f),
-				TooltipText = preview.Description
-			};
-			button.Pressed += () =>
-			{
-				_selectedTile = null;
-				_selectedMarker = null;
-				_selectedPropDefinitionPath = propDefinitionPath;
-				ClearPlacedSelection();
-				UpdateSelectedLabel();
-				UpdateLogicInspector();
-			};
-			_paletteContainer.AddChild(button);
+			_selectedTile = MissionTileCatalog.All.FirstOrDefault();
 		}
-
-		_selectedTile = MissionTileCatalog.All.FirstOrDefault();
-		_selectedPropDefinitionPath = string.Empty;
 	}
 
 	private void UpdateSelectedLabel()
@@ -824,9 +2084,9 @@ public partial class MissionSceneBuilder : Node2D
 		}
 		_gridLines.Clear();
 
-		for (int row = 0; row < 10; row++)
+		for (int row = 0; row < GridPreviewRows; row++)
 		{
-			for (int column = 0; column < 10; column++)
+			for (int column = 0; column < GridPreviewColumns; column++)
 			{
 				Vector2 center = IsoGridHelper.GridToWorld(column, row, _tileStep, _gridOrigin);
 				Vector2[] points =
@@ -839,8 +2099,8 @@ public partial class MissionSceneBuilder : Node2D
 
 				Line2D line = new Line2D
 				{
-					DefaultColor = new Color(0.26f, 0.38f, 0.56f, 0.28f),
-					Width = 1.5f,
+					DefaultColor = new Color(0.34f, 0.52f, 0.74f, 0.42f),
+					Width = 2f,
 					Closed = true,
 					Points = points
 				};
@@ -875,6 +2135,32 @@ public partial class MissionSceneBuilder : Node2D
 
 		Vector2I cell = GetMouseCell();
 		_hoverDiamond.Position = IsoGridHelper.GridToWorld(cell.X, cell.Y, _tileStep, _gridOrigin);
+	}
+
+	private void FramePlacedMap()
+	{
+		if (_camera == null)
+		{
+			return;
+		}
+
+		if (!TryGetPlacedSpriteBounds(out Rect2 bounds))
+		{
+			_camera.Position = Vector2.Zero;
+			ApplyZoom(DefaultZoom);
+			SetStatus("No placed map content yet. Camera reset to the builder origin.");
+			return;
+		}
+
+		Vector2 viewportSize = GetViewportRect().Size;
+		float marginFactor = 1.2f;
+		float widthZoom = bounds.Size.X <= 0f ? DefaultZoom : (bounds.Size.X * marginFactor) / Mathf.Max(viewportSize.X, 1f);
+		float heightZoom = bounds.Size.Y <= 0f ? DefaultZoom : (bounds.Size.Y * marginFactor) / Mathf.Max(viewportSize.Y, 1f);
+		float targetZoom = Mathf.Clamp(Mathf.Max(Mathf.Max(widthZoom, heightZoom), DefaultZoom), MinZoom, MaxZoom);
+
+		_camera.Position = bounds.GetCenter();
+		ApplyZoom(targetZoom);
+		SetStatus("Framed the placed map in view.");
 	}
 
 	private Vector2I GetMouseCell()
@@ -1219,6 +2505,7 @@ public partial class MissionSceneBuilder : Node2D
 			_logicOneShotCheck.ButtonPressed = false;
 			_logicNotesEdit.Text = string.Empty;
 			_isUpdatingLogicUi = false;
+			UpdateDialogueSelectionContext();
 			return;
 		}
 
@@ -1252,6 +2539,7 @@ public partial class MissionSceneBuilder : Node2D
 		_logicNotesEdit.Text = item.GetMeta("logic_notes", string.Empty).AsString();
 		_logicRoleOption.Disabled = isPlacedProp;
 		_isUpdatingLogicUi = false;
+		UpdateDialogueSelectionContext();
 		RefreshValidationReport();
 	}
 
@@ -2341,6 +3629,7 @@ public partial class MissionSceneBuilder : Node2D
 		SelectBackgroundById(loadedBackgroundId, true, false);
 		MarkPlacedMapCenterDirty();
 		UpdateBackgroundFeaturePlacement();
+		FramePlacedMap();
 		SetStatus($"Loaded layout from {ProjectSettings.LocalizePath(path)}");
 		RefreshValidationReport();
 	}
@@ -3434,6 +4723,38 @@ public partial class MissionSceneBuilder : Node2D
 				yield return sprite;
 			}
 		}
+	}
+
+	private bool TryGetPlacedSpriteBounds(out Rect2 bounds)
+	{
+		bool hasAny = false;
+		float minX = float.MaxValue;
+		float maxX = float.MinValue;
+		float minY = float.MaxValue;
+		float maxY = float.MinValue;
+
+		foreach (Node2D layer in GetSaveLayers())
+		{
+			foreach (Sprite2D sprite in EnumerateLiveSprites(layer))
+			{
+				Vector2 halfSize = GetSpriteBoundsSize(sprite) * 0.5f;
+				Vector2 position = sprite.Position;
+				minX = Mathf.Min(minX, position.X - halfSize.X);
+				maxX = Mathf.Max(maxX, position.X + halfSize.X);
+				minY = Mathf.Min(minY, position.Y - halfSize.Y);
+				maxY = Mathf.Max(maxY, position.Y + halfSize.Y);
+				hasAny = true;
+			}
+		}
+
+		if (!hasAny)
+		{
+			bounds = new Rect2();
+			return false;
+		}
+
+		bounds = new Rect2(minX, minY, maxX - minX, maxY - minY);
+		return true;
 	}
 
 	private BuilderLayer GetLayerForTile(MissionTileDefinition definition)

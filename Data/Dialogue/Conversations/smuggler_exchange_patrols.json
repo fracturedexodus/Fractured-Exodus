@@ -1,0 +1,23 @@
+{
+	"conversation_id": "smuggler_exchange_patrols",
+	"nodes": [
+		{
+			"id": "Start",
+			"speaker_name": "Traffic Scrubber",
+			"text": "Patrol feed decrypted. Two cutters are aligning for docking arms and a reclaimer tug is holding back to torch the vault after the sweep. You have one clean exit vector if you move before they finish triangulating Veil's relay.",
+			"options": [
+				{ "text": "Mark the clean vector and keep the feed running.", "next": "End" },
+				{ "text": "Which section do they hit first?", "next": "Impact" }
+			]
+		},
+		{
+			"id": "Impact",
+			"speaker_name": "Traffic Scrubber",
+			"text": "Boarders sweep the vault side first. The medbay dies second. If you were planning to strip contraband and run, this is the warning that makes it possible.",
+			"options": [
+				{ "text": "Good. Keep them blind a little longer.", "next": "End" },
+				{ "text": "Back to the patrol feed.", "next": "Start" }
+			]
+		}
+	]
+}

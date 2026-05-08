@@ -24,6 +24,7 @@ public partial class MissionMap : Node2D
 	private MissionRoomBuilder _roomBuilder;
 	private TextureRect _backgroundBackdrop;
 	private Sprite2D _backgroundFeatureSprite;
+	private Node2D _evacZoneLayer;
 	private readonly List<OfficerPawn> _officerPawns = new List<OfficerPawn>();
 	private readonly List<MissionNpcPawn> _missionNpcs = new List<MissionNpcPawn>();
 	private readonly Dictionary<Vector2I, MissionNpcPawn> _missionNpcsByCell = new Dictionary<Vector2I, MissionNpcPawn>();
@@ -33,6 +34,9 @@ public partial class MissionMap : Node2D
 	private readonly HashSet<string> _consumedTriggerKeys = new HashSet<string>();
 	private readonly HashSet<Vector2I> _exploredCells = new HashSet<Vector2I>();
 	private readonly HashSet<Vector2I> _visibleCells = new HashSet<Vector2I>();
+	private readonly List<Node2D> _evacZoneVisualRoots = new List<Node2D>();
+	private readonly List<Polygon2D> _evacZoneHighlightPolygons = new List<Polygon2D>();
+	private readonly List<Line2D> _evacZoneHighlightOutlines = new List<Line2D>();
 	private int _selectedOfficerIndex;
 	private bool _isPanning;
 	private Vector2 _lastMouseScreenPosition;
@@ -40,6 +44,7 @@ public partial class MissionMap : Node2D
 	private string _pendingInteractionOfficerId = string.Empty;
 	private string _pendingPropInstanceId = string.Empty;
 	private string _pendingNpcId = string.Empty;
+	private float _evacPulseClock;
 
 	public override void _Ready()
 	{
@@ -65,6 +70,7 @@ public partial class MissionMap : Node2D
 		_roomBuilder?.BuildRoom();
 		SpawnMissionProps();
 		ApplyMissionBackground();
+		BuildEvacZoneHighlights();
 		ConfigureMissionView();
 		SpawnMissionNpcs();
 		SpawnMissionOfficers();
@@ -77,6 +83,7 @@ public partial class MissionMap : Node2D
 	public override void _Process(double delta)
 	{
 		UpdateCameraPan((float)delta);
+		UpdateEvacZoneHighlightVisuals((float)delta);
 	}
 
 	public override void _UnhandledInput(InputEvent @event)
@@ -105,13 +112,6 @@ public partial class MissionMap : Node2D
 			if (keyEvent.Keycode == Key.Key2)
 			{
 				SelectOfficer(1);
-				GetViewport().SetInputAsHandled();
-				return;
-			}
-
-			if (keyEvent.Keycode == Key.Escape)
-			{
-				ReturnWithoutOutcome();
 				GetViewport().SetInputAsHandled();
 				return;
 			}
@@ -286,6 +286,173 @@ public partial class MissionMap : Node2D
 		_backgroundFeatureSprite.Position = _roomBuilder.GetRoomCenterWorldPosition() + definition.FeatureOffset;
 	}
 
+	private void BuildEvacZoneHighlights()
+	{
+		EnsureEvacZoneLayer();
+		if (_evacZoneLayer == null || _roomBuilder == null)
+		{
+			return;
+		}
+
+		foreach (Node child in _evacZoneLayer.GetChildren())
+		{
+			_evacZoneLayer.RemoveChild(child);
+			child.QueueFree();
+		}
+
+		_evacZoneVisualRoots.Clear();
+		_evacZoneHighlightPolygons.Clear();
+		_evacZoneHighlightOutlines.Clear();
+
+		List<MissionRoomBuilder.MarkerPlacement> evacMarkers = _roomBuilder.GetMarkerPlacements()
+			.Where(marker => marker.MarkerId == "evac_zone")
+			.ToList();
+		if (evacMarkers.Count == 0)
+		{
+			return;
+		}
+
+		Vector2 tileStep = _roomBuilder.TileStep;
+		Vector2[] diamondPoints =
+		{
+			new Vector2(0f, -tileStep.Y * 0.28f),
+			new Vector2(tileStep.X * 0.28f, 0f),
+			new Vector2(0f, tileStep.Y * 0.28f),
+			new Vector2(-tileStep.X * 0.28f, 0f)
+		};
+		Vector2[] innerDiamondPoints =
+		{
+			new Vector2(0f, -tileStep.Y * 0.16f),
+			new Vector2(tileStep.X * 0.16f, 0f),
+			new Vector2(0f, tileStep.Y * 0.16f),
+			new Vector2(-tileStep.X * 0.16f, 0f)
+		};
+
+		foreach (MissionRoomBuilder.MarkerPlacement evacMarker in evacMarkers)
+		{
+			Node2D root = new Node2D
+			{
+				Name = $"EvacZone_{evacMarker.Cell.X}_{evacMarker.Cell.Y}",
+				Position = _roomBuilder.GetCellWorldPosition(evacMarker.Cell.X, evacMarker.Cell.Y)
+			};
+			_evacZoneLayer.AddChild(root);
+			_evacZoneVisualRoots.Add(root);
+
+			Polygon2D outerFill = new Polygon2D
+			{
+				Polygon = diamondPoints,
+				Color = new Color(0.18f, 0.92f, 0.56f, 0.18f)
+			};
+			root.AddChild(outerFill);
+			_evacZoneHighlightPolygons.Add(outerFill);
+
+			Line2D outline = new Line2D
+			{
+				Points = diamondPoints,
+				Closed = true,
+				Width = 4f,
+				DefaultColor = new Color(0.48f, 1.00f, 0.72f, 0.82f)
+			};
+			root.AddChild(outline);
+			_evacZoneHighlightOutlines.Add(outline);
+
+			Polygon2D innerFill = new Polygon2D
+			{
+				Polygon = innerDiamondPoints,
+				Color = new Color(0.62f, 1.00f, 0.82f, 0.22f)
+			};
+			root.AddChild(innerFill);
+			_evacZoneHighlightPolygons.Add(innerFill);
+
+			Label label = new Label
+			{
+				Text = "EVAC",
+				Position = new Vector2(-70f, -tileStep.Y * 0.62f),
+				Size = new Vector2(140f, 28f),
+				HorizontalAlignment = HorizontalAlignment.Center,
+				MouseFilter = Control.MouseFilterEnum.Ignore
+			};
+			label.AddThemeFontSizeOverride("font_size", 18);
+			label.AddThemeColorOverride("font_color", new Color(0.90f, 1.00f, 0.95f, 0.96f));
+			label.AddThemeColorOverride("font_outline_color", new Color(0.04f, 0.12f, 0.08f, 0.92f));
+			label.AddThemeConstantOverride("outline_size", 4);
+			root.AddChild(label);
+		}
+
+		UpdateEvacZoneHighlightVisuals(0f);
+	}
+
+	private void EnsureEvacZoneLayer()
+	{
+		if (_isoWorld == null)
+		{
+			return;
+		}
+
+		_evacZoneLayer = _isoWorld.GetNodeOrNull<Node2D>("EvacZoneLayer");
+		if (_evacZoneLayer != null)
+		{
+			return;
+		}
+
+		_evacZoneLayer = new Node2D
+		{
+			Name = "EvacZoneLayer",
+			ZIndex = 3
+		};
+		_isoWorld.AddChild(_evacZoneLayer);
+		_isoWorld.MoveChild(_evacZoneLayer, 1);
+	}
+
+	private void UpdateEvacZoneHighlightVisuals(float delta)
+	{
+		if (_evacZoneHighlightPolygons.Count == 0 && _evacZoneHighlightOutlines.Count == 0)
+		{
+			return;
+		}
+
+		_evacPulseClock += delta;
+		bool extractionAvailable = GetAvailableExtractionOptions().Count > 0;
+		bool allOfficersOnEvac = AreAllOfficersOnEvacZone();
+		float pulse = 0.5f + 0.5f * Mathf.Sin(_evacPulseClock * 2.4f);
+		float emphasis = allOfficersOnEvac && extractionAvailable ? 1f : extractionAvailable ? 0.55f : 0.2f;
+		float fillAlpha = 0.16f + (pulse * 0.16f * emphasis);
+		float innerAlpha = 0.12f + (pulse * 0.22f * emphasis);
+		float outlineAlpha = 0.48f + (pulse * 0.34f * emphasis);
+		float scaleBoost = allOfficersOnEvac && extractionAvailable ? 1.05f + pulse * 0.05f : 1f + pulse * 0.025f;
+
+		foreach (Node2D root in _evacZoneVisualRoots)
+		{
+			if (root != null)
+			{
+				root.Scale = new Vector2(scaleBoost, scaleBoost);
+			}
+		}
+
+		for (int i = 0; i < _evacZoneHighlightPolygons.Count; i++)
+		{
+			Polygon2D polygon = _evacZoneHighlightPolygons[i];
+			if (polygon == null)
+			{
+				continue;
+			}
+
+			bool isInner = (i % 2) == 1;
+			polygon.Color = isInner
+				? new Color(0.70f, 1.00f, 0.86f, innerAlpha)
+				: new Color(0.22f, 0.96f, 0.60f, fillAlpha);
+		}
+
+		foreach (Line2D outline in _evacZoneHighlightOutlines)
+		{
+			if (outline != null)
+			{
+				outline.DefaultColor = new Color(0.56f, 1.00f, 0.76f, outlineAlpha);
+				outline.Width = allOfficersOnEvac && extractionAvailable ? 5f : 4f;
+			}
+		}
+	}
+
 	private void AdjustZoom(float delta)
 	{
 		if (_camera == null)
@@ -451,26 +618,11 @@ public partial class MissionMap : Node2D
 			return;
 		}
 
-		string title = _missionState?.MissionTitle ?? "Away Mission";
-		string objective = string.IsNullOrWhiteSpace(_missionTemplate?.ObjectiveText)
-			? "OBJECTIVE: Investigate the relay, assess the survivors, and decide what to save."
-			: _missionTemplate.ObjectiveText;
-		string prompt = string.IsNullOrWhiteSpace(_missionTemplate?.PromptText)
-			? "Controls: left click an officer to select, left click a floor tile to move, TAB or 1-2 to switch officers, middle mouse drag or WASD to pan, mouse wheel or +/- to zoom, ESC to return."
-			: _missionTemplate.PromptText;
 		_missionUi.SetMissionText(
-			title.ToUpper(),
-			objective,
-			prompt);
-		_missionUi.SetActionButtonText(
-			string.IsNullOrWhiteSpace(_missionTemplate?.PrimaryActionText) ? "SAVE SURVIVORS" : _missionTemplate.PrimaryActionText,
-			string.IsNullOrWhiteSpace(_missionTemplate?.SecondaryActionText) ? "SECURE ARCHIVE" : _missionTemplate.SecondaryActionText);
-
-		_missionUi.SaveSurvivorsButton.Pressed += () => CompleteMission(BuildOutcome(
-			GetPrimaryOutcomeId()));
-		_missionUi.SecureArchiveButton.Pressed += () => CompleteMission(BuildOutcome(
-			GetSecondaryOutcomeId()));
-		_missionUi.ReturnButton.Pressed += ReturnWithoutOutcome;
+			(_missionState?.MissionTitle ?? "Away Mission").ToUpper(),
+			GetMissionObjectiveText(),
+			GetMissionPromptText());
+		_missionUi.ExtractionOutcomeChosen += OnExtractionOutcomeChosen;
 		UpdateMissionCompletionActions();
 	}
 
@@ -482,6 +634,7 @@ public partial class MissionMap : Node2D
 		}
 
 		_dialogueUi.ConversationEnded += OnMissionConversationEnded;
+		_dialogueUi.DialogueStateChanged += OnMissionDialogueStateChanged;
 	}
 
 	private void SelectOfficer(int index)
@@ -551,6 +704,7 @@ public partial class MissionMap : Node2D
 				outcome.Reward.EnergyCores = 1;
 				outcome.Reward.AncientTech = 2;
 				outcome.FlagsToSet.Add("smuggler_exchange_deal_cut");
+				outcome.Reward.CodexEntryIds.Add("broker_contract_terms");
 
 				foreach (OfficerState officer in officers)
 				{
@@ -567,6 +721,7 @@ public partial class MissionMap : Node2D
 				outcome.Reward.RawMaterials = 90;
 				outcome.Reward.EnergyCores = 2;
 				outcome.FlagsToSet.Add("smuggler_exchange_contraband_seized");
+				outcome.Reward.CodexEntryIds.Add("smuggler_seizure_report");
 
 				foreach (OfficerState officer in officers)
 				{
@@ -587,6 +742,7 @@ public partial class MissionMap : Node2D
 			outcome.Reward.RawMaterials = 70;
 			outcome.Reward.EnergyCores = 1;
 			outcome.FlagsToSet.Add("relay_survivors_saved");
+			outcome.Reward.CodexEntryIds.Add("relay_survivor_registry");
 
 			foreach (OfficerState officer in officers)
 			{
@@ -604,6 +760,8 @@ public partial class MissionMap : Node2D
 			outcome.Reward.EnergyCores = 2;
 			outcome.Reward.AncientTech = 2;
 			outcome.FlagsToSet.Add("relay_archive_secured");
+			outcome.Reward.FleetItemIds.Add("custodian_archive_shard");
+			outcome.Reward.CodexEntryIds.Add("custodian_archive_shard");
 
 			foreach (OfficerState officer in officers)
 			{
@@ -646,6 +804,91 @@ public partial class MissionMap : Node2D
 	private string GetSecondaryOutcomeId()
 	{
 		return string.IsNullOrWhiteSpace(_missionTemplate?.SecondaryOutcomeId) ? "archive_secured" : _missionTemplate.SecondaryOutcomeId;
+	}
+
+	private string GetMissionObjectiveText()
+	{
+		return string.IsNullOrWhiteSpace(_missionTemplate?.ObjectiveText)
+			? "OBJECTIVE: Investigate the relay, assess the survivors, and decide what to save."
+			: _missionTemplate.ObjectiveText;
+	}
+
+	private string GetBaseMissionPromptText()
+	{
+		return string.IsNullOrWhiteSpace(_missionTemplate?.PromptText)
+			? "Controls: left click an officer to select, left click a floor tile to move, TAB or 1-2 to switch officers, middle mouse drag or WASD to pan, mouse wheel or +/- to zoom."
+			: _missionTemplate.PromptText;
+	}
+
+	private string GetMissionPromptText()
+	{
+		string basePrompt = GetBaseMissionPromptText();
+		List<MissionExtractionOption> extractionOptions = GetAvailableExtractionOptions();
+		bool allOfficersOnEvac = AreAllOfficersOnEvacZone();
+		if (!allOfficersOnEvac)
+		{
+			return $"{basePrompt} Complete a valid mission path, then rally every surviving officer on the evac zone to extract.";
+		}
+
+		if (extractionOptions.Count == 0)
+		{
+			return $"{basePrompt} Your officers are assembled at evac, but no mission outcome is ready yet.";
+		}
+
+		if (extractionOptions.Count == 1)
+		{
+			return $"{basePrompt} All officers are on the evac zone. Extraction is ready for {extractionOptions[0].DisplayText.ToUpper()}.";
+		}
+
+		return $"{basePrompt} All officers are on the evac zone. Multiple extraction outcomes are available; choose how the mission resolves.";
+	}
+
+	private void RefreshMissionPrompt()
+	{
+		if (_missionUi?.PromptLabel != null)
+		{
+			_missionUi.PromptLabel.Text = GetMissionPromptText();
+		}
+	}
+
+	private bool IsOutcomeReady(string outcomeId)
+	{
+		if (outcomeId == GetPrimaryOutcomeId())
+		{
+			return AreRequiredFlagsSatisfied(_missionTemplate?.PrimaryOutcomeRequiredFlags);
+		}
+
+		if (outcomeId == GetSecondaryOutcomeId())
+		{
+			return AreRequiredFlagsSatisfied(_missionTemplate?.SecondaryOutcomeRequiredFlags);
+		}
+
+		return false;
+	}
+
+	private string GetOutcomeDisplayName(string outcomeId)
+	{
+		if (outcomeId == GetPrimaryOutcomeId())
+		{
+			return string.IsNullOrWhiteSpace(_missionTemplate?.PrimaryActionText) ? "SAVE SURVIVORS" : _missionTemplate.PrimaryActionText;
+		}
+
+		if (outcomeId == GetSecondaryOutcomeId())
+		{
+			return string.IsNullOrWhiteSpace(_missionTemplate?.SecondaryActionText) ? "SECURE ARCHIVE" : _missionTemplate.SecondaryActionText;
+		}
+
+		return outcomeId;
+	}
+
+	private void OnExtractionOutcomeChosen(string outcomeId)
+	{
+		if (string.IsNullOrWhiteSpace(outcomeId) || !IsOutcomeReady(outcomeId) || !AreAllOfficersOnEvacZone())
+		{
+			return;
+		}
+
+		CompleteMission(BuildOutcome(outcomeId));
 	}
 
 	private void CompleteMission(MissionOutcome outcome)
@@ -912,6 +1155,16 @@ public partial class MissionMap : Node2D
 			UpdateMissionCompletionActions();
 		}
 
+		if (interaction.MarkerId == "evac_zone")
+		{
+			UpdateMissionCompletionActions();
+			if (interaction.OneShot)
+			{
+				_consumedTriggerKeys.Add(interactionKey);
+			}
+			return;
+		}
+
 		if (interaction.LogicRole == "door")
 		{
 			ToggleDoorInteraction(interaction);
@@ -1107,20 +1360,15 @@ public partial class MissionMap : Node2D
 		return false;
 	}
 
-	private void CheckDialogueTriggers(OfficerPawn officer)
+	private void CheckEnterTriggers(OfficerPawn officer)
 	{
-		if (officer == null || _roomBuilder == null || _dialogueUi == null || _dialogueUi.IsConversationOpen)
+		if (officer == null || _roomBuilder == null)
 		{
 			return;
 		}
 
 		foreach (MissionRoomBuilder.MarkerPlacement marker in _roomBuilder.GetMarkerPlacements())
 		{
-			if (marker.MarkerId != "trigger_dialogue")
-			{
-				continue;
-			}
-
 			if (!string.Equals(marker.TriggerMode, "enter", System.StringComparison.OrdinalIgnoreCase))
 			{
 				continue;
@@ -1153,11 +1401,20 @@ public partial class MissionMap : Node2D
 				_consumedTriggerKeys.Add(triggerKey);
 			}
 
-			_dialogueUi.StartConversation(
-				ResolveDialogueTargetId(marker),
-				officer.OfficerName,
-				officer.PortraitPath,
-				marker.NpcPortraitPath);
+			if (marker.MarkerId == "evac_zone")
+			{
+				UpdateMissionCompletionActions();
+				break;
+			}
+
+			if (marker.MarkerId == "trigger_dialogue" && _dialogueUi != null && !_dialogueUi.IsConversationOpen)
+			{
+				_dialogueUi.StartConversation(
+					ResolveDialogueTargetId(marker),
+					officer.OfficerName,
+					officer.PortraitPath,
+					marker.NpcPortraitPath);
+			}
 			break;
 		}
 	}
@@ -1182,14 +1439,22 @@ public partial class MissionMap : Node2D
 		UpdateSelectedOfficerDisplay();
 	}
 
+	private void OnMissionDialogueStateChanged()
+	{
+		UpdateMissionCompletionActions();
+	}
+
 	private void OnOfficerEnteredCell(OfficerPawn pawn, Vector2I cell)
 	{
 		UpdateFogOfWar();
-		CheckDialogueTriggers(pawn);
+		UpdateMissionCompletionActions();
+		CheckEnterTriggers(pawn);
 	}
 
 	private void OnOfficerReachedCell(OfficerPawn pawn, Vector2I cell)
 	{
+		UpdateMissionCompletionActions();
+
 		if (pawn == null || pawn.OfficerID != _pendingInteractionOfficerId)
 		{
 			return;
@@ -1419,7 +1684,7 @@ public partial class MissionMap : Node2D
 			}
 		}
 
-		npc.CommitInteractionResult(result);
+		npc.CommitInteractionResult(result, context);
 		UpdateMissionCompletionActions();
 
 		if (!string.IsNullOrWhiteSpace(result.DialogueId) && _dialogueUi != null)
@@ -1439,6 +1704,53 @@ public partial class MissionMap : Node2D
 		return $"{roleOrMarker}:{tileId}:{marker.Cell.X},{marker.Cell.Y}:{marker.TargetId}";
 	}
 
+	private List<MissionExtractionOption> GetAvailableExtractionOptions()
+	{
+		List<MissionExtractionOption> options = new List<MissionExtractionOption>();
+		string primaryOutcomeId = GetPrimaryOutcomeId();
+		if (IsOutcomeReady(primaryOutcomeId))
+		{
+			options.Add(new MissionExtractionOption
+			{
+				OutcomeId = primaryOutcomeId,
+				DisplayText = GetOutcomeDisplayName(primaryOutcomeId),
+				Description = $"Complete the mission as {GetOutcomeDisplayName(primaryOutcomeId).ToLowerInvariant()}."
+			});
+		}
+
+		string secondaryOutcomeId = GetSecondaryOutcomeId();
+		if (IsOutcomeReady(secondaryOutcomeId))
+		{
+			options.Add(new MissionExtractionOption
+			{
+				OutcomeId = secondaryOutcomeId,
+				DisplayText = GetOutcomeDisplayName(secondaryOutcomeId),
+				Description = $"Complete the mission as {GetOutcomeDisplayName(secondaryOutcomeId).ToLowerInvariant()}."
+			});
+		}
+
+		return options;
+	}
+
+	private bool AreAllOfficersOnEvacZone()
+	{
+		if (_officerPawns.Count == 0 || _roomBuilder == null)
+		{
+			return false;
+		}
+
+		HashSet<Vector2I> evacCells = _roomBuilder.GetMarkerPlacements()
+			.Where(marker => marker.MarkerId == "evac_zone")
+			.Select(marker => marker.Cell)
+			.ToHashSet();
+		if (evacCells.Count == 0)
+		{
+			return false;
+		}
+
+		return _officerPawns.All(pawn => pawn != null && evacCells.Contains(pawn.CurrentCell));
+	}
+
 	private void UpdateMissionCompletionActions()
 	{
 		if (_missionUi == null)
@@ -1446,24 +1758,20 @@ public partial class MissionMap : Node2D
 			return;
 		}
 
-		bool primaryReady = AreRequiredFlagsSatisfied(_missionTemplate?.PrimaryOutcomeRequiredFlags);
-		bool secondaryReady = AreRequiredFlagsSatisfied(_missionTemplate?.SecondaryOutcomeRequiredFlags);
-
-		if (_missionUi.SaveSurvivorsButton != null)
+		List<MissionExtractionOption> availableOptions = GetAvailableExtractionOptions();
+		if (AreAllOfficersOnEvacZone() && availableOptions.Count > 0)
 		{
-			_missionUi.SaveSurvivorsButton.Disabled = !primaryReady;
-			_missionUi.SaveSurvivorsButton.TooltipText = primaryReady
-				? string.Empty
-				: BuildMissingFlagsTooltip(_missionTemplate?.PrimaryOutcomeRequiredFlags);
+			string message = availableOptions.Count == 1
+				? $"All surviving officers are assembled at the evac zone. Confirm extraction to leave the mission as {availableOptions[0].DisplayText.ToLowerInvariant()}."
+				: "All surviving officers are assembled at the evac zone. Choose which resolved outcome you want to extract with.";
+			_missionUi.ShowExtractionPrompt("EXTRACTION READY", message, availableOptions);
+		}
+		else
+		{
+			_missionUi.HideExtractionPrompt();
 		}
 
-		if (_missionUi.SecureArchiveButton != null)
-		{
-			_missionUi.SecureArchiveButton.Disabled = !secondaryReady;
-			_missionUi.SecureArchiveButton.TooltipText = secondaryReady
-				? string.Empty
-				: BuildMissingFlagsTooltip(_missionTemplate?.SecondaryOutcomeRequiredFlags);
-		}
+		RefreshMissionPrompt();
 	}
 
 	private bool AreRequiredFlagsSatisfied(Godot.Collections.Array<string> requiredFlags)

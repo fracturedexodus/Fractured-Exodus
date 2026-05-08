@@ -52,7 +52,7 @@ public partial class MissionProp : Area2D, IInteractable
 		}
 
 		ApplyGlobalFlags(result, context?.GlobalData);
-		ApplyReward(result, context?.GlobalData);
+		ApplyReward(result, context);
 
 		if (result.ConsumeProp)
 		{
@@ -179,6 +179,36 @@ public partial class MissionProp : Area2D, IInteractable
 			result.Reward.RawMaterials += Definition.RewardRawMaterials;
 			result.Reward.EnergyCores += Definition.RewardEnergyCores;
 			result.Reward.AncientTech += Definition.RewardAncientTech;
+			if (Definition.RewardFleetItemIds != null)
+			{
+				foreach (string itemId in Definition.RewardFleetItemIds)
+				{
+					if (!string.IsNullOrWhiteSpace(itemId) && !result.Reward.FleetItemIds.Contains(itemId))
+					{
+						result.Reward.FleetItemIds.Add(itemId);
+					}
+				}
+			}
+			if (Definition.RewardOfficerItemIds != null)
+			{
+				foreach (string itemId in Definition.RewardOfficerItemIds)
+				{
+					if (!string.IsNullOrWhiteSpace(itemId) && !result.Reward.OfficerItemIds.Contains(itemId))
+					{
+						result.Reward.OfficerItemIds.Add(itemId);
+					}
+				}
+			}
+			if (Definition.RewardCodexEntryIds != null)
+			{
+				foreach (string entryId in Definition.RewardCodexEntryIds)
+				{
+					if (!string.IsNullOrWhiteSpace(entryId) && !result.Reward.CodexEntryIds.Contains(entryId))
+					{
+						result.Reward.CodexEntryIds.Add(entryId);
+					}
+				}
+			}
 		}
 
 		if (Definition.SetFlags != null)
@@ -225,18 +255,13 @@ public partial class MissionProp : Area2D, IInteractable
 		}
 	}
 
-	private void ApplyReward(PropInteractionResult result, GlobalData globalData)
+	private void ApplyReward(PropInteractionResult result, PropInteractionContext context)
 	{
-		if (globalData?.FleetResources == null || result.Reward == null)
+		if (context?.GlobalData == null || result.Reward == null)
 		{
 			return;
 		}
 
-		globalData.FleetResources[GameConstants.ResourceKeys.RawMaterials] =
-			globalData.FleetResources[GameConstants.ResourceKeys.RawMaterials].AsSingle() + result.Reward.RawMaterials;
-		globalData.FleetResources[GameConstants.ResourceKeys.EnergyCores] =
-			globalData.FleetResources[GameConstants.ResourceKeys.EnergyCores].AsSingle() + result.Reward.EnergyCores;
-		globalData.FleetResources[GameConstants.ResourceKeys.AncientTech] =
-			globalData.FleetResources[GameConstants.ResourceKeys.AncientTech].AsSingle() + result.Reward.AncientTech;
+		new CampaignRewardService(context.GlobalData).ApplyReward(result.Reward, context.Officer?.OfficerID ?? string.Empty);
 	}
 }

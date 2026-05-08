@@ -9,6 +9,13 @@ public class InventoryStack
 	public int Count { get; set; }
 }
 
+public class CampaignItemStack
+{
+	public string ItemID { get; set; }
+	public CampaignItemDefinition Item { get; set; }
+	public int Count { get; set; }
+}
+
 public class SellableInventoryEntry
 {
 	public string ItemID { get; set; }
@@ -248,7 +255,77 @@ public class FleetInventoryService
 		report.Lines.Add($"- Armor: {armorCount}");
 		report.Lines.Add($"- Missiles: {missileCount}");
 
+		List<CampaignItemStack> fleetCargo = GetGroupedFleetCargo();
+		report.Lines.Add(string.Empty);
+		report.Lines.Add("[color=lime]--- FLEET CARGO ---[/color]");
+		if (fleetCargo.Count == 0)
+		{
+			report.Lines.Add("- None");
+		}
+		else
+		{
+			foreach (CampaignItemStack stack in fleetCargo)
+			{
+				report.Lines.Add($"- {stack.Item.DisplayName} (x{stack.Count}) [{stack.Item.Category}]");
+			}
+		}
+
+		report.Lines.Add(string.Empty);
+		report.Lines.Add("[color=orange]--- OFFICER FIELD INVENTORY ---[/color]");
+		bool foundOfficerItems = false;
+		foreach (OfficerState officer in (_globalData.ShipOfficers?.Values ?? Enumerable.Empty<OfficerState>()).Where(officer => officer != null))
+		{
+			List<CampaignItemStack> officerItems = GetGroupedOfficerInventory(officer);
+			if (officerItems.Count == 0)
+			{
+				continue;
+			}
+
+			foundOfficerItems = true;
+			report.Lines.Add($"- {officer.DisplayName}:");
+			foreach (CampaignItemStack stack in officerItems)
+			{
+				report.Lines.Add($"  * {stack.Item.DisplayName} (x{stack.Count}) [{stack.Item.Category}]");
+			}
+		}
+
+		if (!foundOfficerItems)
+		{
+			report.Lines.Add("- No officer-carried mission items.");
+		}
+
 		return report;
+	}
+
+	public List<CampaignItemStack> GetGroupedFleetCargo()
+	{
+		return GroupCampaignItems(_globalData?.FleetCargoItemIDs);
+	}
+
+	public List<CampaignItemStack> GetGroupedOfficerInventory(OfficerState officer)
+	{
+		return GroupCampaignItems(officer?.PersonalInventoryItemIDs);
+	}
+
+	private static List<CampaignItemStack> GroupCampaignItems(IEnumerable<string> itemIds)
+	{
+		return (itemIds ?? Enumerable.Empty<string>())
+			.GroupBy(itemId => itemId)
+			.Select(group => new CampaignItemStack
+			{
+				ItemID = group.Key,
+				Item = CampaignItemRegistry.GetItem(group.Key) ?? new CampaignItemDefinition
+				{
+					ItemId = group.Key,
+					DisplayName = group.Key,
+					Description = "Unknown campaign item.",
+					Category = "Mission Loot"
+				},
+				Count = group.Count()
+			})
+			.OrderBy(stack => stack.Item.Category)
+			.ThenBy(stack => stack.Item.DisplayName)
+			.ToList();
 	}
 
 	public int GetStandardIssueSaleValue(string outpostName)

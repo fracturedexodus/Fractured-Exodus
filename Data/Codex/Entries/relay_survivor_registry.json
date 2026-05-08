@@ -1,0 +1,8 @@
+{
+	"entry_id": "relay_survivor_registry",
+	"title": "Relay Survivor Registry",
+	"category": "Mission Intel",
+	"summary": "A recovered list of relay survivors, emergency bunks, and supply dependencies.",
+	"detail_text": "The relay records show the people left alive inside the failing Custodian site, where they were bunked, and which systems were failing first. It is less a manifest than a moral ledger: every missing support line becomes a name you decided not to lose.",
+	"image_path": ""
+}

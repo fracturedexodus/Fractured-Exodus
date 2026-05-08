@@ -1,0 +1,33 @@
+{
+	"conversation_id": "smuggler_exchange_dialogue",
+	"nodes": [
+		{
+			"id": "Start",
+			"speaker_name": "Broker Veil",
+			"text": "The exchange is bleeding pressure. Veil's uplink is still broadcasting and every patrol cutter in the corridor can smell the leak. If we want anything from this outpost, we need the broker's terms, the safehouse manifest, and whatever survived in the vault.",
+			"options": [
+				{ "text": "Review the broker's terms.", "next": "Cache" },
+				{ "text": "Who is converging on the station?", "next": "Threat" },
+				{ "text": "Understood. We'll work the outpost and choose our exit.", "next": "End" }
+			]
+		},
+		{
+			"id": "Cache",
+			"speaker_name": "Broker Veil",
+			"text": "The vault holds route ledgers and contraband manifests. The medbay holds my wounded runners. Help the people and I can still broker your way out. Strip the vault and you'll leave rich, but every ghost on this station becomes your debt.",
+			"options": [
+				{ "text": "Back to the uplink summary.", "next": "Start" },
+				{ "text": "We have enough. We'll make the call ourselves.", "next": "End" }
+			]
+		},
+		{
+			"id": "Threat",
+			"speaker_name": "Broker Veil",
+			"text": "Patrol cutters, reclaim crews, and two licensed evidence burners. If they board first, they erase the vault, purge the medbay, and put our names in an open ledger for every hungry ship in the Reach.",
+			"options": [
+				{ "text": "Back to the uplink summary.", "next": "Start" },
+				{ "text": "Then we move now.", "next": "End" }
+			]
+		}
+	]
+}
