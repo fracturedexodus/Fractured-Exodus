@@ -1,0 +1,22 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://Scripts/Missions/Entities/MissionNpcPawn.cs" id="1_mission_npc_pawn"]
+
+[node name="MissionNpcPawn" type="Node2D"]
+script = ExtResource("1_mission_npc_pawn")
+
+[node name="Shadow" type="Polygon2D" parent="."]
+color = Color(0, 0, 0, 0.180392)
+polygon = PackedVector2Array(-18, 0, -12.7279, -5.65685, 0, -8, 12.7279, -5.65685, 18, 0, 12.7279, 5.65685, 0, 8, -12.7279, 5.65685)
+position = Vector2(0, 4)
+
+[node name="Sprite2D" type="Sprite2D" parent="."]
+centered = true
+texture_filter = 1
+
+[node name="NameLabel" type="Label" parent="."]
+offset_left = -72.0
+offset_top = 16.0
+offset_right = 72.0
+offset_bottom = 40.0
+horizontal_alignment = 1

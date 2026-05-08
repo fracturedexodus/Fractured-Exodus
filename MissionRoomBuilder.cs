@@ -13,6 +13,7 @@ public partial class MissionRoomBuilder : Node
 		public string TileId { get; init; } = string.Empty;
 		public string LogicRole { get; init; } = string.Empty;
 		public string PropDefinitionPath { get; init; } = string.Empty;
+		public string NpcDefinitionPath { get; init; } = string.Empty;
 		public string Label { get; init; } = string.Empty;
 		public string TargetId { get; init; } = string.Empty;
 		public string NpcPortraitPath { get; init; } = string.Empty;
@@ -37,6 +38,7 @@ public partial class MissionRoomBuilder : Node
 	private bool _rebuildNow;
 	private readonly Dictionary<string, Vector2> _markerPositions = new Dictionary<string, Vector2>();
 	private readonly Dictionary<string, Vector2I> _markerCells = new Dictionary<string, Vector2I>();
+	private readonly Dictionary<string, Vector2I> _spawnMarkerCells = new Dictionary<string, Vector2I>();
 	private readonly List<MarkerPlacement> _markerPlacements = new List<MarkerPlacement>();
 	private readonly HashSet<Vector2I> _floorCells = new HashSet<Vector2I>();
 	private readonly HashSet<string> _blockedTransitions = new HashSet<string>();
@@ -107,6 +109,16 @@ public partial class MissionRoomBuilder : Node
 	public bool TryGetMarkerCell(string markerId, out Vector2I cell)
 	{
 		return _markerCells.TryGetValue(markerId, out cell);
+	}
+
+	public bool TryGetSpawnCell(string spawnKey, out Vector2I cell)
+	{
+		if (_spawnMarkerCells.TryGetValue(spawnKey, out cell))
+		{
+			return true;
+		}
+
+		return _markerCells.TryGetValue(spawnKey, out cell);
 	}
 
 	public IReadOnlyList<MarkerPlacement> GetMarkerPlacements()
@@ -304,6 +316,7 @@ public partial class MissionRoomBuilder : Node
 		ClearLayer(propLayer);
 		_markerPositions.Clear();
 		_markerCells.Clear();
+		_spawnMarkerCells.Clear();
 		_markerPlacements.Clear();
 		_floorCells.Clear();
 		_blockedTransitions.Clear();
@@ -369,6 +382,7 @@ public partial class MissionRoomBuilder : Node
 			bool logicOnce = tileDict.TryGetValue("logic_once", out Variant logicOnceVariant) && logicOnceVariant.AsBool();
 			string logicNotes = tileDict.TryGetValue("logic_notes", out Variant logicNotesVariant) ? logicNotesVariant.AsString() : string.Empty;
 			string propDefinitionPath = tileDict.TryGetValue("prop_definition_path", out Variant propDefinitionVariant) ? propDefinitionVariant.AsString() : string.Empty;
+			string npcDefinitionPath = tileDict.TryGetValue("npc_definition_path", out Variant npcDefinitionVariant) ? npcDefinitionVariant.AsString() : string.Empty;
 
 			if (itemType == "background")
 			{
@@ -382,11 +396,17 @@ public partial class MissionRoomBuilder : Node
 			{
 				_markerPositions[markerId] = GetCellWorldPosition(column, row, new Vector2(offsetX, offsetY));
 				_markerCells[markerId] = new Vector2I(column, row);
+				string spawnKey = string.IsNullOrEmpty(logicTargetId) ? markerId : logicTargetId;
+				if ((markerId.StartsWith("spawn_") || markerId == "npc_spawn") && !string.IsNullOrWhiteSpace(spawnKey))
+				{
+					_spawnMarkerCells[spawnKey] = new Vector2I(column, row);
+				}
 				_markerPlacements.Add(new MarkerPlacement
 				{
 					MarkerId = markerId,
 					LogicRole = "marker",
 					PropDefinitionPath = propDefinitionPath,
+					NpcDefinitionPath = npcDefinitionPath,
 					Label = string.IsNullOrEmpty(logicLabel) ? markerId : logicLabel,
 					TargetId = string.IsNullOrEmpty(logicTargetId) ? markerId : logicTargetId,
 					NpcPortraitPath = logicNpcPortrait,
@@ -406,6 +426,7 @@ public partial class MissionRoomBuilder : Node
 				{
 					LogicRole = string.IsNullOrEmpty(logicRole) ? "prop" : logicRole,
 					PropDefinitionPath = propDefinitionPath,
+					NpcDefinitionPath = npcDefinitionPath,
 					Label = string.IsNullOrEmpty(logicLabel) ? GetPropDefinitionDisplayName(propDefinitionPath) : logicLabel,
 					TargetId = logicTargetId,
 					NpcPortraitPath = logicNpcPortrait,
@@ -455,6 +476,7 @@ public partial class MissionRoomBuilder : Node
 				sprite.SetMeta("logic_once", logicOnce);
 				sprite.SetMeta("logic_notes", logicNotes);
 				sprite.SetMeta("prop_definition_path", propDefinitionPath);
+				sprite.SetMeta("npc_definition_path", npcDefinitionPath);
 				targetLayer.AddChild(sprite);
 			}
 
@@ -465,6 +487,7 @@ public partial class MissionRoomBuilder : Node
 					TileId = definition.Id,
 					LogicRole = logicRole,
 					PropDefinitionPath = propDefinitionPath,
+					NpcDefinitionPath = npcDefinitionPath,
 					Label = string.IsNullOrEmpty(logicLabel) ? definition.DisplayName : logicLabel,
 					TargetId = logicTargetId,
 					NpcPortraitPath = logicNpcPortrait,

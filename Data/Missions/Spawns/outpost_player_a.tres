@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="MissionSpawnDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://Scripts/Missions/Entities/MissionSpawnDefinition.cs" id="1_mission_spawn_definition"]
+
+[resource]
+script = ExtResource("1_mission_spawn_definition")
+SpawnId = "outpost_player_a"
+MarkerId = "spawn_a"
+ActorType = 0
+OfficerSlotIndex = 0
+FallbackCell = Vector2i(0, 8)
+Notes = "Primary boarding position at the exchange dock."

@@ -25,8 +25,11 @@ public partial class MissionMap : Node2D
 	private TextureRect _backgroundBackdrop;
 	private Sprite2D _backgroundFeatureSprite;
 	private readonly List<OfficerPawn> _officerPawns = new List<OfficerPawn>();
+	private readonly List<MissionNpcPawn> _missionNpcs = new List<MissionNpcPawn>();
+	private readonly Dictionary<Vector2I, MissionNpcPawn> _missionNpcsByCell = new Dictionary<Vector2I, MissionNpcPawn>();
 	private readonly Dictionary<Vector2I, MissionProp> _missionPropsByCell = new Dictionary<Vector2I, MissionProp>();
 	private readonly Dictionary<string, MissionRoomBuilder.MarkerPlacement> _propPlacementsByInstanceId = new Dictionary<string, MissionRoomBuilder.MarkerPlacement>();
+	private readonly MissionSpawner _missionSpawner = new MissionSpawner();
 	private readonly HashSet<string> _consumedTriggerKeys = new HashSet<string>();
 	private readonly HashSet<Vector2I> _exploredCells = new HashSet<Vector2I>();
 	private readonly HashSet<Vector2I> _visibleCells = new HashSet<Vector2I>();
@@ -36,6 +39,7 @@ public partial class MissionMap : Node2D
 	private string _pendingInteractionKey = string.Empty;
 	private string _pendingInteractionOfficerId = string.Empty;
 	private string _pendingPropInstanceId = string.Empty;
+	private string _pendingNpcId = string.Empty;
 
 	public override void _Ready()
 	{
@@ -62,6 +66,7 @@ public partial class MissionMap : Node2D
 		SpawnMissionProps();
 		ApplyMissionBackground();
 		ConfigureMissionView();
+		SpawnMissionNpcs();
 		SpawnMissionOfficers();
 		UpdateFogOfWar();
 		WireUi();
@@ -306,28 +311,46 @@ public partial class MissionMap : Node2D
 	{
 		_officerPawns.Clear();
 
-		PackedScene pawnScene = GD.Load<PackedScene>("res://officer_pawn.tscn");
-		List<string> shipNames = _missionState?.ParticipatingShipNames ?? new List<string>();
-		for (int i = 0; i < shipNames.Count && i < 2; i++)
+		MissionSpawnContext spawnContext = new MissionSpawnContext
 		{
-			OfficerState officer = _globalData?.ShipOfficers != null && _globalData.ShipOfficers.TryGetValue(shipNames[i], out OfficerState state)
-				? state
-				: null;
-			if (officer == null)
+			GlobalData = _globalData,
+			MissionState = _missionState,
+			MissionTemplate = _missionTemplate,
+			RoomBuilder = _roomBuilder
+		};
+		_officerPawns.AddRange(_missionSpawner.SpawnPlayerOfficers(
+			spawnContext,
+			_characterLayer,
+			GetCellGlobalPosition,
+			pawn =>
 			{
-				continue;
-			}
-
-			OfficerPawn pawn = pawnScene.Instantiate<OfficerPawn>();
-			pawn.SetOfficer(officer);
-			pawn.EnteredCell += OnOfficerEnteredCell;
-			pawn.ReachedCell += OnOfficerReachedCell;
-			_characterLayer.AddChild(pawn);
-			PlaceOfficerAtSpawn(pawn, i);
-			_officerPawns.Add(pawn);
-		}
+				pawn.EnteredCell += OnOfficerEnteredCell;
+				pawn.ReachedCell += OnOfficerReachedCell;
+			}));
 
 		SelectOfficer(0);
+	}
+
+	private void SpawnMissionNpcs()
+	{
+		_missionNpcs.Clear();
+		_missionNpcsByCell.Clear();
+
+		MissionSpawnContext spawnContext = new MissionSpawnContext
+		{
+			GlobalData = _globalData,
+			MissionState = _missionState,
+			MissionTemplate = _missionTemplate,
+			RoomBuilder = _roomBuilder
+		};
+		_missionNpcs.AddRange(_missionSpawner.SpawnMissionNpcs(
+			spawnContext,
+			_characterLayer,
+			GetCellGlobalPosition));
+		foreach (MissionNpcPawn npc in _missionNpcs.Where(npc => npc != null))
+		{
+			_missionNpcsByCell[npc.CurrentCell] = npc;
+		}
 	}
 
 	private void UpdateFogOfWar()
@@ -719,6 +742,11 @@ public partial class MissionMap : Node2D
 		}
 
 		Vector2I clickedCell = _roomBuilder.GetNearestCell(_isoWorld.ToLocal(GetGlobalMousePosition()));
+		if (TryHandleNpcInteractionClick(officer, clickedCell))
+		{
+			return true;
+		}
+
 		if (TryHandlePropInteractionClick(officer, clickedCell))
 		{
 			return true;
@@ -773,6 +801,29 @@ public partial class MissionMap : Node2D
 		if (TryMoveOfficerToCell(officer, clickedCell))
 		{
 			_pendingPropInstanceId = prop.PropInstanceId;
+			_pendingInteractionOfficerId = officer.OfficerID;
+		}
+
+		return true;
+	}
+
+	private bool TryHandleNpcInteractionClick(OfficerPawn officer, Vector2I clickedCell)
+	{
+		if (!_missionNpcsByCell.TryGetValue(clickedCell, out MissionNpcPawn npc) || npc == null)
+		{
+			return false;
+		}
+
+		if (CanOfficerExecuteNpcInteraction(officer, npc))
+		{
+			ExecuteNpcInteraction(officer, npc);
+			return true;
+		}
+
+		Vector2I? approachCell = FindBestNpcApproachCell(officer, npc);
+		if (approachCell.HasValue && TryMoveOfficerToCell(officer, approachCell.Value))
+		{
+			_pendingNpcId = npc.NpcId;
 			_pendingInteractionOfficerId = officer.OfficerID;
 		}
 
@@ -917,6 +968,53 @@ public partial class MissionMap : Node2D
 		return distance <= interactionRange;
 	}
 
+	private bool CanOfficerExecuteNpcInteraction(OfficerPawn officer, MissionNpcPawn npc)
+	{
+		if (officer == null || npc == null)
+		{
+			return false;
+		}
+
+		int interactionRange = Mathf.Max(1, npc.InteractionRange);
+		int distance = Mathf.Abs(officer.CurrentCell.X - npc.CurrentCell.X) + Mathf.Abs(officer.CurrentCell.Y - npc.CurrentCell.Y);
+		return distance <= interactionRange;
+	}
+
+	private Vector2I? FindBestNpcApproachCell(OfficerPawn officer, MissionNpcPawn npc)
+	{
+		if (officer == null || npc == null || _roomBuilder == null)
+		{
+			return null;
+		}
+
+		List<Vector2I> candidates = new List<Vector2I>();
+		Vector2I[] directions =
+		{
+			new Vector2I(1, 0),
+			new Vector2I(-1, 0),
+			new Vector2I(0, 1),
+			new Vector2I(0, -1)
+		};
+		foreach (Vector2I direction in directions)
+		{
+			Vector2I candidate = npc.CurrentCell + direction;
+			if (_roomBuilder.IsWalkableCell(candidate))
+			{
+				candidates.Add(candidate);
+			}
+		}
+
+		foreach (Vector2I candidate in candidates.Distinct())
+		{
+			if (_roomBuilder.TryGetPath(officer.CurrentCell, candidate, out List<Vector2I> _))
+			{
+				return candidate;
+			}
+		}
+
+		return null;
+	}
+
 	private void ExecutePropInteraction(OfficerPawn officer, MissionProp prop)
 	{
 		if (officer == null || prop == null)
@@ -934,6 +1032,35 @@ public partial class MissionMap : Node2D
 		ApplyPropInteractionResult(prop, result, context);
 	}
 
+	private void ExecuteNpcInteraction(OfficerPawn officer, MissionNpcPawn npc)
+	{
+		if (officer == null || npc == null)
+		{
+			return;
+		}
+
+		PropInteractionContext context = new PropInteractionContext
+		{
+			MissionMap = this,
+			GlobalData = _globalData,
+			MissionState = _missionState,
+			MissionTemplate = _missionTemplate,
+			DialogueUI = _dialogueUi,
+			Officer = officer,
+			TargetCell = npc.CurrentCell,
+			PropInstanceId = npc.NpcId,
+			SourceInteractionKey = _missionState?.SourceInteractionKey ?? string.Empty,
+			NpcPortraitPath = npc.PortraitPath ?? string.Empty
+		};
+		PropInteractionResult result = npc.Interact(context);
+		if (result == null || !result.Success)
+		{
+			return;
+		}
+
+		ApplyNpcInteractionResult(npc, result, context);
+	}
+
 	private void ToggleDoorInteraction(MissionRoomBuilder.MarkerPlacement interaction)
 	{
 		if (_roomBuilder == null || string.IsNullOrEmpty(interaction.TargetId))
@@ -948,24 +1075,6 @@ public partial class MissionMap : Node2D
 		}
 
 		_roomBuilder.TrySetDoorOpen(interaction.TargetId, nextOpenState, true);
-	}
-
-	private void PlaceOfficerAtSpawn(OfficerPawn pawn, int spawnIndex)
-	{
-		if (pawn == null || _roomBuilder == null)
-		{
-			return;
-		}
-
-		string markerId = spawnIndex == 0 ? "spawn_a" : "spawn_b";
-		Vector2I fallbackCell = spawnIndex == 0 ? new Vector2I(3, 5) : new Vector2I(4, 5);
-		Vector2I spawnCell = fallbackCell;
-		if (_roomBuilder.TryGetMarkerCell(markerId, out Vector2I markerCell) && _roomBuilder.IsWalkableCell(markerCell))
-		{
-			spawnCell = markerCell;
-		}
-
-		pawn.SetGridCell(spawnCell, GetCellGlobalPosition(spawnCell));
 	}
 
 	private Vector2 GetCellGlobalPosition(Vector2I cell)
@@ -1083,6 +1192,18 @@ public partial class MissionMap : Node2D
 	{
 		if (pawn == null || pawn.OfficerID != _pendingInteractionOfficerId)
 		{
+			return;
+		}
+
+		if (!string.IsNullOrEmpty(_pendingNpcId))
+		{
+			MissionNpcPawn pendingNpc = _missionNpcs.FirstOrDefault(npc => npc != null && npc.NpcId == _pendingNpcId);
+			_pendingNpcId = string.Empty;
+			_pendingInteractionOfficerId = string.Empty;
+			if (pendingNpc != null && CanOfficerExecuteNpcInteraction(pawn, pendingNpc))
+			{
+				ExecuteNpcInteraction(pawn, pendingNpc);
+			}
 			return;
 		}
 
@@ -1269,6 +1390,37 @@ public partial class MissionMap : Node2D
 				_missionPropsByCell.Remove(propCell);
 			}
 		}
+
+		if (!string.IsNullOrWhiteSpace(result.DialogueId) && _dialogueUi != null)
+		{
+			_dialogueUi.StartConversation(
+				result.DialogueId,
+				context.Officer?.OfficerName ?? "Officer",
+				context.Officer?.PortraitPath ?? string.Empty,
+				context.NpcPortraitPath ?? string.Empty);
+		}
+	}
+
+	private void ApplyNpcInteractionResult(MissionNpcPawn npc, PropInteractionResult result, PropInteractionContext context)
+	{
+		if (npc == null || result == null || !result.Success)
+		{
+			return;
+		}
+
+		if (_globalData?.StoryFlags != null && result.FlagsToSet != null)
+		{
+			foreach (string flag in result.FlagsToSet)
+			{
+				if (!string.IsNullOrWhiteSpace(flag) && !_globalData.StoryFlags.Contains(flag))
+				{
+					_globalData.StoryFlags.Add(flag);
+				}
+			}
+		}
+
+		npc.CommitInteractionResult(result);
+		UpdateMissionCompletionActions();
 
 		if (!string.IsNullOrWhiteSpace(result.DialogueId) && _dialogueUi != null)
 		{

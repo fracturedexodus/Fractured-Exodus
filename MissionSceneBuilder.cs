@@ -44,6 +44,9 @@ public partial class MissionSceneBuilder : Node2D
 	private Button _logicPropDefinitionRefreshButton;
 	private TextureRect _logicPropDefinitionPreviewIcon;
 	private Label _logicPropDefinitionPreviewLabel;
+	private LineEdit _logicNpcDefinitionPathEdit;
+	private OptionButton _logicNpcDefinitionOption;
+	private Button _logicNpcDefinitionRefreshButton;
 	private OptionButton _logicNpcPortraitOption;
 	private LineEdit _logicRequiredFlagEdit;
 	private Label _logicRequiredFlagHelpLabel;
@@ -66,6 +69,7 @@ public partial class MissionSceneBuilder : Node2D
 	private Vector2 _lastMouseScreenPosition;
 	private readonly List<Line2D> _gridLines = new List<Line2D>();
 	private readonly Dictionary<string, PropDefinitionPreview> _propDefinitionPreviewCache = new Dictionary<string, PropDefinitionPreview>();
+	private readonly Dictionary<string, NpcDefinitionPreview> _npcDefinitionPreviewCache = new Dictionary<string, NpcDefinitionPreview>();
 	private readonly List<ValidationIssueEntry> _validationEntries = new List<ValidationIssueEntry>();
 	private readonly Dictionary<string, Texture2D> _markerIconCache = new Dictionary<string, Texture2D>();
 	private Polygon2D _hoverDiamond;
@@ -91,6 +95,15 @@ public partial class MissionSceneBuilder : Node2D
 		public string Message { get; init; } = string.Empty;
 		public string TargetKey { get; init; } = string.Empty;
 		public ValidationSeverity Severity { get; init; } = ValidationSeverity.Warning;
+	}
+
+	private sealed class NpcDefinitionPreview
+	{
+		public string Path { get; init; } = string.Empty;
+		public string DisplayName { get; init; } = string.Empty;
+		public string Description { get; init; } = string.Empty;
+		public Texture2D Icon { get; init; }
+		public bool Exists { get; init; }
 	}
 
 	private enum ValidationSeverity
@@ -575,6 +588,21 @@ public partial class MissionSceneBuilder : Node2D
 		};
 		propPreviewRow.AddChild(_logicPropDefinitionPreviewLabel);
 		root.AddChild(propPreviewRow);
+		_logicNpcDefinitionPathEdit = AddInspectorField(root, "NPC Definition Path");
+		_logicNpcDefinitionPathEdit.PlaceholderText = "res://Data/Missions/Entities/Npcs/...";
+		_logicNpcDefinitionPathEdit.TextChanged += OnNpcDefinitionPathChanged;
+		root.AddChild(new Label { Text = "NPC Definition Library" });
+		HBoxContainer npcDefinitionRow = new HBoxContainer();
+		_logicNpcDefinitionOption = new OptionButton
+		{
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+		};
+		_logicNpcDefinitionOption.ItemSelected += OnNpcDefinitionOptionSelected;
+		npcDefinitionRow.AddChild(_logicNpcDefinitionOption);
+		_logicNpcDefinitionRefreshButton = new Button { Text = "Refresh" };
+		_logicNpcDefinitionRefreshButton.Pressed += RefreshNpcDefinitionOptions;
+		npcDefinitionRow.AddChild(_logicNpcDefinitionRefreshButton);
+		root.AddChild(npcDefinitionRow);
 		root.AddChild(new Label { Text = "Conversation Portrait" });
 		_logicNpcPortraitOption = new OptionButton();
 		for (int i = 0; i < MissionDialoguePortraitCatalog.All.Count; i++)
@@ -654,6 +682,7 @@ public partial class MissionSceneBuilder : Node2D
 		root.AddChild(_validationReport);
 
 		RefreshPropDefinitionOptions();
+		RefreshNpcDefinitionOptions();
 		UpdateLogicInspector();
 	}
 
@@ -1177,6 +1206,8 @@ public partial class MissionSceneBuilder : Node2D
 			_logicPropDefinitionPathEdit.Text = string.Empty;
 			SelectPropDefinitionOptionWithoutRefresh(string.Empty);
 			UpdatePropDefinitionPreview(string.Empty);
+			_logicNpcDefinitionPathEdit.Text = string.Empty;
+			SelectNpcDefinitionOptionWithoutRefresh(string.Empty);
 			_logicNpcPortraitOption.Select(0);
 			_logicRequiredFlagEdit.Text = string.Empty;
 			_logicRequiredFlagEdit.PlaceholderText = string.Empty;
@@ -1209,6 +1240,8 @@ public partial class MissionSceneBuilder : Node2D
 		_logicTargetIdEdit.Text = item.GetMeta("logic_target_id", string.Empty).AsString();
 		_logicPropDefinitionPathEdit.Text = item.GetMeta("prop_definition_path", string.Empty).AsString();
 		EnsurePropDefinitionOptionSelection(_logicPropDefinitionPathEdit.Text);
+		_logicNpcDefinitionPathEdit.Text = item.GetMeta("npc_definition_path", string.Empty).AsString();
+		EnsureNpcDefinitionOptionSelection(_logicNpcDefinitionPathEdit.Text);
 		UpdateTargetIdFieldContext(item, isMarker, isPlacedProp);
 		UpdateFlagFieldContext(item, isMarker, isPlacedProp);
 		SelectNpcPortraitOption(item.GetMeta("logic_npc_portrait", string.Empty).AsString());
@@ -1230,6 +1263,9 @@ public partial class MissionSceneBuilder : Node2D
 		_logicPropDefinitionPathEdit.Editable = enabled;
 		_logicPropDefinitionOption.Disabled = !enabled;
 		_logicPropDefinitionRefreshButton.Disabled = !enabled;
+		_logicNpcDefinitionPathEdit.Editable = enabled;
+		_logicNpcDefinitionOption.Disabled = !enabled;
+		_logicNpcDefinitionRefreshButton.Disabled = !enabled;
 		_logicNpcPortraitOption.Disabled = !enabled;
 		_logicRequiredFlagEdit.Editable = enabled;
 		_logicSetFlagEdit.Editable = enabled;
@@ -1257,6 +1293,7 @@ public partial class MissionSceneBuilder : Node2D
 		selectedSprite.SetMeta("logic_label", _logicLabelEdit.Text.StripEdges());
 		selectedSprite.SetMeta("logic_target_id", _logicTargetIdEdit.Text.StripEdges());
 		selectedSprite.SetMeta("prop_definition_path", _logicPropDefinitionPathEdit.Text.StripEdges());
+		selectedSprite.SetMeta("npc_definition_path", _logicNpcDefinitionPathEdit.Text.StripEdges());
 		selectedSprite.SetMeta("logic_npc_portrait", _logicNpcPortraitOption.GetItemMetadata(_logicNpcPortraitOption.Selected).AsString());
 		selectedSprite.SetMeta("logic_required_flag", _logicRequiredFlagEdit.Text.StripEdges());
 		selectedSprite.SetMeta("logic_set_flag", _logicSetFlagEdit.Text.StripEdges());
@@ -1279,6 +1316,17 @@ public partial class MissionSceneBuilder : Node2D
 		UpdateFlagFieldContextForCurrentSelection();
 	}
 
+	private void OnNpcDefinitionPathChanged(string newText)
+	{
+		if (_isUpdatingLogicUi)
+		{
+			return;
+		}
+
+		RefreshNpcDefinitionOptions(newText);
+		UpdateTargetIdFieldContextForCurrentSelection();
+	}
+
 	private void OnPropDefinitionOptionSelected(long selectedIndex)
 	{
 		if (_isUpdatingLogicUi || _logicPropDefinitionOption == null)
@@ -1294,10 +1342,30 @@ public partial class MissionSceneBuilder : Node2D
 		ApplyLogicFieldChanges();
 	}
 
+	private void OnNpcDefinitionOptionSelected(long selectedIndex)
+	{
+		if (_isUpdatingLogicUi || _logicNpcDefinitionOption == null)
+		{
+			return;
+		}
+
+		string selectedPath = _logicNpcDefinitionOption.GetItemMetadata((int)selectedIndex).AsString();
+		_isUpdatingLogicUi = true;
+		_logicNpcDefinitionPathEdit.Text = selectedPath;
+		_isUpdatingLogicUi = false;
+		ApplyLogicFieldChanges();
+	}
+
 	private void RefreshPropDefinitionOptions()
 	{
 		_propDefinitionPreviewCache.Clear();
 		RefreshPropDefinitionOptions(_logicPropDefinitionPathEdit?.Text ?? string.Empty);
+	}
+
+	private void RefreshNpcDefinitionOptions()
+	{
+		_npcDefinitionPreviewCache.Clear();
+		RefreshNpcDefinitionOptions(_logicNpcDefinitionPathEdit?.Text ?? string.Empty);
 	}
 
 	private void RefreshPropDefinitionOptions(string selectedPath)
@@ -1348,6 +1416,53 @@ public partial class MissionSceneBuilder : Node2D
 		UpdatePropDefinitionPreview(normalizedPath);
 	}
 
+	private void RefreshNpcDefinitionOptions(string selectedPath)
+	{
+		if (_logicNpcDefinitionOption == null)
+		{
+			return;
+		}
+
+		string normalizedPath = selectedPath?.StripEdges() ?? string.Empty;
+		List<string> npcDefinitionPaths = GetAvailableNpcDefinitionPaths();
+
+		_logicNpcDefinitionOption.Clear();
+		_logicNpcDefinitionOption.AddItem("None", 0);
+		_logicNpcDefinitionOption.SetItemMetadata(0, string.Empty);
+
+		int selectedIndex = 0;
+		for (int i = 0; i < npcDefinitionPaths.Count; i++)
+		{
+			string path = npcDefinitionPaths[i];
+			NpcDefinitionPreview preview = GetNpcDefinitionPreview(path);
+			int itemIndex = i + 1;
+			_logicNpcDefinitionOption.AddItem(preview.DisplayName, itemIndex);
+			_logicNpcDefinitionOption.SetItemMetadata(itemIndex, path);
+			if (preview.Icon != null)
+			{
+				_logicNpcDefinitionOption.SetItemIcon(itemIndex, preview.Icon);
+			}
+			if (path == normalizedPath)
+			{
+				selectedIndex = itemIndex;
+			}
+		}
+
+		if (!string.IsNullOrEmpty(normalizedPath) && selectedIndex == 0)
+		{
+			NpcDefinitionPreview preview = GetNpcDefinitionPreview(normalizedPath);
+			selectedIndex = _logicNpcDefinitionOption.ItemCount;
+			_logicNpcDefinitionOption.AddItem($"Custom: {preview.DisplayName}", selectedIndex);
+			_logicNpcDefinitionOption.SetItemMetadata(selectedIndex, normalizedPath);
+			if (preview.Icon != null)
+			{
+				_logicNpcDefinitionOption.SetItemIcon(selectedIndex, preview.Icon);
+			}
+		}
+
+		_logicNpcDefinitionOption.Select(selectedIndex);
+	}
+
 	private void EnsurePropDefinitionOptionSelection(string selectedPath)
 	{
 		if (_logicPropDefinitionOption == null)
@@ -1369,6 +1484,28 @@ public partial class MissionSceneBuilder : Node2D
 		}
 
 		RefreshPropDefinitionOptions(normalizedPath);
+	}
+
+	private void EnsureNpcDefinitionOptionSelection(string selectedPath)
+	{
+		if (_logicNpcDefinitionOption == null)
+		{
+			return;
+		}
+
+		string normalizedPath = selectedPath?.StripEdges() ?? string.Empty;
+		for (int i = 0; i < _logicNpcDefinitionOption.ItemCount; i++)
+		{
+			if (_logicNpcDefinitionOption.GetItemMetadata(i).AsString() != normalizedPath)
+			{
+				continue;
+			}
+
+			_logicNpcDefinitionOption.Select(i);
+			return;
+		}
+
+		RefreshNpcDefinitionOptions(normalizedPath);
 	}
 
 	private void SelectPropDefinitionOptionWithoutRefresh(string selectedPath)
@@ -1393,6 +1530,31 @@ public partial class MissionSceneBuilder : Node2D
 		if (_logicPropDefinitionOption.ItemCount > 0)
 		{
 			_logicPropDefinitionOption.Select(0);
+		}
+	}
+
+	private void SelectNpcDefinitionOptionWithoutRefresh(string selectedPath)
+	{
+		if (_logicNpcDefinitionOption == null)
+		{
+			return;
+		}
+
+		string normalizedPath = selectedPath?.StripEdges() ?? string.Empty;
+		for (int i = 0; i < _logicNpcDefinitionOption.ItemCount; i++)
+		{
+			if (_logicNpcDefinitionOption.GetItemMetadata(i).AsString() != normalizedPath)
+			{
+				continue;
+			}
+
+			_logicNpcDefinitionOption.Select(i);
+			return;
+		}
+
+		if (_logicNpcDefinitionOption.ItemCount > 0)
+		{
+			_logicNpcDefinitionOption.Select(0);
 		}
 	}
 
@@ -1450,7 +1612,12 @@ public partial class MissionSceneBuilder : Node2D
 
 		if (isMarker)
 		{
-			if (markerId == "trigger_dialogue")
+			if (markerId == "npc_spawn")
+			{
+				placeholderText = "npc_broker_veil";
+				helpText = "NPC spawn markers use Target ID as a stable spawn key. Pair them with an NPC Definition Path to spawn a named mission character.";
+			}
+			else if (markerId == "trigger_dialogue")
 			{
 				placeholderText = "Dialogue ID";
 				helpText = "Dialogue trigger markers expect a dialogue id like `trigger_dialogue` or `smuggler_exchange_dialogue`.";
@@ -1525,7 +1692,14 @@ public partial class MissionSceneBuilder : Node2D
 
 		if (isMarker)
 		{
-			if (markerId.StartsWith("trigger_"))
+			if (markerId == "npc_spawn")
+			{
+				requiredPlaceholder = "broker_contact_unlocked";
+				setPlaceholder = string.Empty;
+				requiredHelp = "NPC spawn markers can require a story flag if the character should only appear after a certain mission phase.";
+				setHelp = "NPC spawn markers usually do not set flags themselves; the spawned NPC interaction should own that.";
+			}
+			else if (markerId.StartsWith("trigger_"))
 			{
 				requiredPlaceholder = "relay_access_granted";
 				setPlaceholder = "relay_dialogue_seen";
@@ -1716,6 +1890,7 @@ public partial class MissionSceneBuilder : Node2D
 		sprite.SetMeta("item_type", "marker");
 		sprite.SetMeta("marker_id", definition.Id);
 		sprite.SetMeta("layer", "marker");
+		sprite.SetMeta("npc_definition_path", string.Empty);
 		sprite.SetMeta("column", column);
 		sprite.SetMeta("row", row);
 		sprite.SetMeta("offset_x", 0f);
@@ -1743,7 +1918,7 @@ public partial class MissionSceneBuilder : Node2D
 	private void ApplyDefaultMarkerLogic(Sprite2D sprite, MissionMarkerDefinition definition)
 	{
 		sprite.SetMeta("logic_label", definition.DisplayName);
-		sprite.SetMeta("logic_target_id", definition.Id);
+		sprite.SetMeta("logic_target_id", definition.Id == "npc_spawn" ? string.Empty : definition.Id);
 		sprite.SetMeta("logic_npc_portrait", string.Empty);
 		sprite.SetMeta("logic_required_flag", string.Empty);
 		sprite.SetMeta("logic_set_flag", string.Empty);
@@ -1751,6 +1926,7 @@ public partial class MissionSceneBuilder : Node2D
 		sprite.SetMeta("logic_once", definition.Category == MissionMarkerCategory.Trigger);
 		sprite.SetMeta("logic_notes", string.Empty);
 		sprite.SetMeta("prop_definition_path", GetDefaultPropDefinitionPath(definition.Id));
+		sprite.SetMeta("npc_definition_path", GetDefaultNpcDefinitionPath(definition.Id));
 	}
 
 	private void ApplyDefaultPlacedPropLogic(Sprite2D sprite, PropDefinitionPreview preview, string propDefinitionPath)
@@ -2004,6 +2180,7 @@ public partial class MissionSceneBuilder : Node2D
 					item["marker_id"] = markerId;
 					item["logic_label"] = sprite.GetMeta("logic_label", string.Empty).AsString();
 					item["logic_target_id"] = sprite.GetMeta("logic_target_id", string.Empty).AsString();
+					item["npc_definition_path"] = sprite.GetMeta("npc_definition_path", string.Empty).AsString();
 					item["logic_npc_portrait"] = sprite.GetMeta("logic_npc_portrait", string.Empty).AsString();
 					item["logic_required_flag"] = sprite.GetMeta("logic_required_flag", string.Empty).AsString();
 					item["logic_set_flag"] = sprite.GetMeta("logic_set_flag", string.Empty).AsString();
@@ -2018,6 +2195,7 @@ public partial class MissionSceneBuilder : Node2D
 					item["logic_role"] = sprite.GetMeta("logic_role", string.Empty).AsString();
 					item["logic_label"] = sprite.GetMeta("logic_label", string.Empty).AsString();
 					item["logic_target_id"] = sprite.GetMeta("logic_target_id", string.Empty).AsString();
+					item["npc_definition_path"] = sprite.GetMeta("npc_definition_path", string.Empty).AsString();
 					item["logic_npc_portrait"] = sprite.GetMeta("logic_npc_portrait", string.Empty).AsString();
 					item["logic_required_flag"] = sprite.GetMeta("logic_required_flag", string.Empty).AsString();
 					item["logic_set_flag"] = sprite.GetMeta("logic_set_flag", string.Empty).AsString();
@@ -2094,6 +2272,7 @@ public partial class MissionSceneBuilder : Node2D
 				marker.SetMeta("rotation_degrees", rotationDegrees);
 				marker.SetMeta("logic_label", tile.TryGetValue("logic_label", out Variant logicLabelVariant) ? logicLabelVariant.AsString() : marker.GetMeta("logic_label", markerDefinition.DisplayName).AsString());
 				marker.SetMeta("logic_target_id", tile.TryGetValue("logic_target_id", out Variant logicTargetVariant) ? logicTargetVariant.AsString() : marker.GetMeta("logic_target_id", markerDefinition.Id).AsString());
+				marker.SetMeta("npc_definition_path", tile.TryGetValue("npc_definition_path", out Variant npcDefinitionVariant) ? npcDefinitionVariant.AsString() : marker.GetMeta("npc_definition_path", string.Empty).AsString());
 				marker.SetMeta("logic_npc_portrait", tile.TryGetValue("logic_npc_portrait", out Variant logicPortraitVariant) ? logicPortraitVariant.AsString() : string.Empty);
 				marker.SetMeta("logic_required_flag", tile.TryGetValue("logic_required_flag", out Variant logicRequiredVariant) ? logicRequiredVariant.AsString() : string.Empty);
 				marker.SetMeta("logic_set_flag", tile.TryGetValue("logic_set_flag", out Variant logicSetVariant) ? logicSetVariant.AsString() : string.Empty);
@@ -2120,6 +2299,7 @@ public partial class MissionSceneBuilder : Node2D
 				placedPropSprite.SetMeta("logic_role", tile.TryGetValue("logic_role", out Variant placedPropLogicRoleVariant) ? placedPropLogicRoleVariant.AsString() : "prop");
 				placedPropSprite.SetMeta("logic_label", tile.TryGetValue("logic_label", out Variant placedPropLogicLabelVariant) ? placedPropLogicLabelVariant.AsString() : placedPropSprite.GetMeta("logic_label", GetPropDefinitionPreview(placedPropDefinitionPath).DisplayName).AsString());
 				placedPropSprite.SetMeta("logic_target_id", tile.TryGetValue("logic_target_id", out Variant placedPropLogicTargetVariant) ? placedPropLogicTargetVariant.AsString() : string.Empty);
+				placedPropSprite.SetMeta("npc_definition_path", tile.TryGetValue("npc_definition_path", out Variant placedPropNpcDefinitionVariant) ? placedPropNpcDefinitionVariant.AsString() : string.Empty);
 				placedPropSprite.SetMeta("logic_npc_portrait", tile.TryGetValue("logic_npc_portrait", out Variant placedPropLogicPortraitVariant) ? placedPropLogicPortraitVariant.AsString() : string.Empty);
 				placedPropSprite.SetMeta("logic_required_flag", tile.TryGetValue("logic_required_flag", out Variant placedPropLogicRequiredVariant) ? placedPropLogicRequiredVariant.AsString() : string.Empty);
 				placedPropSprite.SetMeta("logic_set_flag", tile.TryGetValue("logic_set_flag", out Variant placedPropLogicSetVariant) ? placedPropLogicSetVariant.AsString() : string.Empty);
@@ -2145,6 +2325,7 @@ public partial class MissionSceneBuilder : Node2D
 			sprite.SetMeta("logic_role", tile.TryGetValue("logic_role", out Variant logicRoleVariant) ? logicRoleVariant.AsString() : sprite.GetMeta("logic_role", string.Empty).AsString());
 			sprite.SetMeta("logic_label", tile.TryGetValue("logic_label", out Variant tileLogicLabelVariant) ? tileLogicLabelVariant.AsString() : sprite.GetMeta("logic_label", definition.DisplayName).AsString());
 			sprite.SetMeta("logic_target_id", tile.TryGetValue("logic_target_id", out Variant tileLogicTargetVariant) ? tileLogicTargetVariant.AsString() : sprite.GetMeta("logic_target_id", string.Empty).AsString());
+			sprite.SetMeta("npc_definition_path", tile.TryGetValue("npc_definition_path", out Variant tileNpcDefinitionVariant) ? tileNpcDefinitionVariant.AsString() : string.Empty);
 			sprite.SetMeta("logic_npc_portrait", tile.TryGetValue("logic_npc_portrait", out Variant tileLogicPortraitVariant) ? tileLogicPortraitVariant.AsString() : string.Empty);
 			sprite.SetMeta("logic_required_flag", tile.TryGetValue("logic_required_flag", out Variant tileLogicRequiredVariant) ? tileLogicRequiredVariant.AsString() : string.Empty);
 			sprite.SetMeta("logic_set_flag", tile.TryGetValue("logic_set_flag", out Variant tileLogicSetVariant) ? tileLogicSetVariant.AsString() : string.Empty);
@@ -2389,6 +2570,7 @@ public partial class MissionSceneBuilder : Node2D
 			string setFlag = marker.GetMeta("logic_set_flag", string.Empty).AsString();
 			bool oneShot = marker.GetMeta("logic_once", false).AsBool();
 			string propDefinitionPath = marker.GetMeta("prop_definition_path", string.Empty).AsString();
+			string npcDefinitionPath = marker.GetMeta("npc_definition_path", string.Empty).AsString();
 
 			ValidateFlagConsistency(markerLabel, requiredFlag, setFlag, issues);
 			if (oneShot)
@@ -2416,6 +2598,26 @@ public partial class MissionSceneBuilder : Node2D
 				if (markerId != "trigger_dialogue")
 				{
 					TrackDuplicateUsage(semanticIdOwners, BuildSemanticUsageKey("trigger_route", targetId), markerLabel);
+				}
+			}
+			else if (markerId == "npc_spawn")
+			{
+				if (string.IsNullOrWhiteSpace(targetId) || targetId == "npc_spawn")
+				{
+					issues.Add($"{markerLabel} needs a unique Target ID spawn key.");
+				}
+				else
+				{
+					TrackDuplicateUsage(semanticIdOwners, BuildSemanticUsageKey("npc_spawn_key", targetId), markerLabel);
+				}
+
+				if (string.IsNullOrWhiteSpace(npcDefinitionPath))
+				{
+					issues.Add($"{markerLabel} is missing an NPC Definition Path.");
+				}
+				else if (!ResourceLoader.Exists(npcDefinitionPath))
+				{
+					issues.Add($"{markerLabel} points to missing NPC definition {npcDefinitionPath}.");
 				}
 			}
 
@@ -2959,6 +3161,14 @@ public partial class MissionSceneBuilder : Node2D
 		};
 	}
 
+	private static string GetDefaultNpcDefinitionPath(string itemId)
+	{
+		return itemId switch
+		{
+			_ => string.Empty
+		};
+	}
+
 	private PropDefinitionPreview GetPropDefinitionPreview(string path)
 	{
 		string normalizedPath = path?.StripEdges() ?? string.Empty;
@@ -3045,6 +3255,55 @@ public partial class MissionSceneBuilder : Node2D
 			.OrderBy(file => file)
 			.Select(file => $"{propDefinitionsDirectory}/{file}")
 			.ToList();
+	}
+
+	private static List<string> GetAvailableNpcDefinitionPaths()
+	{
+		const string npcDefinitionsDirectory = "res://Data/Missions/Entities/Npcs";
+		return DirAccess.GetFilesAt(npcDefinitionsDirectory)
+			.Where(file => file.EndsWith(".tres") || file.EndsWith(".res"))
+			.OrderBy(file => file)
+			.Select(file => $"{npcDefinitionsDirectory}/{file}")
+			.ToList();
+	}
+
+	private NpcDefinitionPreview GetNpcDefinitionPreview(string path)
+	{
+		string normalizedPath = path?.StripEdges() ?? string.Empty;
+		if (_npcDefinitionPreviewCache.TryGetValue(normalizedPath, out NpcDefinitionPreview cachedPreview))
+		{
+			return cachedPreview;
+		}
+
+		bool exists = !string.IsNullOrEmpty(normalizedPath) && ResourceLoader.Exists(normalizedPath);
+		MissionNpcDefinition definition = exists ? GD.Load<MissionNpcDefinition>(normalizedPath) : null;
+		Texture2D icon = !string.IsNullOrEmpty(definition?.PortraitPath)
+			? GD.Load<Texture2D>(definition.PortraitPath)
+			: (!string.IsNullOrEmpty(definition?.SpriteTexturePath) ? GD.Load<Texture2D>(definition.SpriteTexturePath) : null);
+		string fallbackName = normalizedPath.Split('/').LastOrDefault()?.Replace(".tres", string.Empty).Replace(".res", string.Empty);
+		string displayName = string.IsNullOrWhiteSpace(definition?.DisplayName)
+			? (string.IsNullOrEmpty(fallbackName) ? "Unnamed NPC" : fallbackName.Replace('_', ' '))
+			: definition.DisplayName;
+		string description = definition?.Description ?? string.Empty;
+		if (!exists)
+		{
+			description = $"Missing NPC resource.\n{normalizedPath}";
+		}
+		else if (string.IsNullOrEmpty(description))
+		{
+			description = normalizedPath;
+		}
+
+		NpcDefinitionPreview preview = new NpcDefinitionPreview
+		{
+			Path = normalizedPath,
+			DisplayName = displayName,
+			Description = description,
+			Icon = icon,
+			Exists = exists
+		};
+		_npcDefinitionPreviewCache[normalizedPath] = preview;
+		return preview;
 	}
 
 	private Texture2D GetFallbackPropPreviewTexture()
@@ -3219,7 +3478,8 @@ public partial class MissionSceneBuilder : Node2D
 		string markerId = sprite.GetMeta("marker_id", "").AsString();
 		if (!string.IsNullOrEmpty(markerId))
 		{
-			return markerId;
+			string label = sprite.GetMeta("logic_label", string.Empty).AsString();
+			return string.IsNullOrWhiteSpace(label) ? markerId : label;
 		}
 
 		if (IsPlacedPropSprite(sprite))

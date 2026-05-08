@@ -20,6 +20,8 @@ public partial class MissionTemplate : Resource
 	[Export] public string SecondaryOutcomeId { get; set; } = string.Empty;
 	[Export] public Godot.Collections.Array<string> SecondaryOutcomeRequiredFlags { get; set; } = new Godot.Collections.Array<string>();
 	[Export] public string DefaultDialogueId { get; set; } = string.Empty;
+	[Export] public Godot.Collections.Array<MissionSpawnDefinition> SpawnDefinitions { get; set; } = new Godot.Collections.Array<MissionSpawnDefinition>();
+	[Export] public Godot.Collections.Array<string> SpawnDefinitionPaths { get; set; } = new Godot.Collections.Array<string>();
 	[Export] public Godot.Collections.Array<string> InteractionKeys { get; set; } = new Godot.Collections.Array<string>();
 	[Export] public bool IsEnabled { get; set; } = true;
 
