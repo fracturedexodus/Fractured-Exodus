@@ -11,6 +11,7 @@ public partial class MissionSceneBuilder : Node2D
 	private const float CameraPanSpeed = 780f;
 	private const float TileNudgeStep = 10f;
 	private const float TileRotateStep = 15f;
+	private const string BuilderStatePath = "res://Data/MissionLayouts/.mission_builder_state.json";
 
 	private enum BuilderLayer
 	{
@@ -46,11 +47,14 @@ public partial class MissionSceneBuilder : Node2D
 	private Label _logicPropDefinitionPreviewLabel;
 	private OptionButton _logicNpcPortraitOption;
 	private LineEdit _logicRequiredFlagEdit;
+	private Label _logicRequiredFlagHelpLabel;
 	private LineEdit _logicSetFlagEdit;
+	private Label _logicSetFlagHelpLabel;
 	private OptionButton _logicTriggerModeOption;
 	private CheckBox _logicOneShotCheck;
 	private TextEdit _logicNotesEdit;
 	private RichTextLabel _validationReport;
+	private OptionButton _validationFilterOption;
 	private MissionTileDefinition _selectedTile;
 	private MissionMarkerDefinition _selectedMarker;
 	private string _selectedPropDefinitionPath = string.Empty;
@@ -63,10 +67,12 @@ public partial class MissionSceneBuilder : Node2D
 	private Vector2 _lastMouseScreenPosition;
 	private readonly List<Line2D> _gridLines = new List<Line2D>();
 	private readonly Dictionary<string, PropDefinitionPreview> _propDefinitionPreviewCache = new Dictionary<string, PropDefinitionPreview>();
+	private readonly List<ValidationIssueEntry> _validationEntries = new List<ValidationIssueEntry>();
 	private Polygon2D _hoverDiamond;
 	private readonly Vector2 _tileStep = MissionFloorTextureFactory.TileSize;
 	private readonly Vector2 _gridOrigin = new Vector2(0f, -20f);
 	private string _selectedBackgroundId = MissionBackgroundCatalog.DefaultId;
+	private bool _isLoadingBuilderState;
 
 	private sealed class PropDefinitionPreview
 	{
@@ -75,6 +81,28 @@ public partial class MissionSceneBuilder : Node2D
 		public string Description { get; init; } = string.Empty;
 		public Texture2D Icon { get; init; }
 		public bool Exists { get; init; }
+	}
+
+	private sealed class ValidationIssueEntry
+	{
+		public string Message { get; init; } = string.Empty;
+		public Sprite2D Target { get; init; }
+		public ValidationSeverity Severity { get; init; } = ValidationSeverity.Warning;
+	}
+
+	private enum ValidationSeverity
+	{
+		Info,
+		Warning,
+		Error
+	}
+
+	private enum ValidationFilter
+	{
+		All,
+		ErrorsOnly,
+		WarningsAndErrors,
+		InfoOnly
 	}
 
 	public override void _Ready()
@@ -97,6 +125,7 @@ public partial class MissionSceneBuilder : Node2D
 		BuildHoverDiamond();
 		BuildLogicPanel();
 		WireUi();
+		LoadBuilderState();
 		ApplyZoom(DefaultZoom);
 		UpdateSelectedLabel();
 		SetStatus("Left click to place/select. Drag items to move. Right click deletes. Mouse wheel zooms.");
@@ -543,7 +572,21 @@ public partial class MissionSceneBuilder : Node2D
 		_logicNpcPortraitOption.ItemSelected += _ => ApplyLogicFieldChanges();
 		root.AddChild(_logicNpcPortraitOption);
 		_logicRequiredFlagEdit = AddInspectorField(root, "Required Flag");
+		_logicRequiredFlagHelpLabel = new Label
+		{
+			Text = "Required Flag gates whether this interaction is available.",
+			AutowrapMode = TextServer.AutowrapMode.WordSmart
+		};
+		_logicRequiredFlagHelpLabel.AddThemeColorOverride("font_color", new Color(0.72f, 0.78f, 0.88f, 0.95f));
+		root.AddChild(_logicRequiredFlagHelpLabel);
 		_logicSetFlagEdit = AddInspectorField(root, "Set Flag");
+		_logicSetFlagHelpLabel = new Label
+		{
+			Text = "Set Flag is awarded when this interaction succeeds.",
+			AutowrapMode = TextServer.AutowrapMode.WordSmart
+		};
+		_logicSetFlagHelpLabel.AddThemeColorOverride("font_color", new Color(0.72f, 0.78f, 0.88f, 0.95f));
+		root.AddChild(_logicSetFlagHelpLabel);
 
 		root.AddChild(new Label { Text = "Trigger Mode" });
 		_logicTriggerModeOption = new OptionButton();
@@ -567,9 +610,30 @@ public partial class MissionSceneBuilder : Node2D
 		root.AddChild(_logicNotesEdit);
 
 		root.AddChild(new HSeparator());
+		HBoxContainer validationHeaderRow = new HBoxContainer();
+		validationHeaderRow.AddThemeConstantOverride("separation", 8);
 		Label validationTitle = new Label { Text = "Validation" };
 		validationTitle.AddThemeFontSizeOverride("font_size", 18);
-		root.AddChild(validationTitle);
+		validationHeaderRow.AddChild(validationTitle);
+		_validationFilterOption = new OptionButton
+		{
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+		};
+		_validationFilterOption.AddItem("All", (int)ValidationFilter.All);
+		_validationFilterOption.AddItem("Errors Only", (int)ValidationFilter.ErrorsOnly);
+		_validationFilterOption.AddItem("Warnings + Errors", (int)ValidationFilter.WarningsAndErrors);
+		_validationFilterOption.AddItem("Info Only", (int)ValidationFilter.InfoOnly);
+		_validationFilterOption.Select((int)ValidationFilter.All);
+		_validationFilterOption.ItemSelected += _ =>
+		{
+			if (!_isLoadingBuilderState)
+			{
+				SaveBuilderState();
+			}
+			RefreshValidationReport();
+		};
+		validationHeaderRow.AddChild(_validationFilterOption);
+		root.AddChild(validationHeaderRow);
 
 		_validationReport = new RichTextLabel
 		{
@@ -579,6 +643,7 @@ public partial class MissionSceneBuilder : Node2D
 			BbcodeEnabled = true,
 			AutowrapMode = TextServer.AutowrapMode.WordSmart
 		};
+		_validationReport.MetaClicked += OnValidationReportMetaClicked;
 		root.AddChild(_validationReport);
 
 		RefreshPropDefinitionOptions();
@@ -677,6 +742,7 @@ public partial class MissionSceneBuilder : Node2D
 				_selectedTile = null;
 				_selectedMarker = null;
 				_selectedPropDefinitionPath = propDefinitionPath;
+				SaveBuilderState();
 				ClearPlacedSelection();
 				UpdateSelectedLabel();
 				UpdateLogicInspector();
@@ -1076,7 +1142,11 @@ public partial class MissionSceneBuilder : Node2D
 			RefreshPropDefinitionOptions();
 			_logicNpcPortraitOption.Select(0);
 			_logicRequiredFlagEdit.Text = string.Empty;
+			_logicRequiredFlagEdit.PlaceholderText = string.Empty;
+			_logicRequiredFlagHelpLabel.Text = "Required Flag gates whether this interaction is available.";
 			_logicSetFlagEdit.Text = string.Empty;
+			_logicSetFlagEdit.PlaceholderText = string.Empty;
+			_logicSetFlagHelpLabel.Text = "Set Flag is awarded when this interaction succeeds.";
 			_logicTriggerModeOption.Select(0);
 			_logicOneShotCheck.ButtonPressed = false;
 			_logicNotesEdit.Text = string.Empty;
@@ -1104,6 +1174,7 @@ public partial class MissionSceneBuilder : Node2D
 		_logicPropDefinitionPathEdit.Text = item.GetMeta("prop_definition_path", string.Empty).AsString();
 		RefreshPropDefinitionOptions(_logicPropDefinitionPathEdit.Text);
 		UpdateTargetIdFieldContext(item, isMarker, isPlacedProp);
+		UpdateFlagFieldContext(item, isMarker, isPlacedProp);
 		SelectNpcPortraitOption(item.GetMeta("logic_npc_portrait", string.Empty).AsString());
 		_logicRequiredFlagEdit.Text = item.GetMeta("logic_required_flag", string.Empty).AsString();
 		_logicSetFlagEdit.Text = item.GetMeta("logic_set_flag", string.Empty).AsString();
@@ -1169,6 +1240,7 @@ public partial class MissionSceneBuilder : Node2D
 
 		RefreshPropDefinitionOptions(newText);
 		UpdateTargetIdFieldContextForCurrentSelection();
+		UpdateFlagFieldContextForCurrentSelection();
 	}
 
 	private void OnPropDefinitionOptionSelected(long selectedIndex)
@@ -1257,6 +1329,28 @@ public partial class MissionSceneBuilder : Node2D
 		UpdateTargetIdFieldContext(_selectedPlacedSprite, isMarker, isPlacedProp);
 	}
 
+	private void UpdateFlagFieldContextForCurrentSelection()
+	{
+		if (_selectedPlacedSprite == null)
+		{
+			_logicRequiredFlagEdit.PlaceholderText = string.Empty;
+			_logicSetFlagEdit.PlaceholderText = string.Empty;
+			if (_logicRequiredFlagHelpLabel != null)
+			{
+				_logicRequiredFlagHelpLabel.Text = "Required Flag gates whether this interaction is available.";
+			}
+			if (_logicSetFlagHelpLabel != null)
+			{
+				_logicSetFlagHelpLabel.Text = "Set Flag is awarded when this interaction succeeds.";
+			}
+			return;
+		}
+
+		bool isMarker = !string.IsNullOrEmpty(_selectedPlacedSprite.GetMeta("marker_id", string.Empty).AsString());
+		bool isPlacedProp = IsPlacedPropSprite(_selectedPlacedSprite);
+		UpdateFlagFieldContext(_selectedPlacedSprite, isMarker, isPlacedProp);
+	}
+
 	private void UpdateTargetIdFieldContext(Sprite2D item, bool isMarker, bool isPlacedProp)
 	{
 		if (item == null || _logicTargetIdEdit == null || _logicTargetIdHelpLabel == null)
@@ -1328,6 +1422,96 @@ public partial class MissionSceneBuilder : Node2D
 
 		_logicTargetIdEdit.PlaceholderText = placeholderText;
 		_logicTargetIdHelpLabel.Text = helpText;
+	}
+
+	private void UpdateFlagFieldContext(Sprite2D item, bool isMarker, bool isPlacedProp)
+	{
+		if (item == null || _logicRequiredFlagEdit == null || _logicSetFlagEdit == null || _logicRequiredFlagHelpLabel == null || _logicSetFlagHelpLabel == null)
+		{
+			return;
+		}
+
+		string requiredPlaceholder = string.Empty;
+		string setPlaceholder = string.Empty;
+		string requiredHelp = "Required Flag gates whether this interaction is available.";
+		string setHelp = "Set Flag is awarded when this interaction succeeds.";
+		string markerId = item.GetMeta("marker_id", string.Empty).AsString();
+		string logicRole = item.GetMeta("logic_role", string.Empty).AsString();
+		PropDefinition definition = ResolveTargetIdContextDefinition(item, isPlacedProp);
+
+		if (isMarker)
+		{
+			if (markerId.StartsWith("trigger_"))
+			{
+				requiredPlaceholder = "relay_access_granted";
+				setPlaceholder = "relay_dialogue_seen";
+				requiredHelp = "Required Flag can lock this trigger until earlier mission progress or exploration has happened.";
+				setHelp = "Set Flag is useful for one-shot story beats, follow-up triggers, or unlocking downstream props.";
+			}
+			else if (markerId.StartsWith("spawn_"))
+			{
+				requiredPlaceholder = string.Empty;
+				setPlaceholder = string.Empty;
+				requiredHelp = "Spawn markers usually do not need flags unless a special mission script wants alternate insertion rules.";
+				setHelp = "Spawn markers rarely set flags by themselves.";
+			}
+			else
+			{
+				requiredPlaceholder = "objective_unlocked";
+				setPlaceholder = "objective_completed";
+				requiredHelp = "Objective markers can use Required Flag to hide or defer optional content until the right mission phase.";
+				setHelp = "Set Flag works well for tracking completed objectives or branching outcomes.";
+			}
+		}
+		else if (definition != null)
+		{
+			switch (definition.InteractionType)
+			{
+				case PropInteractionType.Dialogue:
+					requiredPlaceholder = "console_powered";
+					setPlaceholder = "console_logs_read";
+					requiredHelp = "Dialogue props often gate access behind a prior event, power restore, or officer-side discovery flag.";
+					setHelp = "Set Flag is great for remembering that this conversation or intel pickup has already been seen.";
+					break;
+				case PropInteractionType.DoorControl:
+					requiredPlaceholder = "bulkhead_access";
+					setPlaceholder = "bulkhead_rerouted";
+					requiredHelp = "Door-control props can require an access flag before officers are allowed to reroute doors.";
+					setHelp = "Set Flag can mark the door network as rerouted for later props, encounters, or mission outcomes.";
+					break;
+				case PropInteractionType.Loot:
+					requiredPlaceholder = "cache_revealed";
+					setPlaceholder = "cache_opened";
+					requiredHelp = "Loot props often use Required Flag to make the cache appear locked until the crew finds a clue or key.";
+					setHelp = "Set Flag is the clean way to prevent duplicate rewards or unlock a follow-up encounter after looting.";
+					break;
+				default:
+					requiredPlaceholder = "interaction_unlocked";
+					setPlaceholder = "interaction_completed";
+					requiredHelp = "Use Required Flag when this prop should only activate after another mission event or prop chain completes.";
+					setHelp = "Set Flag lets this prop feed the next stage of your mission logic.";
+					break;
+			}
+		}
+		else if (logicRole == "door")
+		{
+			requiredPlaceholder = "bulkhead_access";
+			setPlaceholder = "bulkhead_opened";
+			requiredHelp = "Door tiles can use Required Flag if direct interaction should be locked until an access condition is met.";
+			setHelp = "Set Flag can mark that the player opened this route, though terminals usually own that flow.";
+		}
+		else if (logicRole == "terminal")
+		{
+			requiredPlaceholder = "terminal_powered";
+			setPlaceholder = "terminal_used";
+			requiredHelp = "Terminal tiles commonly use Required Flag to represent powered systems, credentials, or puzzle prerequisites.";
+			setHelp = "Set Flag can chain this terminal into other interactions like doors, loot rooms, or story reveals.";
+		}
+
+		_logicRequiredFlagEdit.PlaceholderText = requiredPlaceholder;
+		_logicSetFlagEdit.PlaceholderText = setPlaceholder;
+		_logicRequiredFlagHelpLabel.Text = requiredHelp;
+		_logicSetFlagHelpLabel.Text = setHelp;
 	}
 
 	private PropDefinition ResolveTargetIdContextDefinition(Sprite2D item, bool isPlacedProp)
@@ -1909,8 +2093,94 @@ public partial class MissionSceneBuilder : Node2D
 		RefreshValidationReport();
 	}
 
+	private void LoadBuilderState()
+	{
+		string absolutePath = ProjectSettings.GlobalizePath(BuilderStatePath);
+		if (!FileAccess.FileExists(absolutePath))
+		{
+			return;
+		}
+
+		using FileAccess file = FileAccess.Open(absolutePath, FileAccess.ModeFlags.Read);
+		if (file == null)
+		{
+			return;
+		}
+
+		Variant parsed = Json.ParseString(file.GetAsText());
+		if (parsed.VariantType != Variant.Type.Dictionary)
+		{
+			return;
+		}
+
+		Godot.Collections.Dictionary state = parsed.AsGodotDictionary();
+		_isLoadingBuilderState = true;
+		try
+		{
+			if (state.TryGetValue("layout_name", out Variant layoutNameVariant))
+			{
+				string layoutName = layoutNameVariant.AsString().StripEdges();
+				if (!string.IsNullOrWhiteSpace(layoutName))
+				{
+					_layoutNameEdit.Text = layoutName;
+				}
+			}
+
+			if (state.TryGetValue("validation_filter", out Variant validationFilterVariant)
+				&& _validationFilterOption != null)
+			{
+				int filterIndex = validationFilterVariant.AsInt32();
+				if (filterIndex >= 0 && filterIndex < _validationFilterOption.ItemCount)
+				{
+					_validationFilterOption.Select(filterIndex);
+				}
+			}
+
+			if (state.TryGetValue("selected_prop_definition_path", out Variant propDefinitionVariant))
+			{
+				string propDefinitionPath = propDefinitionVariant.AsString().StripEdges();
+				if (!string.IsNullOrWhiteSpace(propDefinitionPath))
+				{
+					_selectedTile = null;
+					_selectedMarker = null;
+					_selectedPropDefinitionPath = propDefinitionPath;
+					UpdateSelectedLabel();
+				}
+			}
+		}
+		finally
+		{
+			_isLoadingBuilderState = false;
+		}
+	}
+
+	private void SaveBuilderState()
+	{
+		if (_isLoadingBuilderState)
+		{
+			return;
+		}
+
+		DirAccess.MakeDirRecursiveAbsolute(ProjectSettings.GlobalizePath("res://Data/MissionLayouts"));
+		string absolutePath = ProjectSettings.GlobalizePath(BuilderStatePath);
+		using FileAccess file = FileAccess.Open(absolutePath, FileAccess.ModeFlags.Write);
+		if (file == null)
+		{
+			return;
+		}
+
+		Godot.Collections.Dictionary<string, Variant> state = new()
+		{
+			{ "layout_name", _layoutNameEdit?.Text.StripEdges() ?? string.Empty },
+			{ "validation_filter", (int)GetCurrentValidationFilter() },
+			{ "selected_prop_definition_path", _selectedPropDefinitionPath ?? string.Empty }
+		};
+		file.StoreString(Json.Stringify(state, "\t"));
+	}
+
 	private void ExitBuilder()
 	{
+		SaveBuilderState();
 		GetTree().Quit();
 	}
 
@@ -1965,7 +2235,7 @@ public partial class MissionSceneBuilder : Node2D
 
 	private void ValidateLayout()
 	{
-		List<string> issues = CollectValidationIssues();
+		List<ValidationIssueEntry> issues = CollectValidationIssueEntries();
 		RefreshValidationReport(issues);
 		if (issues.Count == 0)
 		{
@@ -1973,37 +2243,117 @@ public partial class MissionSceneBuilder : Node2D
 			return;
 		}
 
-		SetStatus($"Validation found {issues.Count} issue(s). Review the mission logic panel.");
+		int errorCount = issues.Count(issue => issue.Severity == ValidationSeverity.Error);
+		int warningCount = issues.Count(issue => issue.Severity == ValidationSeverity.Warning);
+		int infoCount = issues.Count(issue => issue.Severity == ValidationSeverity.Info);
+		SetStatus($"Validation found {issues.Count} issue(s): {errorCount} error(s), {warningCount} warning(s), {infoCount} info item(s).");
 	}
 
 	private void RefreshValidationReport()
 	{
-		RefreshValidationReport(CollectValidationIssues());
+		RefreshValidationReport(CollectValidationIssueEntries());
 	}
 
-	private void RefreshValidationReport(List<string> issues)
+	private void RefreshValidationReport(List<ValidationIssueEntry> issues)
 	{
 		if (_validationReport == null)
 		{
 			return;
 		}
 
-		if (issues == null || issues.Count == 0)
+		List<ValidationIssueEntry> allIssues = issues ?? new List<ValidationIssueEntry>();
+		List<ValidationIssueEntry> visibleIssues = ApplyValidationFilter(allIssues);
+		_validationEntries.Clear();
+		_validationEntries.AddRange(visibleIssues);
+
+		if (allIssues.Count == 0)
 		{
 			_validationReport.Text = "[color=lime]No validation issues. The mission layout has the core logic markers it needs.[/color]";
 			return;
 		}
 
-		_validationReport.Text = string.Join("\n", issues.Select(issue => $"[color=#ffb86b]- {issue}[/color]"));
+		int errorCount = allIssues.Count(issue => issue.Severity == ValidationSeverity.Error);
+		int warningCount = allIssues.Count(issue => issue.Severity == ValidationSeverity.Warning);
+		int infoCount = allIssues.Count(issue => issue.Severity == ValidationSeverity.Info);
+		List<string> lines = new List<string>();
+		lines.Add($"[color=#ff6b6b]Errors: {errorCount}[/color]  [color=#ffb86b]Warnings: {warningCount}[/color]  [color=#8be9fd]Info: {infoCount}[/color]");
+		if (visibleIssues.Count != allIssues.Count)
+		{
+			lines.Add($"[color=#bdc7d8]Filter: {GetValidationFilterDisplayName(GetCurrentValidationFilter())} ({visibleIssues.Count} shown)[/color]");
+		}
+		for (int i = 0; i < visibleIssues.Count; i++)
+		{
+			ValidationIssueEntry issue = visibleIssues[i];
+			string escapedMessage = issue.Message.Replace("[", "[lb]").Replace("]", "[rb]");
+			string color = GetValidationSeverityColor(issue.Severity);
+			string prefix = GetValidationSeverityPrefix(issue.Severity);
+			if (issue.Target != null && GodotObject.IsInstanceValid(issue.Target))
+			{
+				lines.Add($"[color={color}]{prefix} [url=validation:{i}]{escapedMessage}[/url][/color]");
+			}
+			else
+			{
+				lines.Add($"[color={color}]{prefix} {escapedMessage}[/color]");
+			}
+		}
+
+		_validationReport.Text = string.Join("\n", lines);
 	}
 
-	private List<string> CollectValidationIssues()
+	private List<ValidationIssueEntry> ApplyValidationFilter(List<ValidationIssueEntry> issues)
+	{
+		if (issues == null || issues.Count == 0)
+		{
+			return new List<ValidationIssueEntry>();
+		}
+
+		ValidationFilter filter = GetCurrentValidationFilter();
+		return issues
+			.Where(issue => filter switch
+			{
+				ValidationFilter.ErrorsOnly => issue.Severity == ValidationSeverity.Error,
+				ValidationFilter.WarningsAndErrors => issue.Severity == ValidationSeverity.Error || issue.Severity == ValidationSeverity.Warning,
+				ValidationFilter.InfoOnly => issue.Severity == ValidationSeverity.Info,
+				_ => true
+			})
+			.ToList();
+	}
+
+	private ValidationFilter GetCurrentValidationFilter()
+	{
+		if (_validationFilterOption == null)
+		{
+			return ValidationFilter.All;
+		}
+
+		return (ValidationFilter)_validationFilterOption.Selected;
+	}
+
+	private static string GetValidationFilterDisplayName(ValidationFilter filter)
+	{
+		return filter switch
+		{
+			ValidationFilter.ErrorsOnly => "Errors Only",
+			ValidationFilter.WarningsAndErrors => "Warnings + Errors",
+			ValidationFilter.InfoOnly => "Info Only",
+			_ => "All"
+		};
+	}
+
+	private List<ValidationIssueEntry> CollectValidationIssueEntries()
 	{
 		List<string> issues = new List<string>();
 		List<Sprite2D> markers = _markerLayer.GetChildren().OfType<Sprite2D>().ToList();
+		List<Sprite2D> logicProps = _propLayer.GetChildren()
+			.OfType<Sprite2D>()
+			.Where(sprite => !string.IsNullOrEmpty(sprite.GetMeta("logic_role", string.Empty).AsString()))
+			.ToList();
+		MissionTemplate missionTemplate = GetMissionTemplateForCurrentLayout();
 		Dictionary<string, List<Sprite2D>> markersById = markers
 			.GroupBy(marker => marker.GetMeta("marker_id", string.Empty).AsString())
 			.ToDictionary(group => group.Key, group => group.ToList());
+		Dictionary<string, List<string>> oneShotSetFlagOwners = new Dictionary<string, List<string>>();
+		Dictionary<string, List<string>> semanticIdOwners = new Dictionary<string, List<string>>();
 
 		ValidateRequiredUniqueMarker(markersById, "spawn_a", "Officer Spawn A", issues);
 		ValidateRequiredUniqueMarker(markersById, "spawn_b", "Officer Spawn B", issues);
@@ -2027,7 +2377,16 @@ public partial class MissionSceneBuilder : Node2D
 			string triggerMode = marker.GetMeta("logic_trigger_mode", "none").AsString();
 			string targetId = marker.GetMeta("logic_target_id", string.Empty).AsString();
 			string markerLabel = marker.GetMeta("logic_label", markerId).AsString();
+			string requiredFlag = marker.GetMeta("logic_required_flag", string.Empty).AsString();
+			string setFlag = marker.GetMeta("logic_set_flag", string.Empty).AsString();
+			bool oneShot = marker.GetMeta("logic_once", false).AsBool();
 			string propDefinitionPath = marker.GetMeta("prop_definition_path", string.Empty).AsString();
+
+			ValidateFlagConsistency(markerLabel, requiredFlag, setFlag, issues);
+			if (oneShot)
+			{
+				TrackDuplicateUsage(oneShotSetFlagOwners, setFlag, markerLabel);
+			}
 
 			if (markerId.StartsWith("trigger_"))
 			{
@@ -2045,6 +2404,11 @@ public partial class MissionSceneBuilder : Node2D
 				{
 					issues.Add($"{markerLabel} uses Interact mode but has no Prop Definition Path assigned.");
 				}
+
+				if (markerId != "trigger_dialogue")
+				{
+					TrackDuplicateUsage(semanticIdOwners, BuildSemanticUsageKey("trigger_route", targetId), markerLabel);
+				}
 			}
 
 			if (!string.IsNullOrEmpty(propDefinitionPath) && !ResourceLoader.Exists(propDefinitionPath))
@@ -2053,10 +2417,6 @@ public partial class MissionSceneBuilder : Node2D
 			}
 		}
 
-		List<Sprite2D> logicProps = _propLayer.GetChildren()
-			.OfType<Sprite2D>()
-			.Where(sprite => !string.IsNullOrEmpty(sprite.GetMeta("logic_role", string.Empty).AsString()))
-			.ToList();
 		HashSet<string> doorIds = new HashSet<string>();
 		foreach (Sprite2D prop in logicProps)
 		{
@@ -2064,7 +2424,25 @@ public partial class MissionSceneBuilder : Node2D
 			string logicRole = prop.GetMeta("logic_role", string.Empty).AsString();
 			string label = prop.GetMeta("logic_label", GetItemDisplayId(prop)).AsString();
 			string targetId = prop.GetMeta("logic_target_id", string.Empty).AsString();
+			string requiredFlag = prop.GetMeta("logic_required_flag", string.Empty).AsString();
+			string setFlag = prop.GetMeta("logic_set_flag", string.Empty).AsString();
+			bool oneShot = prop.GetMeta("logic_once", false).AsBool();
 			string propDefinitionPath = prop.GetMeta("prop_definition_path", string.Empty).AsString();
+			PropDefinition effectiveDefinition = ResolveEffectiveValidationPropDefinition(prop, missionTemplate);
+
+			ValidateFlagConsistency(label, requiredFlag, setFlag, issues);
+			if (oneShot)
+			{
+				TrackDuplicateUsage(oneShotSetFlagOwners, setFlag, label);
+			}
+
+			if (effectiveDefinition?.SetFlags != null && (oneShot || effectiveDefinition.OneShot))
+			{
+				foreach (string effectiveFlag in effectiveDefinition.SetFlags.Distinct())
+				{
+					TrackDuplicateUsage(oneShotSetFlagOwners, effectiveFlag, label);
+				}
+			}
 
 			if (itemType == "placed_prop" && string.IsNullOrEmpty(propDefinitionPath))
 			{
@@ -2099,6 +2477,19 @@ public partial class MissionSceneBuilder : Node2D
 					issues.Add($"{label} uses {definition.DisplayName} but that prop definition has no ScenePath.");
 				}
 			}
+
+			if (effectiveDefinition != null)
+			{
+				switch (effectiveDefinition.InteractionType)
+				{
+					case PropInteractionType.Loot:
+						TrackDuplicateUsage(semanticIdOwners, BuildSemanticUsageKey("loot_preset", targetId), label);
+						break;
+					case PropInteractionType.Custom:
+						TrackDuplicateUsage(semanticIdOwners, BuildSemanticUsageKey("custom_prop_target", targetId), label);
+						break;
+				}
+			}
 		}
 
 		foreach (Sprite2D prop in logicProps)
@@ -2121,7 +2512,276 @@ public partial class MissionSceneBuilder : Node2D
 			}
 		}
 
-		return issues;
+		AddDuplicateUsageIssues(oneShotSetFlagOwners, "one-shot set flag", issues);
+		AddDuplicateUsageIssues(semanticIdOwners, "semantic id", issues);
+
+		return BuildValidationIssueEntries(issues, markers, logicProps);
+	}
+
+	private static void ValidateFlagConsistency(string label, string requiredFlag, string setFlag, List<string> issues)
+	{
+		if (!string.IsNullOrWhiteSpace(requiredFlag)
+			&& !string.IsNullOrWhiteSpace(setFlag)
+			&& string.Equals(requiredFlag, setFlag, System.StringComparison.OrdinalIgnoreCase))
+		{
+			issues.Add($"{label} requires and sets the same flag `{requiredFlag}`. This can create a self-blocking interaction chain.");
+		}
+	}
+
+	private static void TrackDuplicateUsage(Dictionary<string, List<string>> usageMap, string usageKey, string ownerLabel)
+	{
+		if (string.IsNullOrWhiteSpace(usageKey) || string.IsNullOrWhiteSpace(ownerLabel))
+		{
+			return;
+		}
+
+		if (!usageMap.TryGetValue(usageKey, out List<string> owners))
+		{
+			owners = new List<string>();
+			usageMap[usageKey] = owners;
+		}
+
+		if (!owners.Contains(ownerLabel))
+		{
+			owners.Add(ownerLabel);
+		}
+	}
+
+	private static string BuildSemanticUsageKey(string kind, string value)
+	{
+		return string.IsNullOrWhiteSpace(value) ? string.Empty : $"{kind}:{value.Trim()}";
+	}
+
+	private static void AddDuplicateUsageIssues(Dictionary<string, List<string>> usageMap, string usageLabel, List<string> issues)
+	{
+		foreach (KeyValuePair<string, List<string>> kvp in usageMap.Where(pair => pair.Value.Count > 1))
+		{
+			string rawKey = kvp.Key;
+			int separatorIndex = rawKey.IndexOf(':');
+			string value = separatorIndex >= 0 && separatorIndex < rawKey.Length - 1
+				? rawKey[(separatorIndex + 1)..]
+				: rawKey;
+			string owners = string.Join(", ", kvp.Value.OrderBy(name => name));
+			issues.Add($"The {usageLabel} `{value}` is reused by multiple items: {owners}. Confirm this shared mission logic is intentional.");
+		}
+	}
+
+	private List<ValidationIssueEntry> BuildValidationIssueEntries(List<string> issues, List<Sprite2D> markers, List<Sprite2D> logicProps)
+	{
+		List<ValidationIssueEntry> entries = new List<ValidationIssueEntry>();
+		List<Sprite2D> candidates = new List<Sprite2D>();
+		candidates.AddRange(markers ?? Enumerable.Empty<Sprite2D>());
+		candidates.AddRange(logicProps ?? Enumerable.Empty<Sprite2D>());
+
+		foreach (string issue in issues)
+		{
+			entries.Add(new ValidationIssueEntry
+			{
+				Message = issue,
+				Target = ResolveValidationTarget(issue, candidates),
+				Severity = InferValidationSeverity(issue)
+			});
+		}
+
+		return entries;
+	}
+
+	private Sprite2D ResolveValidationTarget(string issue, List<Sprite2D> candidates)
+	{
+		if (string.IsNullOrWhiteSpace(issue) || candidates == null || candidates.Count == 0)
+		{
+			return null;
+		}
+
+		foreach (Sprite2D candidate in candidates
+			.Where(sprite => sprite != null && GodotObject.IsInstanceValid(sprite))
+			.OrderByDescending(sprite => GetValidationLookupNames(sprite).DefaultIfEmpty(string.Empty).Max(name => name.Length)))
+		{
+			foreach (string lookupName in GetValidationLookupNames(candidate))
+			{
+				if (!string.IsNullOrWhiteSpace(lookupName)
+					&& issue.Contains(lookupName, System.StringComparison.OrdinalIgnoreCase))
+				{
+					return candidate;
+				}
+			}
+		}
+
+		return null;
+	}
+
+	private static ValidationSeverity InferValidationSeverity(string issue)
+	{
+		if (string.IsNullOrWhiteSpace(issue))
+		{
+			return ValidationSeverity.Info;
+		}
+
+		string normalized = issue.ToLowerInvariant();
+
+		if (normalized.Contains("missing required marker")
+			|| normalized.Contains("no objective markers are placed")
+			|| normalized.Contains("missing a target id")
+			|| normalized.Contains("should use enter or interact")
+			|| normalized.Contains("has no prop definition path assigned")
+			|| normalized.Contains("points to missing prop definition")
+			|| normalized.Contains("needs a door id")
+			|| normalized.Contains("needs a linked door id")
+			|| normalized.Contains("points to missing door id")
+			|| normalized.Contains("has no scenepath")
+			|| normalized.Contains("requires and sets the same flag"))
+		{
+			return ValidationSeverity.Error;
+		}
+
+		if (normalized.Contains("appears ")
+			|| normalized.Contains("is reused by multiple items")
+			|| normalized.Contains("shared mission logic is intentional"))
+		{
+			return ValidationSeverity.Warning;
+		}
+
+		return ValidationSeverity.Info;
+	}
+
+	private static string GetValidationSeverityColor(ValidationSeverity severity)
+	{
+		return severity switch
+		{
+			ValidationSeverity.Error => "#ff6b6b",
+			ValidationSeverity.Warning => "#ffb86b",
+			_ => "#8be9fd"
+		};
+	}
+
+	private static string GetValidationSeverityPrefix(ValidationSeverity severity)
+	{
+		return severity switch
+		{
+			ValidationSeverity.Error => "[ERROR]",
+			ValidationSeverity.Warning => "[WARN]",
+			_ => "[INFO]"
+		};
+	}
+
+	private IEnumerable<string> GetValidationLookupNames(Sprite2D sprite)
+	{
+		if (sprite == null)
+		{
+			yield break;
+		}
+
+		string label = sprite.GetMeta("logic_label", string.Empty).AsString();
+		if (!string.IsNullOrWhiteSpace(label))
+		{
+			yield return label;
+		}
+
+		string markerId = sprite.GetMeta("marker_id", string.Empty).AsString();
+		if (!string.IsNullOrWhiteSpace(markerId))
+		{
+			yield return markerId;
+		}
+
+		string tileId = sprite.GetMeta("tile_id", string.Empty).AsString();
+		if (!string.IsNullOrWhiteSpace(tileId))
+		{
+			yield return tileId;
+		}
+
+		string displayId = GetItemDisplayId(sprite);
+		if (!string.IsNullOrWhiteSpace(displayId))
+		{
+			yield return displayId;
+		}
+	}
+
+	private static PropDefinition ResolveEffectiveValidationPropDefinition(Sprite2D prop, MissionTemplate missionTemplate)
+	{
+		if (prop == null)
+		{
+			return null;
+		}
+
+		string propDefinitionPath = prop.GetMeta("prop_definition_path", string.Empty).AsString();
+		if (string.IsNullOrWhiteSpace(propDefinitionPath))
+		{
+			string tileId = prop.GetMeta("tile_id", string.Empty).AsString();
+			propDefinitionPath = GetDefaultPropDefinitionPath(tileId);
+		}
+
+		if (string.IsNullOrWhiteSpace(propDefinitionPath) || !ResourceLoader.Exists(propDefinitionPath))
+		{
+			return null;
+		}
+
+		PropDefinition baseDefinition = GD.Load<PropDefinition>(propDefinitionPath);
+		if (baseDefinition == null)
+		{
+			return null;
+		}
+
+		PropDefinition definition = baseDefinition.Duplicate(true) as PropDefinition ?? baseDefinition;
+		MissionRoomBuilder.MarkerPlacement placement = new MissionRoomBuilder.MarkerPlacement
+		{
+			MarkerId = prop.GetMeta("marker_id", string.Empty).AsString(),
+			TileId = prop.GetMeta("tile_id", string.Empty).AsString(),
+			LogicRole = prop.GetMeta("logic_role", string.Empty).AsString(),
+			PropDefinitionPath = propDefinitionPath,
+			Label = prop.GetMeta("logic_label", string.Empty).AsString(),
+			TargetId = prop.GetMeta("logic_target_id", string.Empty).AsString(),
+			NpcPortraitPath = prop.GetMeta("logic_npc_portrait", string.Empty).AsString(),
+			RequiredFlag = prop.GetMeta("logic_required_flag", string.Empty).AsString(),
+			SetFlag = prop.GetMeta("logic_set_flag", string.Empty).AsString(),
+			TriggerMode = prop.GetMeta("logic_trigger_mode", "none").AsString(),
+			OneShot = prop.GetMeta("logic_once", false).AsBool(),
+			Notes = prop.GetMeta("logic_notes", string.Empty).AsString(),
+			Cell = new Vector2I(
+				prop.GetMeta("column", 0).AsInt32(),
+				prop.GetMeta("row", 0).AsInt32())
+		};
+		PropPlacementOverrides.ApplyRuntimeOverrides(definition, placement, missionTemplate);
+		return definition;
+	}
+
+	private void OnValidationReportMetaClicked(Variant meta)
+	{
+		string value = meta.AsString();
+		if (string.IsNullOrWhiteSpace(value) || !value.StartsWith("validation:"))
+		{
+			return;
+		}
+
+		string indexText = value["validation:".Length..];
+		if (int.TryParse(indexText, out int issueIndex))
+		{
+			FocusValidationIssue(issueIndex);
+		}
+	}
+
+	private void FocusValidationIssue(int issueIndex)
+	{
+		if (issueIndex < 0 || issueIndex >= _validationEntries.Count)
+		{
+			return;
+		}
+
+		ValidationIssueEntry entry = _validationEntries[issueIndex];
+		if (entry?.Target == null || !GodotObject.IsInstanceValid(entry.Target))
+		{
+			SetStatus(entry?.Message ?? "Validation issue has no linked item.");
+			return;
+		}
+
+		SelectPlacedSprite(entry.Target);
+		if (_camera != null)
+		{
+			_camera.Position = entry.Target.Position;
+		}
+
+		int column = entry.Target.GetMeta("column", 0).AsInt32();
+		int row = entry.Target.GetMeta("row", 0).AsInt32();
+		SetStatus($"Focused validation issue at {column},{row}: {entry.Message}");
 	}
 
 	private static void ValidateRequiredUniqueMarker(Dictionary<string, List<Sprite2D>> markersById, string markerId, string displayName, List<string> issues)
