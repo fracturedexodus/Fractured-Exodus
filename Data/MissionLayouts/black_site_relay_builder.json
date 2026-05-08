@@ -18,6 +18,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 6,
 		"tile_id": "floor_standard"
@@ -37,6 +38,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 5,
 		"tile_id": "floor_standard"
@@ -56,6 +58,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 4,
 		"tile_id": "floor_standard"
@@ -75,6 +78,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 3,
 		"tile_id": "floor_grate"
@@ -94,6 +98,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 3,
 		"tile_id": "floor_grate"
@@ -113,6 +118,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 4,
 		"tile_id": "floor_grate"
@@ -132,6 +138,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 5,
 		"tile_id": "floor_grate"
@@ -151,6 +158,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 6,
 		"tile_id": "floor_hazard"
@@ -170,6 +178,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 3,
 		"tile_id": "floor_glow"
@@ -189,6 +198,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 4,
 		"tile_id": "floor_glow"
@@ -208,6 +218,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 5,
 		"tile_id": "floor_glow"
@@ -227,6 +238,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 6,
 		"tile_id": "floor_glow"
@@ -246,6 +258,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 4,
 		"tile_id": "floor_grate"
@@ -265,6 +278,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 4,
 		"tile_id": "floor_grate"
@@ -284,6 +298,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 4,
 		"tile_id": "floor_grate"
@@ -303,6 +318,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 3,
 		"tile_id": "floor_grate"
@@ -322,6 +338,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 2,
 		"tile_id": "floor_grate"
@@ -341,6 +358,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 1,
 		"tile_id": "floor_grate"
@@ -360,6 +378,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 1,
 		"tile_id": "floor_grate"
@@ -379,6 +398,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 1,
 		"tile_id": "floor_grate"
@@ -398,6 +418,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 2,
 		"tile_id": "floor_glow"
@@ -417,6 +438,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 1,
 		"tile_id": "floor_glow"
@@ -436,6 +458,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 1,
 		"tile_id": "floor_glow"
@@ -455,6 +478,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 1,
 		"tile_id": "floor_glow"
@@ -474,6 +498,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 0,
 		"tile_id": "floor_grate"
@@ -493,6 +518,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": -1,
 		"tile_id": "floor_grate"
@@ -512,6 +538,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": -2,
 		"tile_id": "floor_grate"
@@ -531,6 +558,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": -2,
 		"tile_id": "floor_grate"
@@ -550,6 +578,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": -2,
 		"tile_id": "floor_grate"
@@ -569,6 +598,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": -2,
 		"tile_id": "floor_grate"
@@ -588,6 +618,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": -2,
 		"tile_id": "floor_grate"
@@ -607,6 +638,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": -3,
 		"tile_id": "floor_grate"
@@ -626,6 +658,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": -4,
 		"tile_id": "floor_grate"
@@ -645,6 +678,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": -4,
 		"tile_id": "floor_grate"
@@ -664,6 +698,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": -4,
 		"tile_id": "floor_grate"
@@ -683,6 +718,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": -5,
 		"tile_id": "floor_grate"
@@ -702,25 +738,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
-		"rotation_degrees": 0.0,
-		"row": -5,
-		"tile_id": "floor_grate"
-	},
-	{
-		"column": 5,
-		"item_type": "tile",
-		"layer": "floor",
-		"logic_label": "Floor Grate",
-		"logic_notes": "",
-		"logic_npc_portrait": "",
-		"logic_once": false,
-		"logic_required_flag": "",
-		"logic_role": "",
-		"logic_set_flag": "",
-		"logic_target_id": "",
-		"logic_trigger_mode": "none",
-		"offset_x": 0.0,
-		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": -5,
 		"tile_id": "floor_grate"
@@ -740,6 +758,27 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
+		"rotation_degrees": 0.0,
+		"row": -5,
+		"tile_id": "floor_grate"
+	},
+	{
+		"column": 5,
+		"item_type": "tile",
+		"layer": "floor",
+		"logic_label": "Floor Grate",
+		"logic_notes": "",
+		"logic_npc_portrait": "",
+		"logic_once": false,
+		"logic_required_flag": "",
+		"logic_role": "",
+		"logic_set_flag": "",
+		"logic_target_id": "",
+		"logic_trigger_mode": "none",
+		"offset_x": 0.0,
+		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": -6,
 		"tile_id": "floor_grate"
@@ -759,6 +798,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": -6,
 		"tile_id": "floor_grate"
@@ -778,6 +818,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": -6,
 		"tile_id": "floor_grate"
@@ -797,6 +838,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 2,
 		"tile_id": "floor_glow"
@@ -816,6 +858,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 2,
 		"tile_id": "floor_glow"
@@ -835,6 +878,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 2,
 		"tile_id": "floor_glow"
@@ -854,6 +898,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 2,
 		"tile_id": "floor_glow"
@@ -873,6 +918,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 2,
 		"tile_id": "floor_glow"
@@ -892,6 +938,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 3,
 		"tile_id": "floor_glow"
@@ -911,6 +958,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 1,
 		"tile_id": "floor_glow"
@@ -930,6 +978,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 1,
 		"tile_id": "floor_glow"
@@ -949,6 +998,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 2,
 		"tile_id": "floor_glow"
@@ -968,6 +1018,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 3,
 		"tile_id": "floor_glow"
@@ -987,6 +1038,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 3,
 		"tile_id": "floor_glow"
@@ -1006,6 +1058,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 2,
 		"tile_id": "floor_glow"
@@ -1025,6 +1078,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 1,
 		"tile_id": "floor_glow"
@@ -1044,6 +1098,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 4,
 		"tile_id": "wall_nw_panel"
@@ -1063,6 +1118,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 5,
 		"tile_id": "wall_nw_panel"
@@ -1082,6 +1138,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 6,
 		"tile_id": "wall_nw_panel"
@@ -1101,6 +1158,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 3,
 		"tile_id": "wall_ne_panel"
@@ -1120,6 +1178,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 6,
 		"tile_id": "wall_se_panel"
@@ -1139,6 +1198,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 3,
 		"tile_id": "wall_se_panel"
@@ -1158,6 +1218,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 6,
 		"tile_id": "wall_sw_panel"
@@ -1177,6 +1238,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 6,
 		"tile_id": "wall_sw_panel"
@@ -1196,6 +1258,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 6,
 		"tile_id": "wall_sw_panel"
@@ -1215,6 +1278,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 3,
 		"tile_id": "wall_ne_panel"
@@ -1234,6 +1298,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 4,
 		"tile_id": "wall_ne_panel"
@@ -1253,6 +1318,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 4,
 		"tile_id": "wall_ne_panel"
@@ -1272,6 +1338,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 1,
 		"tile_id": "wall_ne_panel"
@@ -1291,6 +1358,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 1,
 		"tile_id": "wall_ne_panel"
@@ -1310,6 +1378,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 1,
 		"tile_id": "wall_ne_panel"
@@ -1329,6 +1398,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 1,
 		"tile_id": "wall_ne_panel"
@@ -1348,6 +1418,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 1,
 		"tile_id": "wall_sw_panel"
@@ -1367,6 +1438,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 1,
 		"tile_id": "wall_sw_panel"
@@ -1386,6 +1458,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 4,
 		"tile_id": "wall_sw_panel"
@@ -1405,6 +1478,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 4,
 		"tile_id": "wall_sw_panel"
@@ -1424,6 +1498,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 3,
 		"tile_id": "wall_se_panel"
@@ -1443,6 +1518,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 2,
 		"tile_id": "wall_se_panel"
@@ -1462,6 +1538,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 1,
 		"tile_id": "wall_se_panel"
@@ -1481,6 +1558,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 4,
 		"tile_id": "wall_se_panel"
@@ -1500,6 +1578,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 4,
 		"tile_id": "wall_sw_panel"
@@ -1519,6 +1598,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 3,
 		"tile_id": "wall_se_panel"
@@ -1538,6 +1618,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 2,
 		"tile_id": "wall_se_panel"
@@ -1557,6 +1638,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 2,
 		"tile_id": "wall_se_panel"
@@ -1576,6 +1658,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 2,
 		"tile_id": "wall_se_panel"
@@ -1595,6 +1678,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 2,
 		"tile_id": "wall_nw_panel"
@@ -1614,6 +1698,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 3,
 		"tile_id": "wall_nw_panel"
@@ -1633,6 +1718,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 1,
 		"tile_id": "wall_nw_panel"
@@ -1652,6 +1738,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 1,
 		"tile_id": "wall_ne_panel"
@@ -1671,6 +1758,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 1,
 		"tile_id": "wall_ne_panel"
@@ -1690,6 +1778,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 1,
 		"tile_id": "wall_ne_panel"
@@ -1709,6 +1798,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 1,
 		"tile_id": "wall_ne_panel"
@@ -1728,6 +1818,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 1,
 		"tile_id": "wall_sw_panel"
@@ -1747,6 +1838,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 1,
 		"tile_id": "wall_sw_panel"
@@ -1766,6 +1858,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 5,
 		"tile_id": "wall_se_panel"
@@ -1785,6 +1878,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 3,
 		"tile_id": "wall_se_panel"
@@ -1804,6 +1898,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": -6,
 		"tile_id": "wall_nw_panel"
@@ -1823,6 +1918,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": -5,
 		"tile_id": "wall_nw_panel"
@@ -1842,6 +1938,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": -4,
 		"tile_id": "wall_nw_panel"
@@ -1861,6 +1958,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": -3,
 		"tile_id": "wall_nw_panel"
@@ -1880,6 +1978,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": -2,
 		"tile_id": "wall_nw_panel"
@@ -1899,6 +1998,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": -1,
 		"tile_id": "wall_nw_panel"
@@ -1918,6 +2018,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 0,
 		"tile_id": "wall_nw_panel"
@@ -1937,6 +2038,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": -6,
 		"tile_id": "wall_se_panel"
@@ -1956,6 +2058,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": -5,
 		"tile_id": "wall_se_panel"
@@ -1975,6 +2078,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": -4,
 		"tile_id": "wall_se_panel"
@@ -1994,6 +2098,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": -3,
 		"tile_id": "wall_se_panel"
@@ -2013,6 +2118,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": -2,
 		"tile_id": "wall_se_panel"
@@ -2032,6 +2138,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": -1,
 		"tile_id": "wall_se_panel"
@@ -2051,6 +2158,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 0,
 		"tile_id": "wall_se_panel"
@@ -2070,6 +2178,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": -2,
 		"tile_id": "wall_ne_panel"
@@ -2089,6 +2198,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": -2,
 		"tile_id": "wall_ne_panel"
@@ -2108,6 +2218,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": -2,
 		"tile_id": "wall_ne_panel"
@@ -2127,6 +2238,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": -2,
 		"tile_id": "wall_ne_panel"
@@ -2146,6 +2258,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": -6,
 		"tile_id": "wall_ne_panel"
@@ -2165,6 +2278,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": -6,
 		"tile_id": "wall_ne_panel"
@@ -2184,6 +2298,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": -6,
 		"tile_id": "wall_ne_panel"
@@ -2203,6 +2318,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": -4,
 		"tile_id": "wall_sw_panel"
@@ -2222,6 +2338,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": -2,
 		"tile_id": "wall_sw_panel"
@@ -2241,6 +2358,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": -2,
 		"tile_id": "wall_sw_panel"
@@ -2260,6 +2378,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": -2,
 		"tile_id": "wall_sw_panel"
@@ -2279,6 +2398,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": -2,
 		"tile_id": "wall_sw_panel"
@@ -2298,6 +2418,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 3,
 		"tile_id": "wall_nw_panel"
@@ -2317,6 +2438,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 2,
 		"tile_id": "wall_nw_panel"
@@ -2336,6 +2458,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 1,
 		"tile_id": "wall_nw_panel"
@@ -2355,6 +2478,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 3,
 		"tile_id": "wall_nw_panel"
@@ -2374,6 +2498,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 1,
 		"tile_id": "wall_nw_panel"
@@ -2393,6 +2518,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 3,
 		"tile_id": "wall_nw_panel"
@@ -2412,6 +2538,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 2,
 		"tile_id": "wall_nw_panel"
@@ -2431,6 +2558,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 2,
 		"tile_id": "wall_ne_panel"
@@ -2450,6 +2578,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 2,
 		"tile_id": "wall_ne_panel"
@@ -2469,6 +2598,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 2,
 		"tile_id": "wall_ne_panel"
@@ -2488,6 +2618,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 2,
 		"tile_id": "wall_ne_panel"
@@ -2507,6 +2638,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 1,
 		"tile_id": "wall_ne_panel"
@@ -2526,6 +2658,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 1,
 		"tile_id": "wall_ne_panel"
@@ -2545,6 +2678,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 1,
 		"tile_id": "wall_ne_panel"
@@ -2564,6 +2698,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 4,
 		"tile_id": "wall_ne_panel"
@@ -2583,6 +2718,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 4,
 		"tile_id": "wall_ne_panel"
@@ -2602,6 +2738,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 4,
 		"tile_id": "wall_ne_panel"
@@ -2621,6 +2758,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 3,
 		"tile_id": "wall_ne_panel"
@@ -2640,6 +2778,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 3,
 		"tile_id": "wall_ne_panel"
@@ -2659,6 +2798,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 3,
 		"tile_id": "wall_ne_panel"
@@ -2678,6 +2818,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 3,
 		"tile_id": "wall_ne_panel"
@@ -2697,6 +2838,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": -4,
 		"tile_id": "wall_sw_panel"
@@ -2716,6 +2858,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 3,
 		"tile_id": "pipe_tank"
@@ -2733,9 +2876,9 @@
 		"logic_set_flag": "",
 		"logic_target_id": "",
 		"logic_trigger_mode": "interact",
-		"prop_definition_path": "res://Data/Missions/Props/Definitions/door_control_terminal.tres",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "res://Data/Missions/Props/Definitions/door_control_terminal.tres",
 		"rotation_degrees": 0.0,
 		"row": 3,
 		"tile_id": "console_power"
@@ -2755,6 +2898,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 5,
 		"tile_id": "debris_right"
@@ -2774,6 +2918,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": -20.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 360.0,
 		"row": 1,
 		"tile_id": "debris_right"
@@ -2793,6 +2938,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 1,
 		"tile_id": "crate_archive"
@@ -2812,6 +2958,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 1,
 		"tile_id": "crate_archive"
@@ -2831,6 +2978,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 2,
 		"tile_id": "archive_core"
@@ -2848,9 +2996,9 @@
 		"logic_set_flag": "",
 		"logic_target_id": "",
 		"logic_trigger_mode": "interact",
-		"prop_definition_path": "res://Data/Missions/Props/Definitions/door_control_terminal.tres",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "res://Data/Missions/Props/Definitions/door_control_terminal.tres",
 		"rotation_degrees": 0.0,
 		"row": 1,
 		"tile_id": "console_power"
@@ -2868,9 +3016,9 @@
 		"logic_set_flag": "",
 		"logic_target_id": "",
 		"logic_trigger_mode": "interact",
-		"prop_definition_path": "res://Data/Missions/Props/Definitions/door_control_terminal.tres",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "res://Data/Missions/Props/Definitions/door_control_terminal.tres",
 		"rotation_degrees": 0.0,
 		"row": 1,
 		"tile_id": "console_power"
@@ -2890,6 +3038,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": -6,
 		"tile_id": "medical_station"
@@ -2909,6 +3058,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": -6,
 		"tile_id": "medical_station"
@@ -2928,6 +3078,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": -6,
 		"tile_id": "medical_station"
@@ -2947,6 +3098,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": -5,
 		"tile_id": "debris_left"
@@ -2966,6 +3118,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": -4,
 		"tile_id": "debris_left"
@@ -2985,6 +3138,7 @@
 		"logic_trigger_mode": "none",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 4,
 		"tile_id": "debris_left"
@@ -3004,9 +3158,30 @@
 		"logic_trigger_mode": "interact",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 2,
 		"tile_id": "door_archive"
+	},
+	{
+		"column": -3,
+		"item_type": "placed_prop",
+		"layer": "prop",
+		"logic_label": "Sealed Cache Crate",
+		"logic_notes": "Loot preset: relay_archive_cache",
+		"logic_npc_portrait": "",
+		"logic_once": false,
+		"logic_required_flag": "",
+		"logic_role": "prop",
+		"logic_set_flag": "",
+		"logic_target_id": "relay_archive_cache",
+		"logic_trigger_mode": "interact",
+		"offset_x": 0.0,
+		"offset_y": 0.0,
+		"prop_definition_path": "res://Data/Missions/Props/Definitions/smuggler_cache_crate.tres",
+		"rotation_degrees": 360.0,
+		"row": 1,
+		"tile_id": ""
 	},
 	{
 		"column": 3,
@@ -3023,6 +3198,7 @@
 		"marker_id": "spawn_a",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 6
 	},
@@ -3041,6 +3217,7 @@
 		"marker_id": "spawn_b",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 6
 	},
@@ -3057,9 +3234,9 @@
 		"logic_target_id": "trigger_dialogue",
 		"logic_trigger_mode": "interact",
 		"marker_id": "trigger_dialogue",
-		"prop_definition_path": "res://Data/Missions/Props/Definitions/dialogue_terminal.tres",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "res://Data/Missions/Props/Definitions/dialogue_terminal.tres",
 		"rotation_degrees": 0.0,
 		"row": 3
 	},
@@ -3078,6 +3255,7 @@
 		"marker_id": "objective_survivors",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": -6
 	},
@@ -3096,6 +3274,7 @@
 		"marker_id": "objective_survivors",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": -6
 	},
@@ -3114,6 +3293,7 @@
 		"marker_id": "objective_survivors",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": -6
 	},
@@ -3132,6 +3312,7 @@
 		"marker_id": "objective_archive",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 2
 	},
@@ -3150,6 +3331,7 @@
 		"marker_id": "trigger_enemy",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": 2
 	},
@@ -3168,6 +3350,7 @@
 		"marker_id": "trigger_enemy",
 		"offset_x": 0.0,
 		"offset_y": 0.0,
+		"prop_definition_path": "",
 		"rotation_degrees": 0.0,
 		"row": -4
 	}
