@@ -9,6 +9,7 @@ public partial class PropDefinition : Resource
 	[Export] public PropInteractionType InteractionType { get; set; } = PropInteractionType.Custom;
 	[Export(PropertyHint.File, "*.tscn")] public string ScenePath { get; set; } = string.Empty;
 	[Export(PropertyHint.File, "*.png,*.jpg,*.jpeg,*.webp,*.svg")] public string SpriteTexturePath { get; set; } = string.Empty;
+	[Export(PropertyHint.Range, "0.05,3.0,0.01")] public float VisualScaleMultiplier { get; set; } = PropVisualSizing.DefaultVisualScaleMultiplier;
 	[Export] public int InteractionRange { get; set; } = 1;
 	[Export] public bool OneShot { get; set; } = false;
 	[Export] public bool HideWhenConsumed { get; set; } = true;

@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="PropDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://Scripts/Missions/Props/PropDefinition.cs" id="1_prop_definition"]
+
+[resource]
+script = ExtResource("1_prop_definition")
+PropId = "safehouse_medbay"
+DisplayName = "Safehouse Medbay"
+Description = "The outpost's emergency medbay still shelters wounded runners and frightened civilians."
+InteractionType = 0
+ScenePath = "res://Scenes/Missions/Props/DialogueTerminalProp.tscn"
+SpriteTexturePath = "res://Assets/Missions/BlackSiteRelay/GeminiSheetSet/props/medical_bed.png"
+InteractionRange = 1
+OneShot = true
+HideWhenConsumed = false
+SetFlags = PackedStringArray("smuggler_survivors_secured")
+DialogueId = "smuggler_exchange_survivors"
+SuccessMessage = "The wounded are stabilized and evacuation tags are locked in."

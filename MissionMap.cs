@@ -448,6 +448,7 @@ public partial class MissionMap : Node2D
 		_missionUi.SecureArchiveButton.Pressed += () => CompleteMission(BuildOutcome(
 			GetSecondaryOutcomeId()));
 		_missionUi.ReturnButton.Pressed += ReturnWithoutOutcome;
+		UpdateMissionCompletionActions();
 	}
 
 	private void WireDialogue()
@@ -857,6 +858,7 @@ public partial class MissionMap : Node2D
 		if (!string.IsNullOrEmpty(interaction.SetFlag) && _globalData != null && !_globalData.StoryFlags.Contains(interaction.SetFlag))
 		{
 			_globalData.StoryFlags.Add(interaction.SetFlag);
+			UpdateMissionCompletionActions();
 		}
 
 		if (interaction.LogicRole == "door")
@@ -867,6 +869,7 @@ public partial class MissionMap : Node2D
 				_consumedTriggerKeys.Add(interactionKey);
 			}
 			UpdateFogOfWar();
+			UpdateMissionCompletionActions();
 			return;
 		}
 
@@ -882,6 +885,7 @@ public partial class MissionMap : Node2D
 			{
 				_consumedTriggerKeys.Add(interactionKey);
 			}
+			UpdateMissionCompletionActions();
 			return;
 		}
 
@@ -896,6 +900,7 @@ public partial class MissionMap : Node2D
 			{
 				_consumedTriggerKeys.Add(interactionKey);
 			}
+			UpdateMissionCompletionActions();
 		}
 	}
 
@@ -1031,6 +1036,7 @@ public partial class MissionMap : Node2D
 			if (!string.IsNullOrEmpty(marker.SetFlag) && _globalData != null && !_globalData.StoryFlags.Contains(marker.SetFlag))
 			{
 				_globalData.StoryFlags.Add(marker.SetFlag);
+				UpdateMissionCompletionActions();
 			}
 
 			if (marker.OneShot)
@@ -1253,6 +1259,7 @@ public partial class MissionMap : Node2D
 
 		prop.CommitInteractionResult(result, context);
 		UpdateFogOfWar();
+		UpdateMissionCompletionActions();
 
 		if (prop.IsConsumed && prop.Definition?.HideWhenConsumed == true)
 		{
@@ -1278,5 +1285,70 @@ public partial class MissionMap : Node2D
 		string roleOrMarker = !string.IsNullOrEmpty(marker.MarkerId) ? marker.MarkerId : marker.LogicRole;
 		string tileId = marker.TileId ?? string.Empty;
 		return $"{roleOrMarker}:{tileId}:{marker.Cell.X},{marker.Cell.Y}:{marker.TargetId}";
+	}
+
+	private void UpdateMissionCompletionActions()
+	{
+		if (_missionUi == null)
+		{
+			return;
+		}
+
+		bool primaryReady = AreRequiredFlagsSatisfied(_missionTemplate?.PrimaryOutcomeRequiredFlags);
+		bool secondaryReady = AreRequiredFlagsSatisfied(_missionTemplate?.SecondaryOutcomeRequiredFlags);
+
+		if (_missionUi.SaveSurvivorsButton != null)
+		{
+			_missionUi.SaveSurvivorsButton.Disabled = !primaryReady;
+			_missionUi.SaveSurvivorsButton.TooltipText = primaryReady
+				? string.Empty
+				: BuildMissingFlagsTooltip(_missionTemplate?.PrimaryOutcomeRequiredFlags);
+		}
+
+		if (_missionUi.SecureArchiveButton != null)
+		{
+			_missionUi.SecureArchiveButton.Disabled = !secondaryReady;
+			_missionUi.SecureArchiveButton.TooltipText = secondaryReady
+				? string.Empty
+				: BuildMissingFlagsTooltip(_missionTemplate?.SecondaryOutcomeRequiredFlags);
+		}
+	}
+
+	private bool AreRequiredFlagsSatisfied(Godot.Collections.Array<string> requiredFlags)
+	{
+		if (requiredFlags == null || requiredFlags.Count == 0)
+		{
+			return true;
+		}
+
+		if (_globalData?.StoryFlags == null)
+		{
+			return false;
+		}
+
+		foreach (string flag in requiredFlags)
+		{
+			if (!string.IsNullOrWhiteSpace(flag) && !_globalData.StoryFlags.Contains(flag))
+			{
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	private string BuildMissingFlagsTooltip(Godot.Collections.Array<string> requiredFlags)
+	{
+		if (requiredFlags == null || requiredFlags.Count == 0 || _globalData?.StoryFlags == null)
+		{
+			return "Additional mission steps are still required.";
+		}
+
+		List<string> missingFlags = requiredFlags
+			.Where(flag => !string.IsNullOrWhiteSpace(flag) && !_globalData.StoryFlags.Contains(flag))
+			.ToList();
+		return missingFlags.Count == 0
+			? string.Empty
+			: $"Missing mission steps: {string.Join(", ", missingFlags)}";
 	}
 }

@@ -4,14 +4,15 @@
 
 [resource]
 script = ExtResource("1_prop_definition")
-PropId = "dialogue_terminal"
-DisplayName = "Dialogue Terminal"
-Description = "A mission terminal that opens a dialogue sequence when an officer accesses it."
+PropId = "patrol_scrubber_terminal"
+DisplayName = "Patrol Feed Scrubber"
+Description = "A signal-scrub station that can expose approaching patrol routes and delay their boarding vectors."
 InteractionType = 0
 ScenePath = "res://Scenes/Missions/Props/DialogueTerminalProp.tscn"
 SpriteTexturePath = "res://Assets/Missions/BlackSiteRelay/GeminiSheetSet/props/console_single.png"
 InteractionRange = 1
-OneShot = false
+OneShot = true
 HideWhenConsumed = false
-DialogueId = "trigger_dialogue"
-SuccessMessage = "Terminal link established."
+SetFlags = PackedStringArray("smuggler_patrol_feed_scrubbed")
+DialogueId = "smuggler_exchange_patrols"
+SuccessMessage = "Patrol schedules and reclaim paths are cached to your suit display."

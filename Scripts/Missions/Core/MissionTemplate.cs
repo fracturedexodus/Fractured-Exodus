@@ -15,8 +15,10 @@ public partial class MissionTemplate : Resource
 	[Export(PropertyHint.MultilineText)] public string PromptText { get; set; } = string.Empty;
 	[Export] public string PrimaryActionText { get; set; } = string.Empty;
 	[Export] public string PrimaryOutcomeId { get; set; } = string.Empty;
+	[Export] public Godot.Collections.Array<string> PrimaryOutcomeRequiredFlags { get; set; } = new Godot.Collections.Array<string>();
 	[Export] public string SecondaryActionText { get; set; } = string.Empty;
 	[Export] public string SecondaryOutcomeId { get; set; } = string.Empty;
+	[Export] public Godot.Collections.Array<string> SecondaryOutcomeRequiredFlags { get; set; } = new Godot.Collections.Array<string>();
 	[Export] public string DefaultDialogueId { get; set; } = string.Empty;
 	[Export] public Godot.Collections.Array<string> InteractionKeys { get; set; } = new Godot.Collections.Array<string>();
 	[Export] public bool IsEnabled { get; set; } = true;

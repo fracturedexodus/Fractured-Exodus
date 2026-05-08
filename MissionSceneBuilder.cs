@@ -11,7 +11,6 @@ public partial class MissionSceneBuilder : Node2D
 	private const float CameraPanSpeed = 780f;
 	private const float TileNudgeStep = 10f;
 	private const float TileRotateStep = 15f;
-	private const string BuilderStatePath = "res://Data/MissionLayouts/.mission_builder_state.json";
 
 	private enum BuilderLayer
 	{
@@ -68,11 +67,14 @@ public partial class MissionSceneBuilder : Node2D
 	private readonly List<Line2D> _gridLines = new List<Line2D>();
 	private readonly Dictionary<string, PropDefinitionPreview> _propDefinitionPreviewCache = new Dictionary<string, PropDefinitionPreview>();
 	private readonly List<ValidationIssueEntry> _validationEntries = new List<ValidationIssueEntry>();
+	private readonly Dictionary<string, Texture2D> _markerIconCache = new Dictionary<string, Texture2D>();
 	private Polygon2D _hoverDiamond;
 	private readonly Vector2 _tileStep = MissionFloorTextureFactory.TileSize;
 	private readonly Vector2 _gridOrigin = new Vector2(0f, -20f);
 	private string _selectedBackgroundId = MissionBackgroundCatalog.DefaultId;
-	private bool _isLoadingBuilderState;
+	private Texture2D _fallbackPropPreviewTexture;
+	private bool _placedMapCenterDirty = true;
+	private Vector2 _cachedPlacedMapCenter = Vector2.Zero;
 
 	private sealed class PropDefinitionPreview
 	{
@@ -81,12 +83,13 @@ public partial class MissionSceneBuilder : Node2D
 		public string Description { get; init; } = string.Empty;
 		public Texture2D Icon { get; init; }
 		public bool Exists { get; init; }
+		public float VisualScaleMultiplier { get; init; } = PropVisualSizing.DefaultVisualScaleMultiplier;
 	}
 
 	private sealed class ValidationIssueEntry
 	{
 		public string Message { get; init; } = string.Empty;
-		public Sprite2D Target { get; init; }
+		public string TargetKey { get; init; } = string.Empty;
 		public ValidationSeverity Severity { get; init; } = ValidationSeverity.Warning;
 	}
 
@@ -125,7 +128,6 @@ public partial class MissionSceneBuilder : Node2D
 		BuildHoverDiamond();
 		BuildLogicPanel();
 		WireUi();
-		LoadBuilderState();
 		ApplyZoom(DefaultZoom);
 		UpdateSelectedLabel();
 		SetStatus("Left click to place/select. Drag items to move. Right click deletes. Mouse wheel zooms.");
@@ -134,6 +136,7 @@ public partial class MissionSceneBuilder : Node2D
 
 	public override void _Process(double delta)
 	{
+		SanitizeTransientSpriteReferences();
 		UpdateCameraPan((float)delta);
 		UpdateHoverDiamond();
 		UpdateBackgroundFeaturePlacement();
@@ -141,6 +144,8 @@ public partial class MissionSceneBuilder : Node2D
 
 	public override void _UnhandledInput(InputEvent @event)
 	{
+		SanitizeTransientSpriteReferences();
+
 		if (@event is InputEventMouseButton mouseButton && mouseButton.Pressed)
 		{
 			if (mouseButton.ButtonIndex == MouseButton.WheelUp)
@@ -201,13 +206,13 @@ public partial class MissionSceneBuilder : Node2D
 				return;
 			}
 
-			if (_draggedSprite != null)
+			if (TryGetDraggedSprite(out Sprite2D draggedSprite))
 			{
 				Vector2I cell = GetMouseCell();
 				if (cell != _draggedCell)
 				{
 					_draggedCell = cell;
-					MoveSpriteToCell(_draggedSprite, cell.X, cell.Y);
+					MoveSpriteToCell(draggedSprite, cell.X, cell.Y);
 				}
 				GetViewport().SetInputAsHandled();
 				return;
@@ -230,7 +235,7 @@ public partial class MissionSceneBuilder : Node2D
 				return;
 			}
 
-			if (_selectedPlacedSprite != null)
+			if (TryGetSelectedPlacedSprite(out _))
 			{
 				if (keyEvent.Keycode == Key.Left)
 				{
@@ -450,10 +455,17 @@ public partial class MissionSceneBuilder : Node2D
 
 	private Vector2 GetPlacedMapCenter()
 	{
-		List<Sprite2D> floorSprites = _floorLayer.GetChildren().OfType<Sprite2D>().ToList();
+		if (!_placedMapCenterDirty)
+		{
+			return _cachedPlacedMapCenter;
+		}
+
+		List<Sprite2D> floorSprites = EnumerateLiveSprites(_floorLayer).ToList();
 		if (floorSprites.Count == 0)
 		{
-			return Vector2.Zero;
+			_cachedPlacedMapCenter = Vector2.Zero;
+			_placedMapCenterDirty = false;
+			return _cachedPlacedMapCenter;
 		}
 
 		float minX = float.MaxValue;
@@ -469,7 +481,9 @@ public partial class MissionSceneBuilder : Node2D
 			maxY = Mathf.Max(maxY, position.Y);
 		}
 
-		return new Vector2((minX + maxX) * 0.5f, (minY + maxY) * 0.5f);
+		_cachedPlacedMapCenter = new Vector2((minX + maxX) * 0.5f, (minY + maxY) * 0.5f);
+		_placedMapCenterDirty = false;
+		return _cachedPlacedMapCenter;
 	}
 
 	private void BuildLogicPanel()
@@ -624,14 +638,7 @@ public partial class MissionSceneBuilder : Node2D
 		_validationFilterOption.AddItem("Warnings + Errors", (int)ValidationFilter.WarningsAndErrors);
 		_validationFilterOption.AddItem("Info Only", (int)ValidationFilter.InfoOnly);
 		_validationFilterOption.Select((int)ValidationFilter.All);
-		_validationFilterOption.ItemSelected += _ =>
-		{
-			if (!_isLoadingBuilderState)
-			{
-				SaveBuilderState();
-			}
-			RefreshValidationReport();
-		};
+		_validationFilterOption.ItemSelected += _ => RefreshValidationReport();
 		validationHeaderRow.AddChild(_validationFilterOption);
 		root.AddChild(validationHeaderRow);
 
@@ -742,7 +749,6 @@ public partial class MissionSceneBuilder : Node2D
 				_selectedTile = null;
 				_selectedMarker = null;
 				_selectedPropDefinitionPath = propDefinitionPath;
-				SaveBuilderState();
 				ClearPlacedSelection();
 				UpdateSelectedLabel();
 				UpdateLogicInspector();
@@ -756,11 +762,11 @@ public partial class MissionSceneBuilder : Node2D
 
 	private void UpdateSelectedLabel()
 	{
-		if (_selectedPlacedSprite != null)
+		if (TryGetSelectedPlacedSprite(out Sprite2D selectedSprite))
 		{
-			string placedId = GetItemDisplayId(_selectedPlacedSprite);
-			int column = _selectedPlacedSprite.GetMeta("column", 0).AsInt32();
-			int row = _selectedPlacedSprite.GetMeta("row", 0).AsInt32();
+			string placedId = GetItemDisplayId(selectedSprite);
+			int column = selectedSprite.GetMeta("column", 0).AsInt32();
+			int row = selectedSprite.GetMeta("row", 0).AsInt32();
 			_selectedLabel.Text = $"Selected: {placedId} @ {column},{row}";
 			return;
 		}
@@ -919,14 +925,19 @@ public partial class MissionSceneBuilder : Node2D
 
 		Sprite2D sprite = CreateSprite(_selectedTile, cell.X, cell.Y);
 		GetPlacementLayer(GetLayerForTile(_selectedTile)).AddChild(sprite);
+		if (_selectedTile.Category == MissionTileCategory.Floor)
+		{
+			MarkPlacedMapCenterDirty();
+		}
 		SelectPlacedSprite(sprite);
 		SetStatus($"Placed {_selectedTile.DisplayName} at {cell.X},{cell.Y}");
 	}
 
 	private void DeleteTileAtMouse()
 	{
+		SanitizeTransientSpriteReferences();
 		Sprite2D sprite = FindSpriteAtMouse();
-		if (sprite == null)
+		if (!IsLiveSprite(sprite))
 		{
 			return;
 		}
@@ -936,12 +947,32 @@ public partial class MissionSceneBuilder : Node2D
 		{
 			ClearPlacedSelection();
 		}
+
+		if (sprite == _draggedSprite)
+		{
+			_draggedSprite = null;
+		}
+
+		if (IsFloorSprite(sprite))
+		{
+			MarkPlacedMapCenterDirty();
+		}
+
 		sprite.QueueFree();
-		RefreshValidationReport();
+		if (DoesSpriteAffectValidation(sprite))
+		{
+			CallDeferred(nameof(RefreshValidationReport));
+		}
 	}
 
 	private void SelectPlacedSprite(Sprite2D sprite)
 	{
+		if (!IsLiveSprite(sprite))
+		{
+			ClearPlacedSelection();
+			return;
+		}
+
 		if (_selectedPlacedSprite == sprite)
 		{
 			return;
@@ -957,10 +988,10 @@ public partial class MissionSceneBuilder : Node2D
 
 	private void ClearPlacedSelection()
 	{
-		if (_selectedPlacedSprite != null)
+		if (TryGetSelectedPlacedSprite(out Sprite2D selectedSprite))
 		{
-			_selectedPlacedSprite.Modulate = GetBaseModulate(_selectedPlacedSprite);
-			ToggleSelectionOutline(_selectedPlacedSprite, false);
+			selectedSprite.Modulate = GetBaseModulate(selectedSprite);
+			ToggleSelectionOutline(selectedSprite, false);
 			_selectedPlacedSprite = null;
 		}
 
@@ -982,7 +1013,7 @@ public partial class MissionSceneBuilder : Node2D
 			for (int index = children.Count - 1; index >= 0; index--)
 			{
 				Node child = children[index];
-				if (child is not Sprite2D sprite)
+				if (child is not Sprite2D sprite || !IsLiveSprite(sprite))
 				{
 					continue;
 				}
@@ -1030,7 +1061,7 @@ public partial class MissionSceneBuilder : Node2D
 		Godot.Collections.Array<Node> children = layer.GetChildren();
 		for (int index = children.Count - 1; index >= 0; index--)
 		{
-			if (children[index] is not Sprite2D sprite)
+			if (children[index] is not Sprite2D sprite || !IsLiveSprite(sprite))
 			{
 				continue;
 			}
@@ -1110,6 +1141,10 @@ public partial class MissionSceneBuilder : Node2D
 		sprite.Position = IsoGridHelper.GridToWorld(column, row, _tileStep, _gridOrigin) + definition.Offset + adjustment;
 		sprite.SetMeta("column", column);
 		sprite.SetMeta("row", row);
+		if (definition.Category == MissionTileCategory.Floor)
+		{
+			MarkPlacedMapCenterDirty();
+		}
 		UpdateSelectedLabel();
 	}
 
@@ -1120,16 +1155,17 @@ public partial class MissionSceneBuilder : Node2D
 			return;
 		}
 
-		bool isMarker = _selectedPlacedSprite != null && !string.IsNullOrEmpty(_selectedPlacedSprite.GetMeta("marker_id", "").AsString());
-		bool isLogicProp = _selectedPlacedSprite != null && IsLogicCapableSprite(_selectedPlacedSprite);
-		bool isPlacedProp = IsPlacedPropSprite(_selectedPlacedSprite);
+		TryGetSelectedPlacedSprite(out Sprite2D selectedSprite);
+		bool isMarker = selectedSprite != null && !string.IsNullOrEmpty(selectedSprite.GetMeta("marker_id", "").AsString());
+		bool isLogicProp = selectedSprite != null && IsLogicCapableSprite(selectedSprite);
+		bool isPlacedProp = IsPlacedPropSprite(selectedSprite);
 		bool isLogicItem = isMarker || isLogicProp || isPlacedProp;
 		SetLogicEditorEnabled(isLogicItem);
 		_isUpdatingLogicUi = true;
 
 		if (!isLogicItem)
 		{
-			_logicSelectionLabel.Text = _selectedPlacedSprite == null
+			_logicSelectionLabel.Text = selectedSprite == null
 				? "Select a marker, direct mission prop, door, or terminal to edit mission logic."
 				: "Selected item does not support mission logic.";
 			_logicHintLabel.Text = "Use mission logic on markers, direct mission props, doors, and computer terminals.";
@@ -1139,7 +1175,8 @@ public partial class MissionSceneBuilder : Node2D
 			_logicTargetIdEdit.PlaceholderText = string.Empty;
 			_logicTargetIdHelpLabel.Text = "Target ID meaning depends on the selected marker or prop.";
 			_logicPropDefinitionPathEdit.Text = string.Empty;
-			RefreshPropDefinitionOptions();
+			SelectPropDefinitionOptionWithoutRefresh(string.Empty);
+			UpdatePropDefinitionPreview(string.Empty);
 			_logicNpcPortraitOption.Select(0);
 			_logicRequiredFlagEdit.Text = string.Empty;
 			_logicRequiredFlagEdit.PlaceholderText = string.Empty;
@@ -1151,11 +1188,10 @@ public partial class MissionSceneBuilder : Node2D
 			_logicOneShotCheck.ButtonPressed = false;
 			_logicNotesEdit.Text = string.Empty;
 			_isUpdatingLogicUi = false;
-			RefreshValidationReport();
 			return;
 		}
 
-		Sprite2D item = _selectedPlacedSprite;
+		Sprite2D item = selectedSprite;
 		string itemId = GetItemDisplayId(item);
 		string logicLabel = item.GetMeta("logic_label", itemId).AsString();
 		int column = item.GetMeta("column", 0).AsInt32();
@@ -1172,7 +1208,7 @@ public partial class MissionSceneBuilder : Node2D
 		_logicLabelEdit.Text = logicLabel;
 		_logicTargetIdEdit.Text = item.GetMeta("logic_target_id", string.Empty).AsString();
 		_logicPropDefinitionPathEdit.Text = item.GetMeta("prop_definition_path", string.Empty).AsString();
-		RefreshPropDefinitionOptions(_logicPropDefinitionPathEdit.Text);
+		EnsurePropDefinitionOptionSelection(_logicPropDefinitionPathEdit.Text);
 		UpdateTargetIdFieldContext(item, isMarker, isPlacedProp);
 		UpdateFlagFieldContext(item, isMarker, isPlacedProp);
 		SelectNpcPortraitOption(item.GetMeta("logic_npc_portrait", string.Empty).AsString());
@@ -1204,30 +1240,30 @@ public partial class MissionSceneBuilder : Node2D
 
 	private void ApplyLogicFieldChanges()
 	{
-		if (_isUpdatingLogicUi || _selectedPlacedSprite == null)
+		if (_isUpdatingLogicUi || !TryGetSelectedPlacedSprite(out Sprite2D selectedSprite))
 		{
 			return;
 		}
 
-		bool isMarker = !string.IsNullOrEmpty(_selectedPlacedSprite.GetMeta("marker_id", "").AsString());
-		bool isLogicProp = IsLogicCapableSprite(_selectedPlacedSprite);
-		bool isPlacedProp = IsPlacedPropSprite(_selectedPlacedSprite);
+		bool isMarker = !string.IsNullOrEmpty(selectedSprite.GetMeta("marker_id", "").AsString());
+		bool isLogicProp = IsLogicCapableSprite(selectedSprite);
+		bool isPlacedProp = IsPlacedPropSprite(selectedSprite);
 		if (!isMarker && !isLogicProp && !isPlacedProp)
 		{
 			return;
 		}
 
-		_selectedPlacedSprite.SetMeta("logic_role", isPlacedProp ? "prop" : GetLogicRoleValue(_logicRoleOption.Selected, isMarker));
-		_selectedPlacedSprite.SetMeta("logic_label", _logicLabelEdit.Text.StripEdges());
-		_selectedPlacedSprite.SetMeta("logic_target_id", _logicTargetIdEdit.Text.StripEdges());
-		_selectedPlacedSprite.SetMeta("prop_definition_path", _logicPropDefinitionPathEdit.Text.StripEdges());
-		_selectedPlacedSprite.SetMeta("logic_npc_portrait", _logicNpcPortraitOption.GetItemMetadata(_logicNpcPortraitOption.Selected).AsString());
-		_selectedPlacedSprite.SetMeta("logic_required_flag", _logicRequiredFlagEdit.Text.StripEdges());
-		_selectedPlacedSprite.SetMeta("logic_set_flag", _logicSetFlagEdit.Text.StripEdges());
-		_selectedPlacedSprite.SetMeta("logic_trigger_mode", GetTriggerModeValue(_logicTriggerModeOption.Selected));
-		_selectedPlacedSprite.SetMeta("logic_once", _logicOneShotCheck.ButtonPressed);
-		_selectedPlacedSprite.SetMeta("logic_notes", _logicNotesEdit.Text.StripEdges());
-		UpdateMarkerCaption(_selectedPlacedSprite);
+		selectedSprite.SetMeta("logic_role", isPlacedProp ? "prop" : GetLogicRoleValue(_logicRoleOption.Selected, isMarker));
+		selectedSprite.SetMeta("logic_label", _logicLabelEdit.Text.StripEdges());
+		selectedSprite.SetMeta("logic_target_id", _logicTargetIdEdit.Text.StripEdges());
+		selectedSprite.SetMeta("prop_definition_path", _logicPropDefinitionPathEdit.Text.StripEdges());
+		selectedSprite.SetMeta("logic_npc_portrait", _logicNpcPortraitOption.GetItemMetadata(_logicNpcPortraitOption.Selected).AsString());
+		selectedSprite.SetMeta("logic_required_flag", _logicRequiredFlagEdit.Text.StripEdges());
+		selectedSprite.SetMeta("logic_set_flag", _logicSetFlagEdit.Text.StripEdges());
+		selectedSprite.SetMeta("logic_trigger_mode", GetTriggerModeValue(_logicTriggerModeOption.Selected));
+		selectedSprite.SetMeta("logic_once", _logicOneShotCheck.ButtonPressed);
+		selectedSprite.SetMeta("logic_notes", _logicNotesEdit.Text.StripEdges());
+		UpdateMarkerCaption(selectedSprite);
 		RefreshValidationReport();
 	}
 
@@ -1312,9 +1348,57 @@ public partial class MissionSceneBuilder : Node2D
 		UpdatePropDefinitionPreview(normalizedPath);
 	}
 
+	private void EnsurePropDefinitionOptionSelection(string selectedPath)
+	{
+		if (_logicPropDefinitionOption == null)
+		{
+			return;
+		}
+
+		string normalizedPath = selectedPath?.StripEdges() ?? string.Empty;
+		for (int i = 0; i < _logicPropDefinitionOption.ItemCount; i++)
+		{
+			if (_logicPropDefinitionOption.GetItemMetadata(i).AsString() != normalizedPath)
+			{
+				continue;
+			}
+
+			_logicPropDefinitionOption.Select(i);
+			UpdatePropDefinitionPreview(normalizedPath);
+			return;
+		}
+
+		RefreshPropDefinitionOptions(normalizedPath);
+	}
+
+	private void SelectPropDefinitionOptionWithoutRefresh(string selectedPath)
+	{
+		if (_logicPropDefinitionOption == null)
+		{
+			return;
+		}
+
+		string normalizedPath = selectedPath?.StripEdges() ?? string.Empty;
+		for (int i = 0; i < _logicPropDefinitionOption.ItemCount; i++)
+		{
+			if (_logicPropDefinitionOption.GetItemMetadata(i).AsString() != normalizedPath)
+			{
+				continue;
+			}
+
+			_logicPropDefinitionOption.Select(i);
+			return;
+		}
+
+		if (_logicPropDefinitionOption.ItemCount > 0)
+		{
+			_logicPropDefinitionOption.Select(0);
+		}
+	}
+
 	private void UpdateTargetIdFieldContextForCurrentSelection()
 	{
-		if (_selectedPlacedSprite == null)
+		if (!TryGetSelectedPlacedSprite(out Sprite2D selectedSprite))
 		{
 			_logicTargetIdEdit.PlaceholderText = string.Empty;
 			if (_logicTargetIdHelpLabel != null)
@@ -1324,14 +1408,14 @@ public partial class MissionSceneBuilder : Node2D
 			return;
 		}
 
-		bool isMarker = !string.IsNullOrEmpty(_selectedPlacedSprite.GetMeta("marker_id", string.Empty).AsString());
-		bool isPlacedProp = IsPlacedPropSprite(_selectedPlacedSprite);
-		UpdateTargetIdFieldContext(_selectedPlacedSprite, isMarker, isPlacedProp);
+		bool isMarker = !string.IsNullOrEmpty(selectedSprite.GetMeta("marker_id", string.Empty).AsString());
+		bool isPlacedProp = IsPlacedPropSprite(selectedSprite);
+		UpdateTargetIdFieldContext(selectedSprite, isMarker, isPlacedProp);
 	}
 
 	private void UpdateFlagFieldContextForCurrentSelection()
 	{
-		if (_selectedPlacedSprite == null)
+		if (!TryGetSelectedPlacedSprite(out Sprite2D selectedSprite))
 		{
 			_logicRequiredFlagEdit.PlaceholderText = string.Empty;
 			_logicSetFlagEdit.PlaceholderText = string.Empty;
@@ -1346,9 +1430,9 @@ public partial class MissionSceneBuilder : Node2D
 			return;
 		}
 
-		bool isMarker = !string.IsNullOrEmpty(_selectedPlacedSprite.GetMeta("marker_id", string.Empty).AsString());
-		bool isPlacedProp = IsPlacedPropSprite(_selectedPlacedSprite);
-		UpdateFlagFieldContext(_selectedPlacedSprite, isMarker, isPlacedProp);
+		bool isMarker = !string.IsNullOrEmpty(selectedSprite.GetMeta("marker_id", string.Empty).AsString());
+		bool isPlacedProp = IsPlacedPropSprite(selectedSprite);
+		UpdateFlagFieldContext(selectedSprite, isMarker, isPlacedProp);
 	}
 
 	private void UpdateTargetIdFieldContext(Sprite2D item, bool isMarker, bool isPlacedProp)
@@ -1575,7 +1659,7 @@ public partial class MissionSceneBuilder : Node2D
 		{
 			Texture = texture,
 			Position = IsoGridHelper.GridToWorld(column, row, _tileStep, _gridOrigin),
-			Scale = GetPlacedPropPreviewScale(texture)
+			Scale = GetPlacedPropPreviewScale(texture, preview.VisualScaleMultiplier)
 		};
 		sprite.SetMeta("tile_id", string.Empty);
 		sprite.SetMeta("item_type", "placed_prop");
@@ -1822,6 +1906,11 @@ public partial class MissionSceneBuilder : Node2D
 
 	private void ToggleSelectionOutline(Sprite2D sprite, bool isVisible)
 	{
+		if (!IsLiveSprite(sprite))
+		{
+			return;
+		}
+
 		Node2D outline = sprite?.GetNodeOrNull<Node2D>("SelectionOutline");
 		if (outline != null)
 		{
@@ -1831,43 +1920,43 @@ public partial class MissionSceneBuilder : Node2D
 
 	private void AdjustSelectedTile(Vector2 deltaOffset, float deltaRotationDegrees)
 	{
-		if (_selectedPlacedSprite == null)
+		if (!TryGetSelectedPlacedSprite(out Sprite2D selectedSprite))
 		{
 			return;
 		}
 
-		float offsetX = _selectedPlacedSprite.GetMeta("offset_x", 0f).AsSingle() + deltaOffset.X;
-		float offsetY = _selectedPlacedSprite.GetMeta("offset_y", 0f).AsSingle() + deltaOffset.Y;
-		float rotationDegrees = _selectedPlacedSprite.GetMeta("rotation_degrees", 0f).AsSingle() + deltaRotationDegrees;
+		float offsetX = selectedSprite.GetMeta("offset_x", 0f).AsSingle() + deltaOffset.X;
+		float offsetY = selectedSprite.GetMeta("offset_y", 0f).AsSingle() + deltaOffset.Y;
+		float rotationDegrees = selectedSprite.GetMeta("rotation_degrees", 0f).AsSingle() + deltaRotationDegrees;
 
-		_selectedPlacedSprite.SetMeta("offset_x", offsetX);
-		_selectedPlacedSprite.SetMeta("offset_y", offsetY);
-		_selectedPlacedSprite.SetMeta("rotation_degrees", rotationDegrees);
-		_selectedPlacedSprite.RotationDegrees = rotationDegrees;
+		selectedSprite.SetMeta("offset_x", offsetX);
+		selectedSprite.SetMeta("offset_y", offsetY);
+		selectedSprite.SetMeta("rotation_degrees", rotationDegrees);
+		selectedSprite.RotationDegrees = rotationDegrees;
 
 		MoveSpriteToCell(
-			_selectedPlacedSprite,
-			_selectedPlacedSprite.GetMeta("column", 0).AsInt32(),
-			_selectedPlacedSprite.GetMeta("row", 0).AsInt32());
+			selectedSprite,
+			selectedSprite.GetMeta("column", 0).AsInt32(),
+			selectedSprite.GetMeta("row", 0).AsInt32());
 
 		SetStatus($"Adjusted tile: offset ({offsetX:0},{offsetY:0}) rotation {rotationDegrees:0}");
 	}
 
 	private void ResetSelectedTileAdjustment()
 	{
-		if (_selectedPlacedSprite == null)
+		if (!TryGetSelectedPlacedSprite(out Sprite2D selectedSprite))
 		{
 			return;
 		}
 
-		_selectedPlacedSprite.SetMeta("offset_x", 0f);
-		_selectedPlacedSprite.SetMeta("offset_y", 0f);
-		_selectedPlacedSprite.SetMeta("rotation_degrees", 0f);
-		_selectedPlacedSprite.RotationDegrees = 0f;
+		selectedSprite.SetMeta("offset_x", 0f);
+		selectedSprite.SetMeta("offset_y", 0f);
+		selectedSprite.SetMeta("rotation_degrees", 0f);
+		selectedSprite.RotationDegrees = 0f;
 		MoveSpriteToCell(
-			_selectedPlacedSprite,
-			_selectedPlacedSprite.GetMeta("column", 0).AsInt32(),
-			_selectedPlacedSprite.GetMeta("row", 0).AsInt32());
+			selectedSprite,
+			selectedSprite.GetMeta("column", 0).AsInt32(),
+			selectedSprite.GetMeta("row", 0).AsInt32());
 		SetStatus("Reset selected tile adjustment.");
 	}
 
@@ -1893,7 +1982,7 @@ public partial class MissionSceneBuilder : Node2D
 		{
 			foreach (Node child in layer.GetChildren())
 			{
-				if (child is not Sprite2D sprite)
+				if (child is not Sprite2D sprite || !IsLiveSprite(sprite))
 				{
 					continue;
 				}
@@ -1956,7 +2045,7 @@ public partial class MissionSceneBuilder : Node2D
 			return;
 		}
 
-		ClearLayoutInternal();
+		ClearLayoutInternal(false);
 		string loadedBackgroundId = MissionBackgroundCatalog.DefaultId;
 
 		using FileAccess file = FileAccess.Open(path, FileAccess.ModeFlags.Read);
@@ -2069,6 +2158,8 @@ public partial class MissionSceneBuilder : Node2D
 		}
 
 		SelectBackgroundById(loadedBackgroundId, true, false);
+		MarkPlacedMapCenterDirty();
+		UpdateBackgroundFeaturePlacement();
 		SetStatus($"Loaded layout from {ProjectSettings.LocalizePath(path)}");
 		RefreshValidationReport();
 	}
@@ -2077,10 +2168,9 @@ public partial class MissionSceneBuilder : Node2D
 	{
 		ClearLayoutInternal();
 		SetStatus("Cleared placed tiles.");
-		RefreshValidationReport();
 	}
 
-	private void ClearLayoutInternal()
+	private void ClearLayoutInternal(bool refreshValidation = true)
 	{
 		ClearPlacedSelection();
 		foreach (Node2D layer in GetSaveLayers())
@@ -2090,97 +2180,15 @@ public partial class MissionSceneBuilder : Node2D
 				child.QueueFree();
 			}
 		}
-		RefreshValidationReport();
-	}
-
-	private void LoadBuilderState()
-	{
-		string absolutePath = ProjectSettings.GlobalizePath(BuilderStatePath);
-		if (!FileAccess.FileExists(absolutePath))
+		MarkPlacedMapCenterDirty();
+		if (refreshValidation)
 		{
-			return;
+			CallDeferred(nameof(RefreshValidationReport));
 		}
-
-		using FileAccess file = FileAccess.Open(absolutePath, FileAccess.ModeFlags.Read);
-		if (file == null)
-		{
-			return;
-		}
-
-		Variant parsed = Json.ParseString(file.GetAsText());
-		if (parsed.VariantType != Variant.Type.Dictionary)
-		{
-			return;
-		}
-
-		Godot.Collections.Dictionary state = parsed.AsGodotDictionary();
-		_isLoadingBuilderState = true;
-		try
-		{
-			if (state.TryGetValue("layout_name", out Variant layoutNameVariant))
-			{
-				string layoutName = layoutNameVariant.AsString().StripEdges();
-				if (!string.IsNullOrWhiteSpace(layoutName))
-				{
-					_layoutNameEdit.Text = layoutName;
-				}
-			}
-
-			if (state.TryGetValue("validation_filter", out Variant validationFilterVariant)
-				&& _validationFilterOption != null)
-			{
-				int filterIndex = validationFilterVariant.AsInt32();
-				if (filterIndex >= 0 && filterIndex < _validationFilterOption.ItemCount)
-				{
-					_validationFilterOption.Select(filterIndex);
-				}
-			}
-
-			if (state.TryGetValue("selected_prop_definition_path", out Variant propDefinitionVariant))
-			{
-				string propDefinitionPath = propDefinitionVariant.AsString().StripEdges();
-				if (!string.IsNullOrWhiteSpace(propDefinitionPath))
-				{
-					_selectedTile = null;
-					_selectedMarker = null;
-					_selectedPropDefinitionPath = propDefinitionPath;
-					UpdateSelectedLabel();
-				}
-			}
-		}
-		finally
-		{
-			_isLoadingBuilderState = false;
-		}
-	}
-
-	private void SaveBuilderState()
-	{
-		if (_isLoadingBuilderState)
-		{
-			return;
-		}
-
-		DirAccess.MakeDirRecursiveAbsolute(ProjectSettings.GlobalizePath("res://Data/MissionLayouts"));
-		string absolutePath = ProjectSettings.GlobalizePath(BuilderStatePath);
-		using FileAccess file = FileAccess.Open(absolutePath, FileAccess.ModeFlags.Write);
-		if (file == null)
-		{
-			return;
-		}
-
-		Godot.Collections.Dictionary<string, Variant> state = new()
-		{
-			{ "layout_name", _layoutNameEdit?.Text.StripEdges() ?? string.Empty },
-			{ "validation_filter", (int)GetCurrentValidationFilter() },
-			{ "selected_prop_definition_path", _selectedPropDefinitionPath ?? string.Empty }
-		};
-		file.StoreString(Json.Stringify(state, "\t"));
 	}
 
 	private void ExitBuilder()
 	{
-		SaveBuilderState();
 		GetTree().Quit();
 	}
 
@@ -2251,6 +2259,7 @@ public partial class MissionSceneBuilder : Node2D
 
 	private void RefreshValidationReport()
 	{
+		SanitizeTransientSpriteReferences();
 		RefreshValidationReport(CollectValidationIssueEntries());
 	}
 
@@ -2287,7 +2296,7 @@ public partial class MissionSceneBuilder : Node2D
 			string escapedMessage = issue.Message.Replace("[", "[lb]").Replace("]", "[rb]");
 			string color = GetValidationSeverityColor(issue.Severity);
 			string prefix = GetValidationSeverityPrefix(issue.Severity);
-			if (issue.Target != null && GodotObject.IsInstanceValid(issue.Target))
+			if (!string.IsNullOrWhiteSpace(issue.TargetKey))
 			{
 				lines.Add($"[color={color}]{prefix} [url=validation:{i}]{escapedMessage}[/url][/color]");
 			}
@@ -2343,9 +2352,8 @@ public partial class MissionSceneBuilder : Node2D
 	private List<ValidationIssueEntry> CollectValidationIssueEntries()
 	{
 		List<string> issues = new List<string>();
-		List<Sprite2D> markers = _markerLayer.GetChildren().OfType<Sprite2D>().ToList();
-		List<Sprite2D> logicProps = _propLayer.GetChildren()
-			.OfType<Sprite2D>()
+		List<Sprite2D> markers = EnumerateLiveSprites(_markerLayer).ToList();
+		List<Sprite2D> logicProps = EnumerateLiveSprites(_propLayer)
 			.Where(sprite => !string.IsNullOrEmpty(sprite.GetMeta("logic_role", string.Empty).AsString()))
 			.ToList();
 		MissionTemplate missionTemplate = GetMissionTemplateForCurrentLayout();
@@ -2578,7 +2586,7 @@ public partial class MissionSceneBuilder : Node2D
 			entries.Add(new ValidationIssueEntry
 			{
 				Message = issue,
-				Target = ResolveValidationTarget(issue, candidates),
+				TargetKey = ResolveValidationTargetKey(issue, candidates),
 				Severity = InferValidationSeverity(issue)
 			});
 		}
@@ -2586,11 +2594,11 @@ public partial class MissionSceneBuilder : Node2D
 		return entries;
 	}
 
-	private Sprite2D ResolveValidationTarget(string issue, List<Sprite2D> candidates)
+	private string ResolveValidationTargetKey(string issue, List<Sprite2D> candidates)
 	{
 		if (string.IsNullOrWhiteSpace(issue) || candidates == null || candidates.Count == 0)
 		{
-			return null;
+			return string.Empty;
 		}
 
 		foreach (Sprite2D candidate in candidates
@@ -2602,12 +2610,12 @@ public partial class MissionSceneBuilder : Node2D
 				if (!string.IsNullOrWhiteSpace(lookupName)
 					&& issue.Contains(lookupName, System.StringComparison.OrdinalIgnoreCase))
 				{
-					return candidate;
+					return BuildValidationTargetKey(candidate);
 				}
 			}
 		}
 
-		return null;
+		return string.Empty;
 	}
 
 	private static ValidationSeverity InferValidationSeverity(string issue)
@@ -2662,6 +2670,79 @@ public partial class MissionSceneBuilder : Node2D
 			ValidationSeverity.Warning => "[WARN]",
 			_ => "[INFO]"
 		};
+	}
+
+	private string BuildValidationTargetKey(Sprite2D sprite)
+	{
+		if (sprite == null)
+		{
+			return string.Empty;
+		}
+
+		int column = sprite.GetMeta("column", int.MinValue).AsInt32();
+		int row = sprite.GetMeta("row", int.MinValue).AsInt32();
+		string itemType = sprite.GetMeta("item_type", string.Empty).AsString();
+		string markerId = sprite.GetMeta("marker_id", string.Empty).AsString();
+		string tileId = sprite.GetMeta("tile_id", string.Empty).AsString();
+		string label = sprite.GetMeta("logic_label", string.Empty).AsString();
+		return $"{itemType}|{column}|{row}|{markerId}|{tileId}|{label}";
+	}
+
+	private Sprite2D ResolveValidationTargetFromKey(string targetKey)
+	{
+		if (string.IsNullOrWhiteSpace(targetKey))
+		{
+			return null;
+		}
+
+		string[] parts = targetKey.Split('|');
+		if (parts.Length < 6)
+		{
+			return null;
+		}
+
+		string itemType = parts[0];
+		if (!int.TryParse(parts[1], out int column) || !int.TryParse(parts[2], out int row))
+		{
+			return null;
+		}
+
+		string markerId = parts[3];
+		string tileId = parts[4];
+		string label = parts[5];
+
+		IEnumerable<Node2D> layers = itemType == "marker"
+			? new[] { _markerLayer }
+			: new[] { _propLayer, _wallLayer, _floorLayer };
+		foreach (Node2D layer in layers.Where(layer => layer != null))
+		{
+			foreach (Sprite2D sprite in EnumerateLiveSprites(layer))
+			{
+				if (sprite.GetMeta("column", int.MinValue).AsInt32() != column || sprite.GetMeta("row", int.MinValue).AsInt32() != row)
+				{
+					continue;
+				}
+
+				if (!string.IsNullOrWhiteSpace(markerId) && sprite.GetMeta("marker_id", string.Empty).AsString() != markerId)
+				{
+					continue;
+				}
+
+				if (!string.IsNullOrWhiteSpace(tileId) && sprite.GetMeta("tile_id", string.Empty).AsString() != tileId)
+				{
+					continue;
+				}
+
+				if (!string.IsNullOrWhiteSpace(label) && sprite.GetMeta("logic_label", string.Empty).AsString() != label)
+				{
+					continue;
+				}
+
+				return sprite;
+			}
+		}
+
+		return null;
 	}
 
 	private IEnumerable<string> GetValidationLookupNames(Sprite2D sprite)
@@ -2767,20 +2848,21 @@ public partial class MissionSceneBuilder : Node2D
 		}
 
 		ValidationIssueEntry entry = _validationEntries[issueIndex];
-		if (entry?.Target == null || !GodotObject.IsInstanceValid(entry.Target))
+		Sprite2D target = ResolveValidationTargetFromKey(entry?.TargetKey ?? string.Empty);
+		if (target == null || !GodotObject.IsInstanceValid(target))
 		{
 			SetStatus(entry?.Message ?? "Validation issue has no linked item.");
 			return;
 		}
 
-		SelectPlacedSprite(entry.Target);
+		SelectPlacedSprite(target);
 		if (_camera != null)
 		{
-			_camera.Position = entry.Target.Position;
+			_camera.Position = target.Position;
 		}
 
-		int column = entry.Target.GetMeta("column", 0).AsInt32();
-		int row = entry.Target.GetMeta("row", 0).AsInt32();
+		int column = target.GetMeta("column", 0).AsInt32();
+		int row = target.GetMeta("row", 0).AsInt32();
 		SetStatus($"Focused validation issue at {column},{row}: {entry.Message}");
 	}
 
@@ -2899,7 +2981,8 @@ public partial class MissionSceneBuilder : Node2D
 				Path = string.Empty,
 				DisplayName = "None",
 				Description = "No prop definition selected.",
-				Exists = true
+				Exists = true,
+				VisualScaleMultiplier = 0.60f
 			};
 		}
 
@@ -2934,7 +3017,8 @@ public partial class MissionSceneBuilder : Node2D
 			DisplayName = displayName,
 			Description = description,
 			Icon = icon,
-			Exists = exists
+			Exists = exists,
+			VisualScaleMultiplier = definition?.VisualScaleMultiplier > 0f ? definition.VisualScaleMultiplier : PropVisualSizing.DefaultVisualScaleMultiplier
 		};
 	}
 
@@ -2963,9 +3047,14 @@ public partial class MissionSceneBuilder : Node2D
 			.ToList();
 	}
 
-	private static Texture2D GetFallbackPropPreviewTexture()
+	private Texture2D GetFallbackPropPreviewTexture()
 	{
-		Image image = Image.CreateEmpty(84, 84, false, Image.Format.Rgba8);
+		if (_fallbackPropPreviewTexture != null)
+		{
+			return _fallbackPropPreviewTexture;
+		}
+
+		using Image image = Image.CreateEmpty(84, 84, false, Image.Format.Rgba8);
 		Color frame = new Color(0.47f, 0.86f, 0.92f, 1f);
 		Color fill = new Color(0.13f, 0.22f, 0.28f, 0.85f);
 		for (int y = 0; y < 84; y++)
@@ -2977,26 +3066,12 @@ public partial class MissionSceneBuilder : Node2D
 			}
 		}
 
-		return ImageTexture.CreateFromImage(image);
+		_fallbackPropPreviewTexture = ImageTexture.CreateFromImage(image);
+		return _fallbackPropPreviewTexture;
 	}
 
-	private static Vector2 GetPlacedPropPreviewScale(Texture2D texture)
-	{
-		if (texture == null)
-		{
-			return Vector2.One;
-		}
-
-		Vector2 size = texture.GetSize();
-		float maxDimension = Mathf.Max(size.X, size.Y);
-		if (maxDimension <= 0f)
-		{
-			return Vector2.One;
-		}
-
-		float scale = maxDimension > 132f ? 132f / maxDimension : 1f;
-		return new Vector2(scale, scale);
-	}
+	private static Vector2 GetPlacedPropPreviewScale(Texture2D texture, float visualScaleMultiplier)
+		=> PropVisualSizing.GetScale(texture, visualScaleMultiplier);
 
 	private static bool IsLogicCapableSprite(Sprite2D sprite)
 	{
@@ -3007,6 +3082,99 @@ public partial class MissionSceneBuilder : Node2D
 	private static bool IsPlacedPropSprite(Sprite2D sprite)
 	{
 		return sprite?.GetMeta("item_type", string.Empty).AsString() == "placed_prop";
+	}
+
+	private static bool DoesSpriteAffectValidation(Sprite2D sprite)
+	{
+		if (!IsLiveSprite(sprite))
+		{
+			return false;
+		}
+
+		if (!string.IsNullOrEmpty(sprite.GetMeta("marker_id", string.Empty).AsString()))
+		{
+			return true;
+		}
+
+		return IsPlacedPropSprite(sprite) || IsLogicCapableSprite(sprite);
+	}
+
+	private static bool IsFloorSprite(Sprite2D sprite)
+	{
+		if (!IsLiveSprite(sprite))
+		{
+			return false;
+		}
+
+		string tileId = sprite.GetMeta("tile_id", string.Empty).AsString();
+		return MissionTileCatalog.TryGetById(tileId, out MissionTileDefinition definition)
+			&& definition.Category == MissionTileCategory.Floor;
+	}
+
+	private void MarkPlacedMapCenterDirty()
+	{
+		_placedMapCenterDirty = true;
+	}
+
+	private static bool IsLiveNode(Node node)
+	{
+		return node != null && GodotObject.IsInstanceValid(node) && !node.IsQueuedForDeletion();
+	}
+
+	private static bool IsLiveSprite(Sprite2D sprite)
+	{
+		return IsLiveNode(sprite);
+	}
+
+	private void SanitizeTransientSpriteReferences()
+	{
+		if (!IsLiveSprite(_draggedSprite))
+		{
+			_draggedSprite = null;
+		}
+
+		if (!IsLiveSprite(_selectedPlacedSprite))
+		{
+			_selectedPlacedSprite = null;
+		}
+	}
+
+	private bool TryGetDraggedSprite(out Sprite2D sprite)
+	{
+		if (!IsLiveSprite(_draggedSprite))
+		{
+			_draggedSprite = null;
+		}
+
+		sprite = _draggedSprite;
+		return sprite != null;
+	}
+
+	private bool TryGetSelectedPlacedSprite(out Sprite2D sprite)
+	{
+		if (!IsLiveSprite(_selectedPlacedSprite))
+		{
+			_selectedPlacedSprite = null;
+		}
+
+		sprite = _selectedPlacedSprite;
+		return sprite != null;
+	}
+
+	private static IEnumerable<Sprite2D> EnumerateLiveSprites(Node2D layer)
+	{
+		if (!IsLiveNode(layer))
+		{
+			yield break;
+		}
+
+		foreach (Node child in layer.GetChildren())
+		{
+			if (child is Sprite2D sprite && IsLiveSprite(sprite))
+			{
+				yield return sprite;
+			}
+		}
 	}
 
 	private BuilderLayer GetLayerForTile(MissionTileDefinition definition)
@@ -3117,7 +3285,17 @@ public partial class MissionSceneBuilder : Node2D
 
 	private Texture2D GetMarkerIconTexture(MissionMarkerDefinition definition)
 	{
-		Image image = Image.CreateEmpty(72, 72, false, Image.Format.Rgba8);
+		if (definition == null)
+		{
+			return null;
+		}
+
+		if (_markerIconCache.TryGetValue(definition.Id, out Texture2D cachedTexture))
+		{
+			return cachedTexture;
+		}
+
+		using Image image = Image.CreateEmpty(72, 72, false, Image.Format.Rgba8);
 		Color white = Colors.White;
 		Vector2 center = new Vector2(36f, 36f);
 		for (int y = 0; y < 72; y++)
@@ -3148,6 +3326,8 @@ public partial class MissionSceneBuilder : Node2D
 			}
 		}
 
-		return ImageTexture.CreateFromImage(image);
+		Texture2D texture = ImageTexture.CreateFromImage(image);
+		_markerIconCache[definition.Id] = texture;
+		return texture;
 	}
 }

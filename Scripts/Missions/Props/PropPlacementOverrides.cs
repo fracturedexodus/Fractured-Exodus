@@ -128,6 +128,13 @@ public static class PropPlacementOverrides
 				MergeFlag(definition.SetFlags, "smuggler_cache_opened");
 				definition.SuccessMessage = "Cache breached. Contraband manifests secured.";
 				break;
+			case "smuggler_route_cache":
+				definition.RewardRawMaterials = 10;
+				definition.RewardEnergyCores = 1;
+				definition.RewardAncientTech = 3;
+				MergeFlag(definition.SetFlags, "smuggler_route_cache_secured");
+				definition.SuccessMessage = "Route ledgers extracted from the vault core.";
+				break;
 			case "relay_archive_cache":
 				definition.RewardRawMaterials = 12;
 				definition.RewardEnergyCores = 1;

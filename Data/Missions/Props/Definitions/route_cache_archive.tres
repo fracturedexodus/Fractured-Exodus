@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="PropDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://Scripts/Missions/Props/PropDefinition.cs" id="1_prop_definition"]
+
+[resource]
+script = ExtResource("1_prop_definition")
+PropId = "route_cache_archive"
+DisplayName = "Route Cache Archive"
+Description = "A shielded archive spindle full of embargo routes, hush-ledgers, and burned transit keys."
+InteractionType = 1
+ScenePath = "res://Scenes/Missions/Props/LootCrateProp.tscn"
+SpriteTexturePath = "res://Assets/Missions/BlackSiteRelay/GeminiSheetSet/props/archive_core.png"
+InteractionRange = 1
+OneShot = true
+HideWhenConsumed = true
+SetFlags = PackedStringArray("smuggler_route_cache_secured")
+SuccessMessage = "Route ledgers extracted from the vault core."
+RewardRawMaterials = 10
+RewardEnergyCores = 1
+RewardAncientTech = 3

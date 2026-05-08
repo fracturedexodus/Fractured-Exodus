@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="PropDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://Scripts/Missions/Props/PropDefinition.cs" id="1_prop_definition"]
+
+[resource]
+script = ExtResource("1_prop_definition")
+PropId = "broker_veil_terminal"
+DisplayName = "Broker Veil Uplink"
+Description = "A hard-lined broker console carrying Veil's standing offers, blackmail ledgers, and vault access protocols."
+InteractionType = 0
+ScenePath = "res://Scenes/Missions/Props/DialogueTerminalProp.tscn"
+SpriteTexturePath = "res://Assets/Missions/BlackSiteRelay/GeminiSheetSet/props/console_power.png"
+InteractionRange = 1
+OneShot = true
+HideWhenConsumed = false
+SetFlags = PackedStringArray("smuggler_broker_briefed")
+DialogueId = "smuggler_exchange_intro"
+SuccessMessage = "Veil's uplink spills the broker's terms into your tac-net."

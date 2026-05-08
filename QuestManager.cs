@@ -109,12 +109,12 @@ public static class QuestManager
 					"Start", new DialogueNode
 					{
 						SpeakerName = "Broker Veil",
-						Text = "You made it past the false manifests and dead channels. The crate vault is open, but Customs patrols are closing in. Take the data cache, take the contraband, or make this disappear before anyone can trace it.",
+						Text = "The exchange is bleeding pressure. Veil's uplink is still broadcasting and every patrol cutter in the corridor can smell the leak. If we want anything from this outpost, we need the broker's terms, the safehouse manifest, and whatever survived in the vault.",
 						Options = new Dictionary<string, string>
 						{
-							{ "What's in the cache?", "Cache" },
-							{ "Who's coming for this place?", "Threat" },
-							{ "We understand. We'll decide what leaves with us.", "End" }
+							{ "Review the broker's terms.", "Cache" },
+							{ "Who is converging on the station?", "Threat" },
+							{ "Understood. We'll work the outpost and choose our exit.", "End" }
 						}
 					}
 				},
@@ -122,11 +122,11 @@ public static class QuestManager
 					"Cache", new DialogueNode
 					{
 						SpeakerName = "Broker Veil",
-						Text = "Navigation fragments, embargo ledgers, and old gate-route access stamps. Worth a fortune if you know who to sell them to. Worth a firing line if you don't.",
+						Text = "The vault holds route ledgers and contraband manifests. The medbay holds my wounded runners. Help the people and I can still broker your way out. Strip the vault and you'll leave rich, but every ghost on this station becomes your debt.",
 						Options = new Dictionary<string, string>
 						{
-							{ "Back to the vault.", "Start" },
-							{ "We'll take what matters and move.", "End" }
+							{ "Back to the uplink summary.", "Start" },
+							{ "We have enough. We'll make the call ourselves.", "End" }
 						}
 					}
 				},
@@ -134,11 +134,112 @@ public static class QuestManager
 					"Threat", new DialogueNode
 					{
 						SpeakerName = "Broker Veil",
-						Text = "Patrol cutters and hired reclaimers. If they board the station first, they'll scrub every ledger and vent anyone still breathing in here. You have minutes, not hours.",
+						Text = "Patrol cutters, reclaim crews, and two licensed evidence burners. If they board first, they erase the vault, purge the medbay, and put our names in an open ledger for every hungry ship in the Reach.",
 						Options = new Dictionary<string, string>
 						{
-							{ "Back to the decision.", "Start" },
+							{ "Back to the uplink summary.", "Start" },
 							{ "Then we move now.", "End" }
+						}
+					}
+				}
+			}
+		},
+		{
+			"smuggler_exchange_intro", new Dictionary<string, DialogueNode>
+			{
+				{
+					"Start", new DialogueNode
+					{
+						SpeakerName = "Broker Veil",
+						Text = "You found the uplink before the patrols cut it. Good. The vault can be unsealed from the override console, but only if you understand the price: my wounded are boxed into the medbay, and every ledger in the vault can put a dozen routes to the torch.",
+						Options = new Dictionary<string, string>
+						{
+							{ "What does the vault actually hold?", "Vault" },
+							{ "Who is trapped in the medbay?", "Medbay" },
+							{ "Enough. We'll move through the station and decide.", "End" }
+						}
+					}
+				},
+				{
+					"Vault", new DialogueNode
+					{
+						SpeakerName = "Broker Veil",
+						Text = "Route ledgers, hush-pay manifests, and keys to old embargo lanes. Take them and you'll own the corridor for a season. Lose them and the patrols own every ship that ever trusted me.",
+						Options = new Dictionary<string, string>
+						{
+							{ "And the medbay?", "Medbay" },
+							{ "Back to the uplink.", "Start" },
+							{ "We'll handle the station from here.", "End" }
+						}
+					}
+				},
+				{
+					"Medbay", new DialogueNode
+					{
+						SpeakerName = "Broker Veil",
+						Text = "Couriers, cutters, a pair of civilians that happened to be buying medicine when the station sealed. They don't care about ledgers or contracts. They just need a ship willing to take them before the burners arrive.",
+						Options = new Dictionary<string, string>
+						{
+							{ "Back to the uplink.", "Start" },
+							{ "We know enough. Hold this channel.", "End" }
+						}
+					}
+				}
+			}
+		},
+		{
+			"smuggler_exchange_survivors", new Dictionary<string, DialogueNode>
+			{
+				{
+					"Start", new DialogueNode
+					{
+						SpeakerName = "Safehouse Medic",
+						Text = "Three runners are stable enough to move, two civilians are in shock, and the station's auto-doc is cycling on stolen power. Give us a corridor and we'll reach your shuttle under our own legs.",
+						Options = new Dictionary<string, string>
+						{
+							{ "You're coming with us. Be ready to move.", "End" },
+							{ "What happens if we leave you here?", "Risk" }
+						}
+					}
+				},
+				{
+					"Risk", new DialogueNode
+					{
+						SpeakerName = "Safehouse Medic",
+						Text = "Patrol evidence teams don't take witnesses. They'll call it contamination control and vent this room into the black. If you're offering extraction, say it plain so I can keep these people breathing until the doors open.",
+						Options = new Dictionary<string, string>
+						{
+							{ "Understood. Prepare them for evac.", "End" },
+							{ "Hold for a few more minutes.", "Start" }
+						}
+					}
+				}
+			}
+		},
+		{
+			"smuggler_exchange_patrols", new Dictionary<string, DialogueNode>
+			{
+				{
+					"Start", new DialogueNode
+					{
+						SpeakerName = "Traffic Scrubber",
+						Text = "Patrol feed decrypted. Two cutters are aligning for docking arms and a reclaimer tug is holding back to torch the vault after the sweep. You have one clean exit vector if you move before they finish triangulating Veil's relay.",
+						Options = new Dictionary<string, string>
+						{
+							{ "Mark the clean vector and keep the feed running.", "End" },
+							{ "Which section do they hit first?", "Impact" }
+						}
+					}
+				},
+				{
+					"Impact", new DialogueNode
+					{
+						SpeakerName = "Traffic Scrubber",
+						Text = "Boarders sweep the vault side first. The medbay dies second. If you were planning to strip contraband and run, this is the warning that makes it possible.",
+						Options = new Dictionary<string, string>
+						{
+							{ "Good. Keep them blind a little longer.", "End" },
+							{ "Back to the patrol feed.", "Start" }
 						}
 					}
 				}

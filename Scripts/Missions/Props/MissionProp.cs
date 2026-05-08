@@ -147,7 +147,9 @@ public partial class MissionProp : Area2D, IInteractable
 			return;
 		}
 
-		_visualSprite.Texture = GD.Load<Texture2D>(Definition.SpriteTexturePath);
+		Texture2D texture = GD.Load<Texture2D>(Definition.SpriteTexturePath);
+		_visualSprite.Texture = texture;
+		_visualSprite.Scale = PropVisualSizing.GetScale(texture, Definition.VisualScaleMultiplier);
 	}
 
 	private void ApplyDefinitionDefaults(PropInteractionResult result, PropInteractionContext context)
