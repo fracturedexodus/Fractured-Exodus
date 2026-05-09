@@ -153,6 +153,10 @@ public class OfficerStateSaveData
 	public List<string> Flags { get; set; } = new List<string>();
 	public List<string> CompletedScenes { get; set; } = new List<string>();
 	public List<string> PersonalInventoryItemIDs { get; set; } = new List<string>();
+	public string EquippedMissionWeaponId { get; set; } = string.Empty;
+	public string EquippedMissionShieldId { get; set; } = string.Empty;
+	public List<string> OwnedMissionWeaponIds { get; set; } = new List<string>();
+	public List<string> OwnedMissionShieldIds { get; set; } = new List<string>();
 
 	public static OfficerStateSaveData FromRuntime(OfficerState officer)
 	{
@@ -176,7 +180,11 @@ public class OfficerStateSaveData
 			PersonalQuestID = officer?.PersonalQuestID ?? string.Empty,
 			Flags = (officer?.Flags ?? new List<string>()).ToList(),
 			CompletedScenes = (officer?.CompletedScenes ?? new List<string>()).ToList(),
-			PersonalInventoryItemIDs = (officer?.PersonalInventoryItemIDs ?? new List<string>()).ToList()
+			PersonalInventoryItemIDs = (officer?.PersonalInventoryItemIDs ?? new List<string>()).ToList(),
+			EquippedMissionWeaponId = officer?.EquippedMissionWeaponId ?? string.Empty,
+			EquippedMissionShieldId = officer?.EquippedMissionShieldId ?? string.Empty,
+			OwnedMissionWeaponIds = (officer?.OwnedMissionWeaponIds ?? new List<string>()).ToList(),
+			OwnedMissionShieldIds = (officer?.OwnedMissionShieldIds ?? new List<string>()).ToList()
 		};
 	}
 
@@ -202,7 +210,11 @@ public class OfficerStateSaveData
 			PersonalQuestID = PersonalQuestID,
 			Flags = Flags.ToList(),
 			CompletedScenes = CompletedScenes.ToList(),
-			PersonalInventoryItemIDs = PersonalInventoryItemIDs.ToList()
+			PersonalInventoryItemIDs = PersonalInventoryItemIDs.ToList(),
+			EquippedMissionWeaponId = EquippedMissionWeaponId,
+			EquippedMissionShieldId = EquippedMissionShieldId,
+			OwnedMissionWeaponIds = OwnedMissionWeaponIds.ToList(),
+			OwnedMissionShieldIds = OwnedMissionShieldIds.ToList()
 		};
 	}
 
@@ -228,7 +240,11 @@ public class OfficerStateSaveData
 			PersonalQuestID = dict.ContainsKey("PersonalQuestID") ? (string)dict["PersonalQuestID"] : string.Empty,
 			Flags = CampaignSaveData.FromStringArray(dict.ContainsKey("Flags") ? (Godot.Collections.Array)dict["Flags"] : new Godot.Collections.Array()),
 			CompletedScenes = CampaignSaveData.FromStringArray(dict.ContainsKey("CompletedScenes") ? (Godot.Collections.Array)dict["CompletedScenes"] : new Godot.Collections.Array()),
-			PersonalInventoryItemIDs = CampaignSaveData.FromStringArray(dict.ContainsKey("PersonalInventoryItemIDs") ? (Godot.Collections.Array)dict["PersonalInventoryItemIDs"] : new Godot.Collections.Array())
+			PersonalInventoryItemIDs = CampaignSaveData.FromStringArray(dict.ContainsKey("PersonalInventoryItemIDs") ? (Godot.Collections.Array)dict["PersonalInventoryItemIDs"] : new Godot.Collections.Array()),
+			EquippedMissionWeaponId = dict.ContainsKey("EquippedMissionWeaponId") ? (string)dict["EquippedMissionWeaponId"] : string.Empty,
+			EquippedMissionShieldId = dict.ContainsKey("EquippedMissionShieldId") ? (string)dict["EquippedMissionShieldId"] : string.Empty,
+			OwnedMissionWeaponIds = CampaignSaveData.FromStringArray(dict.ContainsKey("OwnedMissionWeaponIds") ? (Godot.Collections.Array)dict["OwnedMissionWeaponIds"] : new Godot.Collections.Array()),
+			OwnedMissionShieldIds = CampaignSaveData.FromStringArray(dict.ContainsKey("OwnedMissionShieldIds") ? (Godot.Collections.Array)dict["OwnedMissionShieldIds"] : new Godot.Collections.Array())
 		};
 	}
 
@@ -254,7 +270,11 @@ public class OfficerStateSaveData
 			{ "PersonalQuestID", PersonalQuestID },
 			{ "Flags", CampaignSaveData.ToVariantArray(Flags) },
 			{ "CompletedScenes", CampaignSaveData.ToVariantArray(CompletedScenes) },
-			{ "PersonalInventoryItemIDs", CampaignSaveData.ToVariantArray(PersonalInventoryItemIDs) }
+			{ "PersonalInventoryItemIDs", CampaignSaveData.ToVariantArray(PersonalInventoryItemIDs) },
+			{ "EquippedMissionWeaponId", EquippedMissionWeaponId },
+			{ "EquippedMissionShieldId", EquippedMissionShieldId },
+			{ "OwnedMissionWeaponIds", CampaignSaveData.ToVariantArray(OwnedMissionWeaponIds) },
+			{ "OwnedMissionShieldIds", CampaignSaveData.ToVariantArray(OwnedMissionShieldIds) }
 		};
 	}
 }

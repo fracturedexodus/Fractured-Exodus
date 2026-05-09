@@ -85,7 +85,7 @@ public class OfficerService
 		OfficerTemplate template = GetPresetTemplateForShip(shipName);
 		if (template == null)
 		{
-			return new OfficerState
+			OfficerState fallbackOfficer = new OfficerState
 			{
 				OfficerID = $"preset_missing_{Sanitize(shipName)}",
 				TemplateOfficerID = string.Empty,
@@ -101,9 +101,12 @@ public class OfficerService
 				Approval = 0,
 				CombatAbilityID = "TacticalCommand"
 			};
+
+			OfficerMissionLoadoutService.EnsureOfficerLoadout(fallbackOfficer);
+			return fallbackOfficer;
 		}
 
-		return new OfficerState
+		OfficerState presetOfficer = new OfficerState
 		{
 			OfficerID = template.OfficerID,
 			TemplateOfficerID = template.OfficerID,
@@ -121,6 +124,9 @@ public class OfficerService
 			CombatAbilityID = template.CombatAbilityID,
 			PersonalQuestID = template.PersonalQuestID
 		};
+
+		OfficerMissionLoadoutService.EnsureOfficerLoadout(presetOfficer);
+		return presetOfficer;
 	}
 
 	public OfficerState CreateCustomOfficer(CustomOfficerRequest request)
@@ -130,7 +136,7 @@ public class OfficerService
 		string portraitPath = !string.IsNullOrEmpty(request.PortraitPath) ? request.PortraitPath : GetPresetTemplateForShip(shipName)?.PortraitPath ?? string.Empty;
 		string specialty = string.IsNullOrEmpty(request.Specialty) ? Specialties[0] : request.Specialty;
 
-		return new OfficerState
+		OfficerState customOfficer = new OfficerState
 		{
 			OfficerID = $"custom_{Sanitize(shipName)}",
 			TemplateOfficerID = string.Empty,
@@ -149,6 +155,9 @@ public class OfficerService
 			CombatAbilityID = GetAbilityForSpecialty(specialty),
 			PersonalQuestID = string.Empty
 		};
+
+		OfficerMissionLoadoutService.EnsureOfficerLoadout(customOfficer);
+		return customOfficer;
 	}
 
 	public void AssignOfficerToShip(string shipName, OfficerState officer)
@@ -159,6 +168,7 @@ public class OfficerService
 		}
 
 		officer.ShipName = shipName;
+		OfficerMissionLoadoutService.EnsureOfficerLoadout(officer);
 		_globalData.ShipOfficers[shipName] = officer;
 	}
 

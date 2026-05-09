@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="MissionWeaponDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://Scripts/Missions/Equipment/MissionWeaponDefinition.cs" id="1_weapon"]
+
+[resource]
+script = ExtResource("1_weapon")
+WeaponId = "scrap_pistol"
+DisplayName = "Scrap Pistol"
+Description = "A scavenger sidearm that spits rough metal slugs at medium range."
+IsMelee = false
+AttackRange = 3
+MinDamage = 2
+MaxDamage = 4
+BonusShieldDamage = 0
+ShieldPiercingDamage = 0
+StatusEffectId = ""
+StatusEffectChance = 0.0

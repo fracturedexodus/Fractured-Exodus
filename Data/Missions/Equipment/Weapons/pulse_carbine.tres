@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="MissionWeaponDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://Scripts/Missions/Equipment/MissionWeaponDefinition.cs" id="1_weapon"]
+
+[resource]
+script = ExtResource("1_weapon")
+WeaponId = "pulse_carbine"
+DisplayName = "Pulse Carbine"
+Description = "A disciplined burst carbine balanced for reliable ranged pressure and shield stripping."
+IsMelee = false
+AttackRange = 4
+MinDamage = 3
+MaxDamage = 5
+BonusShieldDamage = 1
+ShieldPiercingDamage = 0
+StatusEffectId = ""
+StatusEffectChance = 0.0

@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="MissionShieldDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://Scripts/Missions/Equipment/MissionShieldDefinition.cs" id="1_shield"]
+
+[resource]
+script = ExtResource("1_shield")
+ShieldId = "tuned_barrier"
+DisplayName = "Tuned Barrier"
+Description = "A finely calibrated shield lattice that restores charge faster between exchanges."
+CapacityBonus = 3
+RechargePerTurn = 2

@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="MissionWeaponDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://Scripts/Missions/Equipment/MissionWeaponDefinition.cs" id="1_weapon"]
+
+[resource]
+script = ExtResource("1_weapon")
+WeaponId = "shock_maul"
+DisplayName = "Shock Maul"
+Description = "A brutal kinetic maul that hammers shields and leaves targets staggered."
+IsMelee = true
+AttackRange = 1
+MinDamage = 3
+MaxDamage = 5
+BonusShieldDamage = 2
+ShieldPiercingDamage = 0
+StatusEffectId = "disrupted"
+StatusEffectChance = 0.2

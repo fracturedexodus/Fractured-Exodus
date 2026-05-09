@@ -31,12 +31,23 @@ public partial class OfficerPawn : Node2D
 	public Vector2I CurrentCell { get; private set; } = Vector2I.Zero;
 	public int MaxHP { get; private set; } = 14;
 	public int CurrentHP { get; private set; } = 14;
+	public int MaxShields { get; private set; } = 5;
+	public int CurrentShields { get; private set; } = 5;
 	public int MaxActions { get; private set; } = 2;
 	public int CurrentActions { get; private set; } = 2;
+	public int AttackMinDamage { get; private set; } = 2;
 	public int AttackRange { get; private set; } = 3;
 	public int AttackDamage { get; private set; } = 4;
+	public int BonusShieldDamage { get; private set; }
+	public int ShieldPiercingDamage { get; private set; }
 	public int InitiativeBonus { get; private set; } = 1;
 	public string WeaponName { get; private set; } = "Sidearm";
+	public string ShieldName { get; private set; } = "Field Aegis";
+	public int ShieldRechargePerTurn { get; private set; } = 1;
+	public bool UsesMeleeWeapon { get; private set; }
+	public string WeaponStatusEffectId { get; private set; } = string.Empty;
+	public float WeaponStatusEffectChance { get; private set; }
+	public string ActiveStatusEffectId { get; private set; } = string.Empty;
 	public bool IsDead { get; private set; }
 	public bool IsMoving => _isMoving;
 
@@ -107,6 +118,8 @@ public partial class OfficerPawn : Node2D
 		Specialty = officer.Specialty;
 		CombatAbilityId = officer.CombatAbilityID;
 		ApplyCombatProfileForSpecialty(officer.Specialty);
+		OfficerMissionLoadoutService.EnsureOfficerLoadout(officer);
+		ApplyMissionLoadout(officer);
 
 		if (_nameLabel != null)
 		{
@@ -138,6 +151,17 @@ public partial class OfficerPawn : Node2D
 		}
 
 		CurrentActions = MaxActions;
+		if (ShieldRechargePerTurn > 0 && CurrentShields < MaxShields)
+		{
+			CurrentShields = Mathf.Clamp(CurrentShields + ShieldRechargePerTurn, 0, MaxShields);
+		}
+
+		if (ActiveStatusEffectId == "disrupted")
+		{
+			CurrentActions = Mathf.Max(0, CurrentActions - 1);
+			ActiveStatusEffectId = string.Empty;
+		}
+
 		EmitSignal(SignalName.CombatStateChanged, this);
 	}
 
@@ -157,14 +181,25 @@ public partial class OfficerPawn : Node2D
 		EmitSignal(SignalName.CombatStateChanged, this);
 	}
 
-	public void ApplyDamage(int damage)
+	public CombatDamageResult ApplyDamage(int damage, int bonusShieldDamage = 0, int directHealthDamage = 0)
 	{
-		if (damage <= 0 || IsDead)
+		if ((damage <= 0 && bonusShieldDamage <= 0 && directHealthDamage <= 0) || IsDead)
 		{
-			return;
+			return new CombatDamageResult
+			{
+				IncomingDamage = Mathf.Max(0, damage) + Mathf.Max(0, bonusShieldDamage) + Mathf.Max(0, directHealthDamage),
+				RemainingShields = CurrentShields,
+				RemainingHealth = CurrentHP,
+				WasFatal = IsDead
+			};
 		}
 
-		CurrentHP = Mathf.Max(0, CurrentHP - damage);
+		int shieldDamage = Mathf.Min(CurrentShields, Mathf.Max(0, damage) + Mathf.Max(0, bonusShieldDamage));
+		CurrentShields = Mathf.Max(0, CurrentShields - shieldDamage);
+		int baseDamageAbsorbedByShields = Mathf.Min(Mathf.Max(0, damage), shieldDamage);
+		int remainingDamage = Mathf.Max(0, damage - baseDamageAbsorbedByShields);
+		int healthDamage = Mathf.Min(CurrentHP, remainingDamage + Mathf.Max(0, directHealthDamage));
+		CurrentHP = Mathf.Max(0, CurrentHP - healthDamage);
 		if (CurrentHP <= 0)
 		{
 			IsDead = true;
@@ -174,6 +209,43 @@ public partial class OfficerPawn : Node2D
 		}
 
 		EmitSignal(SignalName.CombatStateChanged, this);
+		return new CombatDamageResult
+		{
+			IncomingDamage = Mathf.Max(0, damage) + Mathf.Max(0, bonusShieldDamage) + Mathf.Max(0, directHealthDamage),
+			ShieldDamage = shieldDamage,
+			HealthDamage = healthDamage,
+			RemainingShields = CurrentShields,
+			RemainingHealth = CurrentHP,
+			WasFatal = IsDead
+		};
+	}
+
+	public MissionAttackProfile GetAttackProfile()
+	{
+		return new MissionAttackProfile
+		{
+			WeaponName = WeaponName,
+			IsMelee = UsesMeleeWeapon,
+			Range = AttackRange,
+			MinDamage = AttackMinDamage,
+			MaxDamage = AttackDamage,
+			BonusShieldDamage = BonusShieldDamage,
+			ShieldPiercingDamage = ShieldPiercingDamage,
+			StatusEffectId = WeaponStatusEffectId,
+			StatusEffectChance = WeaponStatusEffectChance
+		};
+	}
+
+	public bool TryApplyStatusEffect(string statusEffectId)
+	{
+		if (IsDead || string.IsNullOrWhiteSpace(statusEffectId))
+		{
+			return false;
+		}
+
+		ActiveStatusEffectId = statusEffectId;
+		EmitSignal(SignalName.CombatStateChanged, this);
+		return true;
 	}
 
 	public void SetSelected(bool isSelected)
@@ -277,12 +349,23 @@ public partial class OfficerPawn : Node2D
 
 	private void ApplyCombatProfileForSpecialty(string specialty)
 	{
+		AttackMinDamage = 2;
+		BonusShieldDamage = 0;
+		ShieldPiercingDamage = 0;
+		WeaponStatusEffectId = string.Empty;
+		WeaponStatusEffectChance = 0f;
+		UsesMeleeWeapon = false;
+		ShieldRechargePerTurn = 1;
+		ShieldName = "Field Aegis";
+
 		switch (specialty)
 		{
 			case "Medical Triage":
 			case "Morale Support":
 				MaxHP = 16;
+				MaxShields = 4;
 				MaxActions = 2;
+				AttackMinDamage = 2;
 				AttackRange = 1;
 				AttackDamage = 3;
 				InitiativeBonus = 0;
@@ -291,7 +374,9 @@ public partial class OfficerPawn : Node2D
 			case "Salvage Efficiency":
 			case "Engine Routing":
 				MaxHP = 15;
+				MaxShields = 5;
 				MaxActions = 2;
+				AttackMinDamage = 2;
 				AttackRange = 1;
 				AttackDamage = 4;
 				InitiativeBonus = 1;
@@ -299,7 +384,9 @@ public partial class OfficerPawn : Node2D
 				break;
 			case "Missile Control":
 				MaxHP = 13;
+				MaxShields = 6;
 				MaxActions = 2;
+				AttackMinDamage = 3;
 				AttackRange = 4;
 				AttackDamage = 5;
 				InitiativeBonus = 1;
@@ -307,7 +394,9 @@ public partial class OfficerPawn : Node2D
 				break;
 			case "Tactical Command":
 				MaxHP = 14;
+				MaxShields = 6;
 				MaxActions = 2;
+				AttackMinDamage = 3;
 				AttackRange = 4;
 				AttackDamage = 5;
 				InitiativeBonus = 2;
@@ -315,15 +404,20 @@ public partial class OfficerPawn : Node2D
 				break;
 			case "Shield Tuning":
 				MaxHP = 17;
+				MaxShields = 8;
 				MaxActions = 2;
+				AttackMinDamage = 2;
 				AttackRange = 2;
 				AttackDamage = 4;
 				InitiativeBonus = 0;
 				WeaponName = "Defense Pistol";
+				ShieldRechargePerTurn = 2;
 				break;
 			default:
 				MaxHP = 14;
+				MaxShields = 5;
 				MaxActions = 2;
+				AttackMinDamage = 2;
 				AttackRange = 3;
 				AttackDamage = 4;
 				InitiativeBonus = 1;
@@ -332,7 +426,34 @@ public partial class OfficerPawn : Node2D
 		}
 
 		CurrentHP = MaxHP;
+		CurrentShields = MaxShields;
 		CurrentActions = MaxActions;
+	}
+
+	private void ApplyMissionLoadout(OfficerState officer)
+	{
+		MissionWeaponDefinition weapon = OfficerMissionLoadoutService.GetEquippedWeapon(officer);
+		if (weapon != null)
+		{
+			WeaponName = string.IsNullOrWhiteSpace(weapon.DisplayName) ? WeaponName : weapon.DisplayName;
+			UsesMeleeWeapon = weapon.IsMelee;
+			AttackRange = Mathf.Max(1, weapon.AttackRange);
+			AttackMinDamage = Mathf.Max(1, weapon.MinDamage);
+			AttackDamage = Mathf.Max(AttackMinDamage, weapon.MaxDamage);
+			BonusShieldDamage = Mathf.Max(0, weapon.BonusShieldDamage);
+			ShieldPiercingDamage = Mathf.Max(0, weapon.ShieldPiercingDamage);
+			WeaponStatusEffectId = weapon.StatusEffectId ?? string.Empty;
+			WeaponStatusEffectChance = Mathf.Clamp(weapon.StatusEffectChance, 0f, 1f);
+		}
+
+		MissionShieldDefinition shield = OfficerMissionLoadoutService.GetEquippedShield(officer);
+		if (shield != null)
+		{
+			ShieldName = string.IsNullOrWhiteSpace(shield.DisplayName) ? ShieldName : shield.DisplayName;
+			MaxShields = Mathf.Max(0, MaxShields + shield.CapacityBonus);
+			CurrentShields = MaxShields;
+			ShieldRechargePerTurn = Mathf.Max(0, shield.RechargePerTurn);
+		}
 	}
 
 	private Vector2[] BuildDiamond(float halfWidth, float halfHeight)

@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="MissionWeaponDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://Scripts/Missions/Equipment/MissionWeaponDefinition.cs" id="1_weapon"]
+
+[resource]
+script = ExtResource("1_weapon")
+WeaponId = "cutting_rig"
+DisplayName = "Cutting Rig"
+Description = "A repurposed industrial cutter that can chew through softened armor and shield seams."
+IsMelee = true
+AttackRange = 1
+MinDamage = 2
+MaxDamage = 4
+BonusShieldDamage = 1
+ShieldPiercingDamage = 1
+StatusEffectId = ""
+StatusEffectChance = 0.0

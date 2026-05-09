@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="MissionWeaponDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://Scripts/Missions/Equipment/MissionWeaponDefinition.cs" id="1_weapon"]
+
+[resource]
+script = ExtResource("1_weapon")
+WeaponId = "defense_pistol"
+DisplayName = "Defense Pistol"
+Description = "A calibrated sidearm paired with shield-tuning officers to break hostile screens and stagger targets."
+IsMelee = false
+AttackRange = 2
+MinDamage = 2
+MaxDamage = 4
+BonusShieldDamage = 2
+ShieldPiercingDamage = 0
+StatusEffectId = "disrupted"
+StatusEffectChance = 0.25

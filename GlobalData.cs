@@ -119,6 +119,10 @@ public class OfficerState
 	public List<string> Flags { get; set; } = new List<string>();
 	public List<string> CompletedScenes { get; set; } = new List<string>();
 	public List<string> PersonalInventoryItemIDs { get; set; } = new List<string>();
+	public string EquippedMissionWeaponId { get; set; } = string.Empty;
+	public string EquippedMissionShieldId { get; set; } = string.Empty;
+	public List<string> OwnedMissionWeaponIds { get; set; } = new List<string>();
+	public List<string> OwnedMissionShieldIds { get; set; } = new List<string>();
 }
 
 // --- NEW: EQUIPMENT AND LOADOUT CLASSES ---

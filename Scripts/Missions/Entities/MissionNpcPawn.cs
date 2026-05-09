@@ -24,12 +24,23 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 	public bool IsHostile => _definition?.IsHostile == true;
 	public int MaxHP { get; private set; } = 10;
 	public int CurrentHP { get; private set; } = 10;
+	public int MaxShields { get; private set; } = 4;
+	public int CurrentShields { get; private set; } = 4;
 	public int MaxActions { get; private set; } = 2;
 	public int CurrentActions { get; private set; } = 2;
+	public int AttackMinDamage { get; private set; } = 1;
 	public int AttackRange { get; private set; } = 1;
 	public int AttackDamage { get; private set; } = 3;
+	public int BonusShieldDamage { get; private set; }
+	public int ShieldPiercingDamage { get; private set; }
 	public int InitiativeBonus { get; private set; }
 	public string WeaponName { get; private set; } = "Claws";
+	public string ShieldName { get; private set; } = "Reactive Screen";
+	public int ShieldRechargePerTurn { get; private set; } = 1;
+	public bool UsesMeleeWeapon { get; private set; }
+	public string WeaponStatusEffectId { get; private set; } = string.Empty;
+	public float WeaponStatusEffectChance { get; private set; }
+	public string ActiveStatusEffectId { get; private set; } = string.Empty;
 	public bool IsDead { get; private set; }
 	public bool IsMoving => _isMoving;
 
@@ -96,12 +107,28 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 		InteractionRange = Mathf.Max(1, definition.InteractionRange);
 		MaxHP = Mathf.Max(1, definition.MaxHP);
 		CurrentHP = MaxHP;
+		MaxShields = Mathf.Max(0, definition.MaxShields);
+		if (MaxShields <= 0 && definition.IsHostile)
+		{
+			MaxShields = 5;
+		}
+
+		CurrentShields = MaxShields;
 		MaxActions = Mathf.Max(1, definition.MaxActions);
 		CurrentActions = MaxActions;
+		AttackMinDamage = Mathf.Max(1, definition.AttackDamage / 2);
 		AttackRange = Mathf.Max(1, definition.AttackRange);
 		AttackDamage = Mathf.Max(1, definition.AttackDamage);
 		InitiativeBonus = definition.InitiativeBonus;
 		WeaponName = string.IsNullOrWhiteSpace(definition.WeaponName) ? "Claws" : definition.WeaponName;
+		BonusShieldDamage = 0;
+		ShieldPiercingDamage = 0;
+		ShieldRechargePerTurn = 1;
+		ShieldName = MaxShields > 0 ? "Reactive Screen" : "No Shields";
+		UsesMeleeWeapon = AttackRange <= 1;
+		WeaponStatusEffectId = string.Empty;
+		WeaponStatusEffectChance = 0f;
+		ApplyEquipmentDefinitions(definition);
 
 		if (_visualSprite != null)
 		{
@@ -178,6 +205,17 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 		}
 
 		CurrentActions = MaxActions;
+		if (ShieldRechargePerTurn > 0 && CurrentShields < MaxShields)
+		{
+			CurrentShields = Mathf.Clamp(CurrentShields + ShieldRechargePerTurn, 0, MaxShields);
+		}
+
+		if (ActiveStatusEffectId == "disrupted")
+		{
+			CurrentActions = Mathf.Max(0, CurrentActions - 1);
+			ActiveStatusEffectId = string.Empty;
+		}
+
 		EmitSignal(SignalName.CombatStateChanged, this);
 	}
 
@@ -197,14 +235,25 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 		EmitSignal(SignalName.CombatStateChanged, this);
 	}
 
-	public void ApplyDamage(int damage)
+	public CombatDamageResult ApplyDamage(int damage, int bonusShieldDamage = 0, int directHealthDamage = 0)
 	{
-		if (damage <= 0 || IsDead)
+		if ((damage <= 0 && bonusShieldDamage <= 0 && directHealthDamage <= 0) || IsDead)
 		{
-			return;
+			return new CombatDamageResult
+			{
+				IncomingDamage = Mathf.Max(0, damage) + Mathf.Max(0, bonusShieldDamage) + Mathf.Max(0, directHealthDamage),
+				RemainingShields = CurrentShields,
+				RemainingHealth = CurrentHP,
+				WasFatal = IsDead
+			};
 		}
 
-		CurrentHP = Mathf.Max(0, CurrentHP - damage);
+		int shieldDamage = Mathf.Min(CurrentShields, Mathf.Max(0, damage) + Mathf.Max(0, bonusShieldDamage));
+		CurrentShields = Mathf.Max(0, CurrentShields - shieldDamage);
+		int baseDamageAbsorbedByShields = Mathf.Min(Mathf.Max(0, damage), shieldDamage);
+		int remainingDamage = Mathf.Max(0, damage - baseDamageAbsorbedByShields);
+		int healthDamage = Mathf.Min(CurrentHP, remainingDamage + Mathf.Max(0, directHealthDamage));
+		CurrentHP = Mathf.Max(0, CurrentHP - healthDamage);
 		if (CurrentHP <= 0)
 		{
 			IsDead = true;
@@ -214,6 +263,43 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 		}
 
 		EmitSignal(SignalName.CombatStateChanged, this);
+		return new CombatDamageResult
+		{
+			IncomingDamage = Mathf.Max(0, damage) + Mathf.Max(0, bonusShieldDamage) + Mathf.Max(0, directHealthDamage),
+			ShieldDamage = shieldDamage,
+			HealthDamage = healthDamage,
+			RemainingShields = CurrentShields,
+			RemainingHealth = CurrentHP,
+			WasFatal = IsDead
+		};
+	}
+
+	public MissionAttackProfile GetAttackProfile()
+	{
+		return new MissionAttackProfile
+		{
+			WeaponName = WeaponName,
+			IsMelee = UsesMeleeWeapon,
+			Range = AttackRange,
+			MinDamage = AttackMinDamage,
+			MaxDamage = AttackDamage,
+			BonusShieldDamage = BonusShieldDamage,
+			ShieldPiercingDamage = ShieldPiercingDamage,
+			StatusEffectId = WeaponStatusEffectId,
+			StatusEffectChance = WeaponStatusEffectChance
+		};
+	}
+
+	public bool TryApplyStatusEffect(string statusEffectId)
+	{
+		if (IsDead || string.IsNullOrWhiteSpace(statusEffectId))
+		{
+			return false;
+		}
+
+		ActiveStatusEffectId = statusEffectId;
+		EmitSignal(SignalName.CombatStateChanged, this);
+		return true;
 	}
 
 	public bool CanInteract(PropInteractionContext context)
@@ -310,5 +396,31 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 		}
 
 		return string.Empty;
+	}
+
+	private void ApplyEquipmentDefinitions(MissionNpcDefinition definition)
+	{
+		MissionWeaponDefinition weapon = MissionEquipmentRegistry.GetWeapon(definition.WeaponDefinitionId);
+		if (weapon != null)
+		{
+			WeaponName = string.IsNullOrWhiteSpace(weapon.DisplayName) ? WeaponName : weapon.DisplayName;
+			UsesMeleeWeapon = weapon.IsMelee;
+			AttackRange = Mathf.Max(1, weapon.AttackRange);
+			AttackMinDamage = Mathf.Max(1, weapon.MinDamage);
+			AttackDamage = Mathf.Max(AttackMinDamage, weapon.MaxDamage);
+			BonusShieldDamage = Mathf.Max(0, weapon.BonusShieldDamage);
+			ShieldPiercingDamage = Mathf.Max(0, weapon.ShieldPiercingDamage);
+			WeaponStatusEffectId = weapon.StatusEffectId ?? string.Empty;
+			WeaponStatusEffectChance = Mathf.Clamp(weapon.StatusEffectChance, 0f, 1f);
+		}
+
+		MissionShieldDefinition shield = MissionEquipmentRegistry.GetShield(definition.ShieldDefinitionId);
+		if (shield != null)
+		{
+			ShieldName = string.IsNullOrWhiteSpace(shield.DisplayName) ? ShieldName : shield.DisplayName;
+			MaxShields = Mathf.Max(0, MaxShields + shield.CapacityBonus);
+			CurrentShields = MaxShields;
+			ShieldRechargePerTurn = Mathf.Max(0, shield.RechargePerTurn);
+		}
 	}
 }

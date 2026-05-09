@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="MissionShieldDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://Scripts/Missions/Equipment/MissionShieldDefinition.cs" id="1_shield"]
+
+[resource]
+script = ExtResource("1_shield")
+ShieldId = "custodian_lattice"
+DisplayName = "Custodian Lattice"
+Description = "A relay-grade shield network that recovers charge with machine precision."
+CapacityBonus = 6
+RechargePerTurn = 2

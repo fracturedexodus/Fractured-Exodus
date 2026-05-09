@@ -13,13 +13,17 @@ public sealed class MissionCombatantSummary
 	public string DisplayName { get; init; } = string.Empty;
 	public string Subtitle { get; init; } = string.Empty;
 	public string WeaponName { get; init; } = string.Empty;
+	public string ShieldName { get; init; } = string.Empty;
 	public Texture2D Icon { get; init; }
 	public int CurrentHP { get; init; }
 	public int MaxHP { get; init; }
+	public int CurrentShields { get; init; }
+	public int MaxShields { get; init; }
 	public int CurrentAP { get; init; }
 	public int MaxAP { get; init; }
 	public int AttackRange { get; init; }
-	public int AttackDamage { get; init; }
+	public int AttackMinDamage { get; init; }
+	public int AttackMaxDamage { get; init; }
 	public string Notes { get; init; } = string.Empty;
 }
 
@@ -202,7 +206,7 @@ public partial class MissionUI : CanvasLayer
 			PanelContainer square = new PanelContainer
 			{
 				CustomMinimumSize = new Vector2(82f, 82f),
-				TooltipText = $"{summary.DisplayName}\nHP {summary.CurrentHP}/{summary.MaxHP} | AP {summary.CurrentAP}/{summary.MaxAP}"
+			TooltipText = $"{summary.DisplayName}\nHP {summary.CurrentHP}/{summary.MaxHP} | SHD {summary.CurrentShields}/{summary.MaxShields} | AP {summary.CurrentAP}/{summary.MaxAP}\n{summary.WeaponName} | {summary.ShieldName}"
 			};
 			square.AddThemeStyleboxOverride("panel", (i == activeIndex ? activeStyle : defaultStyle).Duplicate() as StyleBoxFlat);
 			VBoxContainer content = new VBoxContainer
@@ -295,7 +299,7 @@ public partial class MissionUI : CanvasLayer
 			return;
 		}
 
-		_hoverSummaryLabel.Text = $"{summary.DisplayName}\n{summary.Subtitle}\nWEAPON: {summary.WeaponName}\nHP: {summary.CurrentHP}/{summary.MaxHP}\nAP: {summary.CurrentAP}/{summary.MaxAP}\nRANGE: {summary.AttackRange} | DMG: 1-{summary.AttackDamage}" + (string.IsNullOrWhiteSpace(summary.Notes) ? string.Empty : $"\n{summary.Notes}");
+		_hoverSummaryLabel.Text = $"{summary.DisplayName}\n{summary.Subtitle}\nWEAPON: {summary.WeaponName}\nSHIELD: {summary.ShieldName}\nHP: {summary.CurrentHP}/{summary.MaxHP}\nSHIELDS: {summary.CurrentShields}/{summary.MaxShields}\nAP: {summary.CurrentAP}/{summary.MaxAP}\nRANGE: {summary.AttackRange} | DMG: {summary.AttackMinDamage}-{summary.AttackMaxDamage}" + (string.IsNullOrWhiteSpace(summary.Notes) ? string.Empty : $"\n{summary.Notes}");
 		Vector2 viewportSize = GetViewport().GetVisibleRect().Size;
 		Vector2 desiredPosition = screenPosition + new Vector2(34f, -24f);
 		float maxX = Mathf.Max(12f, viewportSize.X - _hoverSummaryPanel.Size.X - 12f);
@@ -586,7 +590,7 @@ public partial class MissionUI : CanvasLayer
 
 		panel.Visible = true;
 		iconRect.Texture = summary.Icon;
-		infoLabel.Text = $"{emptyTitle}: {summary.DisplayName}\n{summary.Subtitle}\nWEAPON: {summary.WeaponName}\nHP: {summary.CurrentHP}/{summary.MaxHP}\nAP: {summary.CurrentAP}/{summary.MaxAP}\nRANGE: {summary.AttackRange} | DMG: 1-{summary.AttackDamage}";
+		infoLabel.Text = $"{emptyTitle}: {summary.DisplayName}\n{summary.Subtitle}\nWEAPON: {summary.WeaponName}\nSHIELD: {summary.ShieldName}\nHP: {summary.CurrentHP}/{summary.MaxHP}\nSHIELDS: {summary.CurrentShields}/{summary.MaxShields}\nAP: {summary.CurrentAP}/{summary.MaxAP}\nRANGE: {summary.AttackRange} | DMG: {summary.AttackMinDamage}-{summary.AttackMaxDamage}";
 	}
 
 	private static StyleBoxFlat CreateCombatSquareStyle(Color backgroundColor, Color borderColor)

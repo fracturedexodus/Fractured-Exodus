@@ -15,6 +15,7 @@ public partial class MissionMap : Node2D
 	private const int FogRevealRadius = 4;
 	private const int CombatAttackActionCost = 1;
 	private const int CombatInteractionActionCost = 1;
+	private const float HostileRoamIntervalSeconds = 1.35f;
 
 	private sealed class MissionCombatTurnEntry
 	{
@@ -38,6 +39,7 @@ public partial class MissionMap : Node2D
 	private TextureRect _backgroundBackdrop;
 	private Sprite2D _backgroundFeatureSprite;
 	private Node2D _evacZoneLayer;
+	private Node2D _combatEffectLayer;
 	private readonly List<OfficerPawn> _officerPawns = new List<OfficerPawn>();
 	private readonly List<MissionNpcPawn> _missionNpcs = new List<MissionNpcPawn>();
 	private readonly Dictionary<Vector2I, MissionNpcPawn> _missionNpcsByCell = new Dictionary<Vector2I, MissionNpcPawn>();
@@ -71,6 +73,7 @@ public partial class MissionMap : Node2D
 	private bool _enemyTurnInProgress;
 	private bool _missionGameOver;
 	private Node2D _hoveredCombatActor;
+	private float _hostileRoamClock;
 
 	public override void _Ready()
 	{
@@ -98,6 +101,7 @@ public partial class MissionMap : Node2D
 		SpawnMissionProps();
 		ApplyMissionBackground();
 		BuildEvacZoneHighlights();
+		EnsureCombatEffectLayer();
 		ConfigureMissionView();
 		SpawnMissionNpcs();
 		SpawnMissionOfficers();
@@ -112,6 +116,7 @@ public partial class MissionMap : Node2D
 	{
 		UpdateCameraPan((float)delta);
 		UpdateEvacZoneHighlightVisuals((float)delta);
+		UpdateHostileRoaming((float)delta);
 		UpdateCombatHoverSummary();
 	}
 
@@ -448,6 +453,27 @@ public partial class MissionMap : Node2D
 		};
 		_isoWorld.AddChild(_evacZoneLayer);
 		_isoWorld.MoveChild(_evacZoneLayer, 1);
+	}
+
+	private void EnsureCombatEffectLayer()
+	{
+		if (_isoWorld == null)
+		{
+			return;
+		}
+
+		_combatEffectLayer = _isoWorld.GetNodeOrNull<Node2D>("CombatEffectLayer");
+		if (_combatEffectLayer != null)
+		{
+			return;
+		}
+
+		_combatEffectLayer = new Node2D
+		{
+			Name = "CombatEffectLayer",
+			ZIndex = 30
+		};
+		_isoWorld.AddChild(_combatEffectLayer);
 	}
 
 	private void UpdateEvacZoneHighlightVisuals(float delta)
@@ -1797,6 +1823,70 @@ public partial class MissionMap : Node2D
 		RefreshCombatHud();
 	}
 
+	private void UpdateHostileRoaming(float delta)
+	{
+		if (_combatActive || _missionGameOver || _roomBuilder == null)
+		{
+			_hostileRoamClock = 0f;
+			return;
+		}
+
+		if ((_dialogueUi?.IsConversationOpen ?? false) || IsAnyCombatActorMoving())
+		{
+			return;
+		}
+
+		_hostileRoamClock += delta;
+		if (_hostileRoamClock < HostileRoamIntervalSeconds)
+		{
+			return;
+		}
+
+		_hostileRoamClock = 0f;
+		List<MissionNpcPawn> roamingHostiles = _missionNpcs
+			.Where(npc => npc != null && npc.IsHostile && !npc.IsDead && !npc.IsMoving && !_engagedEnemyIds.Contains(npc.NpcId))
+			.OrderBy(_ => _combatRng.Randi())
+			.ToList();
+		foreach (MissionNpcPawn hostile in roamingHostiles)
+		{
+			if (TryRoamHostile(hostile))
+			{
+				break;
+			}
+		}
+	}
+
+	private bool TryRoamHostile(MissionNpcPawn hostile)
+	{
+		if (hostile == null || hostile.IsDead || hostile.IsMoving || _roomBuilder == null)
+		{
+			return false;
+		}
+
+		List<Vector2I> candidateCells = HexMath.Directions
+			.Select(direction => hostile.CurrentCell + direction)
+			.Where(cell => _roomBuilder.IsWalkableCell(cell) && !IsCellOccupiedByLivingActor(cell, null, hostile))
+			.OrderBy(_ => _combatRng.Randi())
+			.ToList();
+		if (candidateCells.Count == 0)
+		{
+			return false;
+		}
+
+		Vector2I destinationCell = candidateCells[0];
+		if (!_roomBuilder.TryGetPath(hostile.CurrentCell, destinationCell, out List<Vector2I> pathCells) || pathCells.Count <= 1)
+		{
+			return false;
+		}
+
+		List<Vector2I> steppedCells = pathCells.Skip(1).ToList();
+		List<Vector2> pathPoints = steppedCells
+			.Select(GetCellGlobalPosition)
+			.ToList();
+		hostile.MoveAlongPath(pathPoints, steppedCells, destinationCell);
+		return true;
+	}
+
 	private void CleanupCombatQueue()
 	{
 		string activeCombatantId = GetActiveCombatTurnEntry()?.CombatantId ?? string.Empty;
@@ -2174,16 +2264,23 @@ public partial class MissionMap : Node2D
 			return;
 		}
 
-		if (GetManhattanDistance(officer.CurrentCell, enemy.CurrentCell) > officer.AttackRange)
+		MissionAttackProfile attackProfile = officer.GetAttackProfile();
+		if (GetManhattanDistance(officer.CurrentCell, enemy.CurrentCell) > attackProfile.Range)
 		{
 			return;
 		}
 
 		officer.SpendActions(CombatAttackActionCost);
-		int minimumDamage = Math.Max(1, officer.AttackDamage / 2);
-		int damage = _combatRng.RandiRange(minimumDamage, officer.AttackDamage);
-		enemy.ApplyDamage(damage);
-		AppendCombatLog($"{officer.OfficerName} fires {officer.WeaponName.ToLowerInvariant()} at {enemy.DisplayName}, landing {damage} damage and leaving the target at {enemy.CurrentHP}/{enemy.MaxHP} HP.");
+		int damage = _combatRng.RandiRange(attackProfile.MinDamage, attackProfile.MaxDamage);
+		CombatDamageResult result = ApplyAttackProfileToTarget(enemy, damage, attackProfile);
+		string statusText = TryApplyStatusEffect(enemy, attackProfile)
+			? $" {enemy.DisplayName} is afflicted with {attackProfile.StatusEffectId}."
+			: string.Empty;
+		PlayAttackEffects(officer, enemy, attackProfile, result);
+		AppendCombatLog(BuildDamageLog(
+			$"{officer.OfficerName} fires {attackProfile.WeaponName.ToLowerInvariant()} at {enemy.DisplayName}",
+			result,
+			statusText));
 		_focusedEnemy = enemy;
 		_pendingCombatAttackEnemyId = string.Empty;
 		ReindexMissionNpcCells();
@@ -2209,22 +2306,278 @@ public partial class MissionMap : Node2D
 			return;
 		}
 
-		if (GetManhattanDistance(enemy.CurrentCell, officer.CurrentCell) > enemy.AttackRange)
+		MissionAttackProfile attackProfile = enemy.GetAttackProfile();
+		if (GetManhattanDistance(enemy.CurrentCell, officer.CurrentCell) > attackProfile.Range)
 		{
 			return;
 		}
 
 		enemy.SpendActions(CombatAttackActionCost);
-		int minimumDamage = Math.Max(1, enemy.AttackDamage / 2);
-		int damage = _combatRng.RandiRange(minimumDamage, enemy.AttackDamage);
-		officer.ApplyDamage(damage);
-		AppendCombatLog($"{enemy.DisplayName} answers with {enemy.WeaponName.ToLowerInvariant()}, hitting {officer.OfficerName} for {damage} damage and dropping them to {officer.CurrentHP}/{officer.MaxHP} HP.");
+		int damage = _combatRng.RandiRange(attackProfile.MinDamage, attackProfile.MaxDamage);
+		CombatDamageResult result = ApplyAttackProfileToTarget(officer, damage, attackProfile);
+		string statusText = TryApplyStatusEffect(officer, attackProfile)
+			? $" {officer.OfficerName} is afflicted with {attackProfile.StatusEffectId}."
+			: string.Empty;
+		PlayAttackEffects(enemy, officer, attackProfile, result);
+		AppendCombatLog(BuildDamageLog(
+			$"{enemy.DisplayName} answers with {attackProfile.WeaponName.ToLowerInvariant()}, hitting {officer.OfficerName}",
+			result,
+			statusText));
 		UpdateFogOfWar();
 		RefreshCombatHud();
 		if (!GetAliveOfficers().Any())
 		{
 			HandleMissionGameOver();
 		}
+	}
+
+	private static string BuildDamageLog(string actionText, CombatDamageResult result, string suffix = "")
+	{
+		if (result == null)
+		{
+			return $"{actionText}.{suffix}";
+		}
+
+		List<string> impactParts = new List<string>();
+		if (result.ShieldDamage > 0)
+		{
+			impactParts.Add($"stripping {result.ShieldDamage} shield");
+		}
+
+		if (result.HealthDamage > 0)
+		{
+			impactParts.Add($"dealing {result.HealthDamage} health damage");
+		}
+
+		if (impactParts.Count == 0)
+		{
+			impactParts.Add("but the shot disperses harmlessly");
+		}
+
+		string impactText = impactParts.Count == 1
+			? impactParts[0]
+			: $"{impactParts[0]} and {impactParts[1]}";
+		return $"{actionText}, {impactText}, leaving {result.RemainingShields} shield and {result.RemainingHealth} HP.{suffix}";
+	}
+
+	private CombatDamageResult ApplyAttackProfileToTarget(MissionNpcPawn target, int rolledDamage, MissionAttackProfile attackProfile)
+	{
+		if (target == null || attackProfile == null)
+		{
+			return null;
+		}
+
+		return target.ApplyDamage(rolledDamage, attackProfile.BonusShieldDamage, 0);
+	}
+
+	private CombatDamageResult ApplyAttackProfileToTarget(OfficerPawn target, int rolledDamage, MissionAttackProfile attackProfile)
+	{
+		if (target == null || attackProfile == null)
+		{
+			return null;
+		}
+
+		return target.ApplyDamage(rolledDamage, attackProfile.BonusShieldDamage, 0);
+	}
+
+	private void PlayAttackEffects(Node2D attacker, Node2D target, MissionAttackProfile attackProfile, CombatDamageResult result)
+	{
+		if (attacker == null || target == null || attackProfile == null)
+		{
+			return;
+		}
+
+		EnsureCombatEffectLayer();
+		if (_combatEffectLayer == null)
+		{
+			return;
+		}
+
+		bool shieldsHit = result?.ShieldDamage > 0;
+		bool hullHit = result?.HealthDamage > 0;
+		Color attackColor = shieldsHit && !hullHit
+			? new Color(0.25f, 0.95f, 1f, 0.95f)
+			: new Color(1f, 0.45f, 0.35f, 0.95f);
+
+		if (attackProfile.IsMelee)
+		{
+			SpawnMeleeSlashEffect(target.GlobalPosition, attackColor);
+		}
+		else
+		{
+			SpawnRangedTracerEffect(attacker.GlobalPosition, target.GlobalPosition, attackColor);
+		}
+
+		SpawnImpactEffect(target.GlobalPosition, shieldsHit, hullHit);
+		SpawnDamageText(target.GlobalPosition, result);
+	}
+
+	private void SpawnRangedTracerEffect(Vector2 start, Vector2 end, Color color)
+	{
+		Line2D beam = new Line2D
+		{
+			Width = 5f,
+			DefaultColor = color,
+			ZIndex = 40
+		};
+		beam.AddPoint(_combatEffectLayer.ToLocal(start));
+		beam.AddPoint(_combatEffectLayer.ToLocal(end));
+		_combatEffectLayer.AddChild(beam);
+
+		Tween tween = CreateTween();
+		tween.TweenProperty(beam, "modulate:a", 0f, 0.16f);
+		tween.Parallel().TweenProperty(beam, "width", 1.5f, 0.16f);
+		tween.TweenCallback(Callable.From(beam.QueueFree));
+	}
+
+	private void SpawnMeleeSlashEffect(Vector2 targetPosition, Color color)
+	{
+		Node2D root = new Node2D
+		{
+			Position = _combatEffectLayer.ToLocal(targetPosition),
+			ZIndex = 41
+		};
+		_combatEffectLayer.AddChild(root);
+
+		Line2D slashA = new Line2D
+		{
+			Width = 6f,
+			DefaultColor = color
+		};
+		slashA.AddPoint(new Vector2(-22f, -16f));
+		slashA.AddPoint(new Vector2(24f, 18f));
+		root.AddChild(slashA);
+
+		Line2D slashB = new Line2D
+		{
+			Width = 4f,
+			DefaultColor = new Color(color.R, color.G, color.B, 0.72f)
+		};
+		slashB.AddPoint(new Vector2(-10f, 22f));
+		slashB.AddPoint(new Vector2(18f, -20f));
+		root.AddChild(slashB);
+
+		Tween tween = CreateTween();
+		tween.TweenProperty(root, "scale", new Vector2(1.25f, 1.25f), 0.12f);
+		tween.Parallel().TweenProperty(root, "modulate:a", 0f, 0.18f);
+		tween.TweenCallback(Callable.From(root.QueueFree));
+	}
+
+	private void SpawnImpactEffect(Vector2 targetPosition, bool shieldsHit, bool hullHit)
+	{
+		Node2D root = new Node2D
+		{
+			Position = _combatEffectLayer.ToLocal(targetPosition),
+			ZIndex = 42
+		};
+		_combatEffectLayer.AddChild(root);
+
+		Polygon2D burst = new Polygon2D
+		{
+			Color = shieldsHit && !hullHit
+				? new Color(0.35f, 0.95f, 1f, 0.34f)
+				: new Color(1f, 0.44f, 0.32f, 0.32f),
+			Polygon = BuildEffectDiamond(20f, 12f)
+		};
+		root.AddChild(burst);
+
+		Line2D outline = new Line2D
+		{
+			Width = 3.5f,
+			DefaultColor = shieldsHit && !hullHit
+				? new Color(0.55f, 1f, 1f, 0.95f)
+				: new Color(1f, 0.72f, 0.48f, 0.95f),
+			Closed = true
+		};
+		foreach (Vector2 point in BuildEffectDiamond(20f, 12f))
+		{
+			outline.AddPoint(point);
+		}
+		root.AddChild(outline);
+
+		Tween tween = CreateTween();
+		tween.TweenProperty(root, "scale", new Vector2(1.7f, 1.7f), 0.2f);
+		tween.Parallel().TweenProperty(root, "modulate:a", 0f, 0.2f);
+		tween.TweenCallback(Callable.From(root.QueueFree));
+	}
+
+	private void SpawnDamageText(Vector2 targetPosition, CombatDamageResult result)
+	{
+		if (_combatEffectLayer == null || result == null)
+		{
+			return;
+		}
+
+		if (result.ShieldDamage > 0)
+		{
+			SpawnFloatingCombatLabel(targetPosition + new Vector2(0f, -38f), $"-{result.ShieldDamage} SHD", new Color(0.35f, 0.95f, 1f, 1f));
+		}
+
+		if (result.HealthDamage > 0)
+		{
+			SpawnFloatingCombatLabel(targetPosition + new Vector2(0f, -16f), $"-{result.HealthDamage} HP", new Color(1f, 0.48f, 0.4f, 1f));
+		}
+	}
+
+	private void SpawnFloatingCombatLabel(Vector2 worldPosition, string text, Color color)
+	{
+		Label label = new Label
+		{
+			Text = text,
+			Position = _combatEffectLayer.ToLocal(worldPosition),
+			ZIndex = 43
+		};
+		label.AddThemeFontSizeOverride("font_size", 16);
+		label.AddThemeColorOverride("font_color", color);
+		label.AddThemeColorOverride("font_outline_color", new Color(0.02f, 0.04f, 0.06f, 0.95f));
+		label.AddThemeConstantOverride("outline_size", 4);
+		_combatEffectLayer.AddChild(label);
+
+		Tween tween = CreateTween();
+		tween.TweenProperty(label, "position:y", label.Position.Y - 28f, 0.42f);
+		tween.Parallel().TweenProperty(label, "modulate:a", 0f, 0.42f);
+		tween.TweenCallback(Callable.From(label.QueueFree));
+	}
+
+	private static Vector2[] BuildEffectDiamond(float halfWidth, float halfHeight)
+	{
+		return new[]
+		{
+			new Vector2(0f, -halfHeight),
+			new Vector2(halfWidth, 0f),
+			new Vector2(0f, halfHeight),
+			new Vector2(-halfWidth, 0f)
+		};
+	}
+
+	private bool TryApplyStatusEffect(OfficerPawn target, MissionAttackProfile attackProfile)
+	{
+		if (target == null || attackProfile == null || string.IsNullOrWhiteSpace(attackProfile.StatusEffectId) || attackProfile.StatusEffectChance <= 0f)
+		{
+			return false;
+		}
+
+		if (_combatRng.Randf() > attackProfile.StatusEffectChance)
+		{
+			return false;
+		}
+
+		return target.TryApplyStatusEffect(attackProfile.StatusEffectId);
+	}
+
+	private bool TryApplyStatusEffect(MissionNpcPawn target, MissionAttackProfile attackProfile)
+	{
+		if (target == null || attackProfile == null || string.IsNullOrWhiteSpace(attackProfile.StatusEffectId) || attackProfile.StatusEffectChance <= 0f)
+		{
+			return false;
+		}
+
+		if (_combatRng.Randf() > attackProfile.StatusEffectChance)
+		{
+			return false;
+		}
+
+		return target.TryApplyStatusEffect(attackProfile.StatusEffectId);
 	}
 
 	private MissionNpcPawn GetClosestVisibleEnemy(Vector2I fromCell)
@@ -2443,14 +2796,18 @@ public partial class MissionMap : Node2D
 			DisplayName = officer.OfficerName,
 			Subtitle = $"{officer.Specialty} | {officer.ShipName}",
 			WeaponName = officer.WeaponName,
+			ShieldName = officer.ShieldName,
 			Icon = icon,
 			CurrentHP = officer.CurrentHP,
 			MaxHP = officer.MaxHP,
+			CurrentShields = officer.CurrentShields,
+			MaxShields = officer.MaxShields,
 			CurrentAP = officer.CurrentActions,
 			MaxAP = officer.MaxActions,
 			AttackRange = officer.AttackRange,
-			AttackDamage = officer.AttackDamage,
-			Notes = $"Initiative bonus: +{officer.InitiativeBonus}"
+			AttackMinDamage = officer.AttackMinDamage,
+			AttackMaxDamage = officer.AttackDamage,
+			Notes = BuildCombatantNotes(officer.InitiativeBonus, officer.ShieldRechargePerTurn, officer.BonusShieldDamage, officer.ShieldPiercingDamage, officer.WeaponStatusEffectId, officer.WeaponStatusEffectChance, officer.ActiveStatusEffectId)
 		};
 	}
 
@@ -2474,15 +2831,52 @@ public partial class MissionMap : Node2D
 			DisplayName = enemy.DisplayName,
 			Subtitle = enemy.IsHostile ? "Hostile Contact" : "Mission Contact",
 			WeaponName = enemy.WeaponName,
+			ShieldName = enemy.ShieldName,
 			Icon = icon,
 			CurrentHP = enemy.CurrentHP,
 			MaxHP = enemy.MaxHP,
+			CurrentShields = enemy.CurrentShields,
+			MaxShields = enemy.MaxShields,
 			CurrentAP = enemy.CurrentActions,
 			MaxAP = enemy.MaxActions,
 			AttackRange = enemy.AttackRange,
-			AttackDamage = enemy.AttackDamage,
-			Notes = enemy.IsHostile ? $"Initiative bonus: +{enemy.InitiativeBonus}" : "Non-hostile contact"
+			AttackMinDamage = enemy.AttackMinDamage,
+			AttackMaxDamage = enemy.AttackDamage,
+			Notes = enemy.IsHostile
+				? BuildCombatantNotes(enemy.InitiativeBonus, enemy.ShieldRechargePerTurn, enemy.BonusShieldDamage, enemy.ShieldPiercingDamage, enemy.WeaponStatusEffectId, enemy.WeaponStatusEffectChance, enemy.ActiveStatusEffectId)
+				: "Non-hostile contact"
 		};
+	}
+
+	private static string BuildCombatantNotes(int initiativeBonus, int shieldRechargePerTurn, int bonusShieldDamage, int shieldPiercingDamage, string statusEffectId, float statusEffectChance, string activeStatusEffectId)
+	{
+		List<string> notes = new List<string>
+		{
+			$"Initiative bonus: +{initiativeBonus}",
+			$"Shield recharge: +{shieldRechargePerTurn}/turn"
+		};
+
+		if (bonusShieldDamage > 0)
+		{
+			notes.Add($"Shield break: +{bonusShieldDamage}");
+		}
+
+		if (shieldPiercingDamage > 0)
+		{
+			notes.Add($"Piercing: +{shieldPiercingDamage}");
+		}
+
+		if (!string.IsNullOrWhiteSpace(statusEffectId) && statusEffectChance > 0f)
+		{
+			notes.Add($"Status: {statusEffectId} {(int)(statusEffectChance * 100f)}%");
+		}
+
+		if (!string.IsNullOrWhiteSpace(activeStatusEffectId))
+		{
+			notes.Add($"Afflicted: {activeStatusEffectId}");
+		}
+
+		return string.Join("\n", notes);
 	}
 
 	private void HandleMissionGameOver()

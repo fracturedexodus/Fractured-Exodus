@@ -15,7 +15,10 @@ public partial class MissionNpcDefinition : Resource
 	[Export] public bool IsHostile { get; set; } = false;
 	[Export] public int InteractionRange { get; set; } = 1;
 	[Export] public bool OneShot { get; set; } = false;
+	[Export] public string WeaponDefinitionId { get; set; } = string.Empty;
+	[Export] public string ShieldDefinitionId { get; set; } = string.Empty;
 	[Export] public int MaxHP { get; set; } = 10;
+	[Export] public int MaxShields { get; set; } = 0;
 	[Export] public int MaxActions { get; set; } = 2;
 	[Export] public int AttackRange { get; set; } = 1;
 	[Export] public int AttackDamage { get; set; } = 3;

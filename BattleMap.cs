@@ -441,7 +441,7 @@ public partial class BattleMap : Node2D
 		_missionPromptWrapper.AddChild(missionPanel);
 
 		VBoxContainer content = new VBoxContainer();
-		content.CustomMinimumSize = new Vector2(560, 0);
+		content.CustomMinimumSize = new Vector2(760, 0);
 		content.AddThemeConstantOverride("separation", 14);
 		missionPanel.AddChild(content);
 
@@ -453,7 +453,7 @@ public partial class BattleMap : Node2D
 		content.AddChild(_missionPromptTitle);
 
 		_missionPromptDescription = new RichTextLabel();
-		_missionPromptDescription.CustomMinimumSize = new Vector2(560, 180);
+		_missionPromptDescription.CustomMinimumSize = new Vector2(760, 180);
 		_missionPromptDescription.BbcodeEnabled = true;
 		_missionPromptDescription.FitContent = true;
 		_missionPromptDescription.ScrollActive = false;
@@ -470,7 +470,7 @@ public partial class BattleMap : Node2D
 
 		_missionOfficerSelectionScroll = new ScrollContainer
 		{
-			CustomMinimumSize = new Vector2(560, 172),
+			CustomMinimumSize = new Vector2(760, 260),
 			HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled
 		};
 		content.AddChild(_missionOfficerSelectionScroll);
@@ -551,6 +551,29 @@ public partial class BattleMap : Node2D
 		foreach (string shipName in availableShips)
 		{
 			OfficerState officer = _officerService?.GetOfficerForShip(shipName);
+			OfficerMissionLoadoutService.EnsureOfficerLoadout(officer);
+
+			PanelContainer rowPanel = new PanelContainer();
+			StyleBoxFlat rowStyle = new StyleBoxFlat
+			{
+				BgColor = new Color(0.07f, 0.1f, 0.15f, 0.88f),
+				BorderWidthLeft = 1,
+				BorderWidthTop = 1,
+				BorderWidthRight = 1,
+				BorderWidthBottom = 1,
+				BorderColor = new Color(0.22f, 0.5f, 0.68f, 0.7f),
+				ContentMarginLeft = 12,
+				ContentMarginTop = 10,
+				ContentMarginRight = 12,
+				ContentMarginBottom = 10
+			};
+			rowPanel.AddThemeStyleboxOverride("panel", rowStyle);
+			_missionOfficerSelectionList.AddChild(rowPanel);
+
+			VBoxContainer rowContent = new VBoxContainer();
+			rowContent.AddThemeConstantOverride("separation", 8);
+			rowPanel.AddChild(rowContent);
+
 			CheckBox box = new CheckBox
 			{
 				Text = $"{officer?.DisplayName ?? shipName}  |  {officer?.Specialty ?? "Unassigned Specialty"}  |  {shipName}",
@@ -559,8 +582,45 @@ public partial class BattleMap : Node2D
 			box.ButtonPressed = preferredSelection.Contains(shipName);
 			string shipNameLocal = shipName;
 			box.Toggled += pressed => OnMissionOfficerToggled(shipNameLocal, pressed);
-			_missionOfficerSelectionList.AddChild(box);
+			rowContent.AddChild(box);
 			_missionOfficerCheckboxes[shipName] = box;
+
+			Label loadoutLabel = new Label
+			{
+				Text = "TACTICAL LOADOUT",
+				HorizontalAlignment = HorizontalAlignment.Left
+			};
+			loadoutLabel.AddThemeColorOverride("font_color", new Color(0.74f, 0.86f, 0.98f));
+			loadoutLabel.AddThemeFontSizeOverride("font_size", 13);
+			rowContent.AddChild(loadoutLabel);
+
+			HBoxContainer loadoutRow = new HBoxContainer();
+			loadoutRow.AddThemeConstantOverride("separation", 12);
+			rowContent.AddChild(loadoutRow);
+
+			VBoxContainer weaponColumn = new VBoxContainer();
+			weaponColumn.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+			weaponColumn.AddThemeConstantOverride("separation", 4);
+			loadoutRow.AddChild(weaponColumn);
+
+			Label weaponLabel = new Label { Text = "Weapon" };
+			weaponLabel.AddThemeColorOverride("font_color", new Color(0.88f, 0.96f, 1f));
+			weaponColumn.AddChild(weaponLabel);
+
+			OptionButton weaponDropdown = BuildMissionWeaponDropdown(officer, shipName);
+			weaponColumn.AddChild(weaponDropdown);
+
+			VBoxContainer shieldColumn = new VBoxContainer();
+			shieldColumn.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+			shieldColumn.AddThemeConstantOverride("separation", 4);
+			loadoutRow.AddChild(shieldColumn);
+
+			Label shieldLabel = new Label { Text = "Shield" };
+			shieldLabel.AddThemeColorOverride("font_color", new Color(0.88f, 0.96f, 1f));
+			shieldColumn.AddChild(shieldLabel);
+
+			OptionButton shieldDropdown = BuildMissionShieldDropdown(officer, shipName);
+			shieldColumn.AddChild(shieldDropdown);
 		}
 		_isUpdatingMissionOfficerSelection = false;
 
@@ -648,11 +708,157 @@ public partial class BattleMap : Node2D
 			return;
 		}
 
-		_missionOfficerSelectionStatus.Text = $"Select {requiredSelections} officer{(requiredSelections == 1 ? string.Empty : "s")} for this away mission. Current selection: {selectedShips.Count}/{requiredSelections}.";
+		_missionOfficerSelectionStatus.Text = $"Select {requiredSelections} officer{(requiredSelections == 1 ? string.Empty : "s")} for this away mission and confirm their tactical loadouts. Current selection: {selectedShips.Count}/{requiredSelections}.";
 		if (_missionLaunchButton != null)
 		{
 			_missionLaunchButton.Disabled = !CanLaunchPendingMission(selectedShips);
 		}
+	}
+
+	private OptionButton BuildMissionWeaponDropdown(OfficerState officer, string shipName)
+	{
+		OptionButton dropdown = new OptionButton
+		{
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+		};
+
+		List<string> ownedWeaponIds = (officer?.OwnedMissionWeaponIds ?? new List<string>())
+			.Where(weaponId => MissionEquipmentRegistry.GetWeapon(weaponId) != null)
+			.Distinct()
+			.ToList();
+		if (ownedWeaponIds.Count == 0)
+		{
+			string fallbackWeaponId = MissionEquipmentRegistry.GetDefaultWeaponIdForSpecialty(officer?.Specialty ?? string.Empty);
+			if (!string.IsNullOrWhiteSpace(fallbackWeaponId))
+			{
+				ownedWeaponIds.Add(fallbackWeaponId);
+			}
+		}
+
+		int selectedIndex = 0;
+		for (int i = 0; i < ownedWeaponIds.Count; i++)
+		{
+			MissionWeaponDefinition weapon = MissionEquipmentRegistry.GetWeapon(ownedWeaponIds[i]);
+			if (weapon == null)
+			{
+				continue;
+			}
+
+			dropdown.AddItem($"{weapon.DisplayName}  [{weapon.MinDamage}-{weapon.MaxDamage} | R{weapon.AttackRange}]");
+			int itemIndex = dropdown.ItemCount - 1;
+			dropdown.SetItemMetadata(itemIndex, weapon.WeaponId);
+			dropdown.SetItemTooltip(itemIndex, $"{weapon.DisplayName}\n{weapon.Description}\nRange: {weapon.AttackRange}\nDamage: {weapon.MinDamage}-{weapon.MaxDamage}\nShield Break: +{weapon.BonusShieldDamage}\nPiercing: +{weapon.ShieldPiercingDamage}");
+			if (weapon.WeaponId == officer?.EquippedMissionWeaponId)
+			{
+				selectedIndex = itemIndex;
+			}
+		}
+
+		if (dropdown.ItemCount > 0)
+		{
+			dropdown.Select(selectedIndex);
+		}
+
+		string shipNameLocal = shipName;
+		dropdown.ItemSelected += index => OnMissionWeaponSelected(shipNameLocal, dropdown, index);
+		return dropdown;
+	}
+
+	private OptionButton BuildMissionShieldDropdown(OfficerState officer, string shipName)
+	{
+		OptionButton dropdown = new OptionButton
+		{
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+		};
+
+		List<string> ownedShieldIds = (officer?.OwnedMissionShieldIds ?? new List<string>())
+			.Where(shieldId => MissionEquipmentRegistry.GetShield(shieldId) != null)
+			.Distinct()
+			.ToList();
+		if (ownedShieldIds.Count == 0)
+		{
+			string fallbackShieldId = MissionEquipmentRegistry.GetDefaultShieldIdForSpecialty(officer?.Specialty ?? string.Empty);
+			if (!string.IsNullOrWhiteSpace(fallbackShieldId))
+			{
+				ownedShieldIds.Add(fallbackShieldId);
+			}
+		}
+
+		int selectedIndex = 0;
+		for (int i = 0; i < ownedShieldIds.Count; i++)
+		{
+			MissionShieldDefinition shield = MissionEquipmentRegistry.GetShield(ownedShieldIds[i]);
+			if (shield == null)
+			{
+				continue;
+			}
+
+			dropdown.AddItem($"{shield.DisplayName}  [+{shield.CapacityBonus} SHD | +{shield.RechargePerTurn}/turn]");
+			int itemIndex = dropdown.ItemCount - 1;
+			dropdown.SetItemMetadata(itemIndex, shield.ShieldId);
+			dropdown.SetItemTooltip(itemIndex, $"{shield.DisplayName}\n{shield.Description}\nCapacity Bonus: +{shield.CapacityBonus}\nRecharge: +{shield.RechargePerTurn}/turn");
+			if (shield.ShieldId == officer?.EquippedMissionShieldId)
+			{
+				selectedIndex = itemIndex;
+			}
+		}
+
+		if (dropdown.ItemCount > 0)
+		{
+			dropdown.Select(selectedIndex);
+		}
+
+		string shipNameLocal = shipName;
+		dropdown.ItemSelected += index => OnMissionShieldSelected(shipNameLocal, dropdown, index);
+		return dropdown;
+	}
+
+	private void OnMissionWeaponSelected(string shipName, OptionButton dropdown, long index)
+	{
+		OfficerState officer = _officerService?.GetOfficerForShip(shipName);
+		if (officer == null || dropdown == null || index < 0 || index >= dropdown.ItemCount)
+		{
+			return;
+		}
+
+		string weaponId = dropdown.GetItemMetadata((int)index).AsString();
+		if (!OfficerMissionLoadoutService.EquipWeapon(officer, weaponId))
+		{
+			return;
+		}
+
+		ApplyOfficerApprovalEvent(
+			OfficerApprovalEventType.EquipItem,
+			new OfficerApprovalContext
+			{
+				ActingShipName = shipName,
+				ItemName = MissionEquipmentRegistry.GetWeapon(weaponId)?.DisplayName ?? weaponId,
+				ItemCategory = GameConstants.EquipmentCategories.Weapon
+			});
+	}
+
+	private void OnMissionShieldSelected(string shipName, OptionButton dropdown, long index)
+	{
+		OfficerState officer = _officerService?.GetOfficerForShip(shipName);
+		if (officer == null || dropdown == null || index < 0 || index >= dropdown.ItemCount)
+		{
+			return;
+		}
+
+		string shieldId = dropdown.GetItemMetadata((int)index).AsString();
+		if (!OfficerMissionLoadoutService.EquipShield(officer, shieldId))
+		{
+			return;
+		}
+
+		ApplyOfficerApprovalEvent(
+			OfficerApprovalEventType.EquipItem,
+			new OfficerApprovalContext
+			{
+				ActingShipName = shipName,
+				ItemName = MissionEquipmentRegistry.GetShield(shieldId)?.DisplayName ?? shieldId,
+				ItemCategory = GameConstants.EquipmentCategories.Shield
+			});
 	}
 
 	// ==========================================
