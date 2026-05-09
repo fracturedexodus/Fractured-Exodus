@@ -34,6 +34,7 @@ public static class MissionMarkerCatalog
 		new MissionMarkerDefinition("spawn_a", "Officer Spawn A", MissionMarkerCategory.Spawn, new Color(0.28f, 0.88f, 1.00f, 0.92f), Vector2.Zero),
 		new MissionMarkerDefinition("spawn_b", "Officer Spawn B", MissionMarkerCategory.Spawn, new Color(1.00f, 0.72f, 0.24f, 0.92f), Vector2.Zero),
 		new MissionMarkerDefinition("npc_spawn", "NPC Spawn", MissionMarkerCategory.Spawn, new Color(0.95f, 0.48f, 0.22f, 0.92f), Vector2.Zero),
+		new MissionMarkerDefinition("hostile_spawn", "Hostile Spawn", MissionMarkerCategory.Spawn, new Color(1.00f, 0.20f, 0.18f, 0.92f), Vector2.Zero),
 		new MissionMarkerDefinition("objective_survivors", "Objective: Survivors", MissionMarkerCategory.Objective, new Color(0.35f, 0.95f, 0.78f, 0.92f), new Vector2(0f, -36f)),
 		new MissionMarkerDefinition("objective_power", "Objective: Power", MissionMarkerCategory.Objective, new Color(1.00f, 0.78f, 0.24f, 0.92f), new Vector2(0f, -36f)),
 		new MissionMarkerDefinition("objective_archive", "Objective: Archive", MissionMarkerCategory.Objective, new Color(0.60f, 0.78f, 1.00f, 0.92f), new Vector2(0f, -36f)),

@@ -70,6 +70,7 @@ public partial class MissionMap : Node2D
 	private MissionNpcPawn _focusedEnemy;
 	private bool _enemyTurnInProgress;
 	private bool _missionGameOver;
+	private Node2D _hoveredCombatActor;
 
 	public override void _Ready()
 	{
@@ -111,6 +112,7 @@ public partial class MissionMap : Node2D
 	{
 		UpdateCameraPan((float)delta);
 		UpdateEvacZoneHighlightVisuals((float)delta);
+		UpdateCombatHoverSummary();
 	}
 
 	public override void _UnhandledInput(InputEvent @event)
@@ -1104,6 +1106,7 @@ public partial class MissionMap : Node2D
 			officer.SpendActions(moveCost);
 			_pendingCombatMoveOfficerId = officer.OfficerID;
 			_pendingCombatMoveCost = moveCost;
+			AppendCombatLog($"{officer.OfficerName} repositions {moveCost} tile{(moveCost == 1 ? string.Empty : "s")} toward {targetCell.X},{targetCell.Y}, conserving {officer.WeaponName.ToLowerInvariant()} fire for the next opening.");
 		}
 
 		List<Vector2> pathPoints = steppedCells
@@ -1771,6 +1774,8 @@ public partial class MissionMap : Node2D
 		_enemyTurnInProgress = false;
 		_combatRound = 1;
 		_combatActiveIndex = -1;
+		_missionUi?.ClearCombatLog();
+		AppendCombatLog("Combat erupts in the mission zone as hostile contacts emerge from cover.");
 		RebuildCombatQueue();
 		RefreshCombatHud();
 		BeginNextCombatTurn();
@@ -1786,6 +1791,9 @@ public partial class MissionMap : Node2D
 		_pendingCombatAttackEnemyId = string.Empty;
 		_focusedEnemy = null;
 		_engagedEnemyIds.Clear();
+		_hoveredCombatActor = null;
+		_missionUi?.HideHoverSummary();
+		AppendCombatLog("The last engaged hostile goes quiet. Combat control returns to exploration.");
 		RefreshCombatHud();
 	}
 
@@ -1910,6 +1918,10 @@ public partial class MissionMap : Node2D
 			}
 
 			_focusedEnemy = GetClosestVisibleEnemy(entry.Officer?.CurrentCell ?? Vector2I.Zero);
+			if (entry.Officer != null)
+			{
+				AppendCombatLog($"Round {_combatRound}: {entry.Officer.OfficerName} takes point with {entry.Officer.CurrentActions} AP and {entry.Officer.CurrentHP} HP.");
+			}
 			RefreshCombatHud();
 			return;
 		}
@@ -1924,6 +1936,7 @@ public partial class MissionMap : Node2D
 
 		activeEnemy.BeginTurn();
 		_focusedEnemy = activeEnemy;
+		AppendCombatLog($"Round {_combatRound}: {activeEnemy.DisplayName} advances with {activeEnemy.CurrentActions} AP and {activeEnemy.CurrentHP} HP.");
 		RefreshCombatHud();
 		_enemyTurnInProgress = true;
 		await ToSignal(GetTree().CreateTimer(0.35f), SceneTreeTimer.SignalName.Timeout);
@@ -2098,6 +2111,7 @@ public partial class MissionMap : Node2D
 		steppedCells = steppedCells.Take(moveCost).ToList();
 		Vector2I destinationCell = steppedCells[^1];
 		enemy.SpendActions(moveCost);
+		AppendCombatLog($"{enemy.DisplayName} pushes {moveCost} tile{(moveCost == 1 ? string.Empty : "s")} toward the away team, closing with {enemy.WeaponName.ToLowerInvariant()} ready.");
 		List<Vector2> pathPoints = steppedCells
 			.Select(GetCellGlobalPosition)
 			.ToList();
@@ -2169,6 +2183,7 @@ public partial class MissionMap : Node2D
 		int minimumDamage = Math.Max(1, officer.AttackDamage / 2);
 		int damage = _combatRng.RandiRange(minimumDamage, officer.AttackDamage);
 		enemy.ApplyDamage(damage);
+		AppendCombatLog($"{officer.OfficerName} fires {officer.WeaponName.ToLowerInvariant()} at {enemy.DisplayName}, landing {damage} damage and leaving the target at {enemy.CurrentHP}/{enemy.MaxHP} HP.");
 		_focusedEnemy = enemy;
 		_pendingCombatAttackEnemyId = string.Empty;
 		ReindexMissionNpcCells();
@@ -2203,6 +2218,7 @@ public partial class MissionMap : Node2D
 		int minimumDamage = Math.Max(1, enemy.AttackDamage / 2);
 		int damage = _combatRng.RandiRange(minimumDamage, enemy.AttackDamage);
 		officer.ApplyDamage(damage);
+		AppendCombatLog($"{enemy.DisplayName} answers with {enemy.WeaponName.ToLowerInvariant()}, hitting {officer.OfficerName} for {damage} damage and dropping them to {officer.CurrentHP}/{officer.MaxHP} HP.");
 		UpdateFogOfWar();
 		RefreshCombatHud();
 		if (!GetAliveOfficers().Any())
@@ -2230,6 +2246,78 @@ public partial class MissionMap : Node2D
 		return Mathf.Abs(a.X - b.X) + Mathf.Abs(a.Y - b.Y);
 	}
 
+	private void AppendCombatLog(string message)
+	{
+		if (string.IsNullOrWhiteSpace(message))
+		{
+			return;
+		}
+
+		_missionUi?.AppendCombatLog(message);
+	}
+
+	private void UpdateCombatHoverSummary()
+	{
+		if (_missionUi == null || !_combatActive || _missionGameOver)
+		{
+			_hoveredCombatActor = null;
+			_missionUi?.HideHoverSummary();
+			return;
+		}
+
+		Node2D hoveredActor = FindHoveredCombatActor();
+		if (hoveredActor == null)
+		{
+			_hoveredCombatActor = null;
+			_missionUi.HideHoverSummary();
+			return;
+		}
+
+		_hoveredCombatActor = hoveredActor;
+		MissionCombatantSummary summary = hoveredActor switch
+		{
+			OfficerPawn officer => BuildOfficerSummary(officer),
+			MissionNpcPawn enemy => BuildEnemySummary(enemy),
+			_ => null
+		};
+		if (summary == null)
+		{
+			_missionUi.HideHoverSummary();
+			return;
+		}
+
+		Vector2 screenPosition = GetViewport().GetCanvasTransform() * hoveredActor.GlobalPosition;
+		_missionUi.ShowHoverSummary(summary, screenPosition);
+	}
+
+	private Node2D FindHoveredCombatActor()
+	{
+		Vector2 mousePosition = GetGlobalMousePosition();
+
+		foreach (MissionNpcPawn enemy in _missionNpcs.Where(npc => npc != null && npc.Visible && !npc.IsDead))
+		{
+			if (BuildHoverBounds(enemy).HasPoint(mousePosition))
+			{
+				return enemy;
+			}
+		}
+
+		foreach (OfficerPawn officer in _officerPawns.Where(pawn => pawn != null && pawn.Visible && !pawn.IsDead))
+		{
+			if (BuildHoverBounds(officer).HasPoint(mousePosition))
+			{
+				return officer;
+			}
+		}
+
+		return null;
+	}
+
+	private static Rect2 BuildHoverBounds(Node2D actor)
+	{
+		return new Rect2(actor.GlobalPosition + new Vector2(-54f, -96f), new Vector2(108f, 144f));
+	}
+
 	private void ReindexMissionNpcCells()
 	{
 		_missionNpcsByCell.Clear();
@@ -2251,6 +2339,11 @@ public partial class MissionMap : Node2D
 
 	private void OnOfficerDied(OfficerPawn pawn)
 	{
+		if (pawn != null)
+		{
+			AppendCombatLog($"{pawn.OfficerName} collapses under enemy fire. Their post goes dark.");
+		}
+
 		RefreshCombatHud();
 		UpdateFogOfWar();
 		if (!GetAliveOfficers().Any())
@@ -2268,6 +2361,11 @@ public partial class MissionMap : Node2D
 
 	private void OnMissionNpcDied(MissionNpcPawn pawn)
 	{
+		if (pawn != null)
+		{
+			AppendCombatLog($"{pawn.DisplayName} goes down and stops fighting.");
+		}
+
 		if (pawn != null && !string.IsNullOrWhiteSpace(pawn.NpcId))
 		{
 			_engagedEnemyIds.Remove(pawn.NpcId);
@@ -2351,7 +2449,8 @@ public partial class MissionMap : Node2D
 			CurrentAP = officer.CurrentActions,
 			MaxAP = officer.MaxActions,
 			AttackRange = officer.AttackRange,
-			AttackDamage = officer.AttackDamage
+			AttackDamage = officer.AttackDamage,
+			Notes = $"Initiative bonus: +{officer.InitiativeBonus}"
 		};
 	}
 
@@ -2381,7 +2480,8 @@ public partial class MissionMap : Node2D
 			CurrentAP = enemy.CurrentActions,
 			MaxAP = enemy.MaxActions,
 			AttackRange = enemy.AttackRange,
-			AttackDamage = enemy.AttackDamage
+			AttackDamage = enemy.AttackDamage,
+			Notes = enemy.IsHostile ? $"Initiative bonus: +{enemy.InitiativeBonus}" : "Non-hostile contact"
 		};
 	}
 
@@ -2395,6 +2495,7 @@ public partial class MissionMap : Node2D
 		_missionGameOver = true;
 		_combatActive = false;
 		_enemyTurnInProgress = false;
+		AppendCombatLog("All deployed officers have fallen. The mission is lost.");
 		_missionUi?.HideExtractionPrompt();
 		_missionUi?.ShowMissionGameOver();
 		RefreshCombatHud();

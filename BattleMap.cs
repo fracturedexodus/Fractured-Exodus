@@ -82,8 +82,16 @@ public partial class BattleMap : Node2D
 	private CenterContainer _missionPromptWrapper;
 	private Label _missionPromptTitle;
 	private RichTextLabel _missionPromptDescription;
+	private Label _missionOfficerSelectionLabel;
+	private ScrollContainer _missionOfficerSelectionScroll;
+	private VBoxContainer _missionOfficerSelectionList;
+	private Label _missionOfficerSelectionStatus;
+	private Button _missionLaunchButton;
 	private MapEntity _pendingMissionShip;
 	private MissionInteractionContext _pendingMissionContext;
+	private readonly Dictionary<string, CheckBox> _missionOfficerCheckboxes = new Dictionary<string, CheckBox>();
+	private int _pendingMissionRecommendedOfficerCount = 1;
+	private bool _isUpdatingMissionOfficerSelection;
 	private FleetInventoryService _inventoryService;
 	private OfficerService _officerService;
 	private ShipContextService _shipContextService;
@@ -451,23 +459,200 @@ public partial class BattleMap : Node2D
 		_missionPromptDescription.ScrollActive = false;
 		content.AddChild(_missionPromptDescription);
 
+		_missionOfficerSelectionLabel = new Label
+		{
+			Text = "AWAY TEAM",
+			HorizontalAlignment = HorizontalAlignment.Center
+		};
+		_missionOfficerSelectionLabel.AddThemeColorOverride("font_color", new Color(0.82f, 0.92f, 1f));
+		_missionOfficerSelectionLabel.AddThemeFontSizeOverride("font_size", 18);
+		content.AddChild(_missionOfficerSelectionLabel);
+
+		_missionOfficerSelectionScroll = new ScrollContainer
+		{
+			CustomMinimumSize = new Vector2(560, 172),
+			HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled
+		};
+		content.AddChild(_missionOfficerSelectionScroll);
+
+		_missionOfficerSelectionList = new VBoxContainer();
+		_missionOfficerSelectionList.AddThemeConstantOverride("separation", 8);
+		_missionOfficerSelectionScroll.AddChild(_missionOfficerSelectionList);
+
+		_missionOfficerSelectionStatus = new Label
+		{
+			AutowrapMode = TextServer.AutowrapMode.WordSmart,
+			HorizontalAlignment = HorizontalAlignment.Center
+		};
+		_missionOfficerSelectionStatus.AddThemeColorOverride("font_color", new Color(0.74f, 0.86f, 0.98f));
+		content.AddChild(_missionOfficerSelectionStatus);
+
 		HBoxContainer buttonRow = new HBoxContainer();
 		buttonRow.Alignment = BoxContainer.AlignmentMode.Center;
 		buttonRow.AddThemeConstantOverride("separation", 12);
 		content.AddChild(buttonRow);
 
-		Button launchButton = new Button();
-		launchButton.Text = "LAUNCH MISSION";
-		launchButton.CustomMinimumSize = new Vector2(220, 42);
-		launchButton.AddThemeColorOverride("font_color", new Color(0.4f, 1f, 0.75f));
-		launchButton.Pressed += LaunchPendingMission;
-		buttonRow.AddChild(launchButton);
+		_missionLaunchButton = new Button();
+		_missionLaunchButton.Text = "DEPLOY AWAY TEAM";
+		_missionLaunchButton.CustomMinimumSize = new Vector2(220, 42);
+		_missionLaunchButton.AddThemeColorOverride("font_color", new Color(0.4f, 1f, 0.75f));
+		_missionLaunchButton.Pressed += LaunchPendingMission;
+		buttonRow.AddChild(_missionLaunchButton);
 
 		Button declineButton = new Button();
 		declineButton.Text = "NOT YET";
 		declineButton.CustomMinimumSize = new Vector2(160, 42);
 		declineButton.Pressed += HideMissionPrompt;
 		buttonRow.AddChild(declineButton);
+	}
+
+	private void PopulateMissionOfficerSelection(MissionInteractionContext missionContext)
+	{
+		if (_missionOfficerSelectionList == null || _globalData == null)
+		{
+			return;
+		}
+
+		foreach (Node child in _missionOfficerSelectionList.GetChildren())
+		{
+			child.QueueFree();
+		}
+		_missionOfficerCheckboxes.Clear();
+
+		List<string> availableShips = (_globalData.SelectedPlayerFleet ?? new List<string>())
+			.Where(shipName => !string.IsNullOrWhiteSpace(shipName))
+			.Where(shipName => _officerService?.GetOfficerForShip(shipName) != null)
+			.ToList();
+		_pendingMissionRecommendedOfficerCount = Mathf.Max(1, missionContext?.Definition?.RecommendedOfficerCount ?? 1);
+		int requiredSelections = Mathf.Min(_pendingMissionRecommendedOfficerCount, availableShips.Count);
+
+		if (availableShips.Count == 0)
+		{
+			Label emptyLabel = new Label
+			{
+				Text = "No assigned officers are available in the current fleet. Assign officers before launching a mission.",
+				AutowrapMode = TextServer.AutowrapMode.WordSmart,
+				HorizontalAlignment = HorizontalAlignment.Center
+			};
+			_missionOfficerSelectionList.AddChild(emptyLabel);
+			UpdateMissionOfficerSelectionStatus();
+			return;
+		}
+
+		HashSet<string> preferredSelection = (_globalData.SelectedMissionOfficerShipNames ?? new List<string>())
+			.Where(shipName => !string.IsNullOrWhiteSpace(shipName))
+			.ToHashSet();
+		if (preferredSelection.Count == 0)
+		{
+			preferredSelection = availableShips.Take(requiredSelections).ToHashSet();
+		}
+
+		_isUpdatingMissionOfficerSelection = true;
+		foreach (string shipName in availableShips)
+		{
+			OfficerState officer = _officerService?.GetOfficerForShip(shipName);
+			CheckBox box = new CheckBox
+			{
+				Text = $"{officer?.DisplayName ?? shipName}  |  {officer?.Specialty ?? "Unassigned Specialty"}  |  {shipName}",
+				TooltipText = $"{officer?.DisplayName ?? shipName}\nShip: {shipName}\nSpecialty: {officer?.Specialty ?? "Unknown"}\nIdeology: {officer?.Ideology ?? "Unknown"}\nArchetype: {officer?.Archetype ?? "Unknown"}"
+			};
+			box.ButtonPressed = preferredSelection.Contains(shipName);
+			string shipNameLocal = shipName;
+			box.Toggled += pressed => OnMissionOfficerToggled(shipNameLocal, pressed);
+			_missionOfficerSelectionList.AddChild(box);
+			_missionOfficerCheckboxes[shipName] = box;
+		}
+		_isUpdatingMissionOfficerSelection = false;
+
+		TrimMissionOfficerSelectionToLimit(requiredSelections);
+		UpdateMissionOfficerSelectionStatus();
+	}
+
+	private void OnMissionOfficerToggled(string shipName, bool pressed)
+	{
+		if (_isUpdatingMissionOfficerSelection)
+		{
+			return;
+		}
+
+		List<string> availableShips = _missionOfficerCheckboxes.Keys.ToList();
+		int selectionLimit = Mathf.Min(_pendingMissionRecommendedOfficerCount, availableShips.Count);
+		if (pressed && GetSelectedMissionOfficerShips().Count > selectionLimit && _missionOfficerCheckboxes.TryGetValue(shipName, out CheckBox box))
+		{
+			_isUpdatingMissionOfficerSelection = true;
+			box.ButtonPressed = false;
+			_isUpdatingMissionOfficerSelection = false;
+		}
+
+		UpdateMissionOfficerSelectionStatus();
+	}
+
+	private void TrimMissionOfficerSelectionToLimit(int selectionLimit)
+	{
+		List<string> selectedShips = GetSelectedMissionOfficerShips();
+		if (selectedShips.Count <= selectionLimit)
+		{
+			return;
+		}
+
+		_isUpdatingMissionOfficerSelection = true;
+		foreach (string shipName in selectedShips.Skip(selectionLimit))
+		{
+			if (_missionOfficerCheckboxes.TryGetValue(shipName, out CheckBox box))
+			{
+				box.ButtonPressed = false;
+			}
+		}
+		_isUpdatingMissionOfficerSelection = false;
+	}
+
+	private List<string> GetSelectedMissionOfficerShips()
+	{
+		return _missionOfficerCheckboxes
+			.Where(pair => pair.Value != null && pair.Value.ButtonPressed)
+			.Select(pair => pair.Key)
+			.ToList();
+	}
+
+	private bool CanLaunchPendingMission(List<string> selectedShips = null)
+	{
+		List<string> availableShips = _missionOfficerCheckboxes.Keys.ToList();
+		List<string> resolvedSelection = selectedShips ?? GetSelectedMissionOfficerShips();
+		if (availableShips.Count == 0)
+		{
+			return false;
+		}
+
+		int requiredSelections = Mathf.Min(_pendingMissionRecommendedOfficerCount, availableShips.Count);
+		return resolvedSelection.Count == requiredSelections;
+	}
+
+	private void UpdateMissionOfficerSelectionStatus()
+	{
+		if (_missionOfficerSelectionStatus == null)
+		{
+			return;
+		}
+
+		List<string> availableShips = _missionOfficerCheckboxes.Keys.ToList();
+		List<string> selectedShips = GetSelectedMissionOfficerShips();
+		int requiredSelections = Mathf.Min(_pendingMissionRecommendedOfficerCount, availableShips.Count);
+
+		if (availableShips.Count == 0)
+		{
+			_missionOfficerSelectionStatus.Text = "No mission-ready officers are currently assigned to the fleet.";
+			if (_missionLaunchButton != null)
+			{
+				_missionLaunchButton.Disabled = true;
+			}
+			return;
+		}
+
+		_missionOfficerSelectionStatus.Text = $"Select {requiredSelections} officer{(requiredSelections == 1 ? string.Empty : "s")} for this away mission. Current selection: {selectedShips.Count}/{requiredSelections}.";
+		if (_missionLaunchButton != null)
+		{
+			_missionLaunchButton.Disabled = !CanLaunchPendingMission(selectedShips);
+		}
 	}
 
 	// ==========================================
@@ -1535,6 +1720,7 @@ public partial class BattleMap : Node2D
 		_pendingMissionContext = missionContext;
 		_missionPromptTitle.Text = missionContext.Definition.Title.ToUpper();
 		_missionPromptDescription.Text = BuildMissionPromptDescription(missionContext);
+		PopulateMissionOfficerSelection(missionContext);
 		_missionPromptWrapper.Visible = true;
 
 		if (reopenShipMenu)
@@ -1551,7 +1737,7 @@ public partial class BattleMap : Node2D
 				+ missionContext.SourceNodeID
 				+ ".[/color]\n\n"
 				+ missionContext.Definition.Description
-				+ "\n\nDo you want to dispatch an away team and begin the operation now?";
+				+ "\n\nChoose your away team below, then dispatch the mission.";
 		}
 
 		string sourceLabel = string.IsNullOrWhiteSpace(missionContext.SourceNodeID)
@@ -1561,7 +1747,7 @@ public partial class BattleMap : Node2D
 			+ sourceLabel
 			+ ".[/color]\n\n"
 			+ missionContext.Definition.Description
-			+ "\n\nDo you want to dispatch an away team and begin the operation now?";
+			+ "\n\nChoose your away team below, then dispatch the mission.";
 	}
 
 	private void HideMissionPrompt()
@@ -1573,6 +1759,7 @@ public partial class BattleMap : Node2D
 
 		_pendingMissionShip = null;
 		_pendingMissionContext = null;
+		_missionOfficerCheckboxes.Clear();
 	}
 
 	private void LaunchPendingMission()
@@ -1581,6 +1768,19 @@ public partial class BattleMap : Node2D
 		{
 			return;
 		}
+
+		List<string> selectedMissionShips = GetSelectedMissionOfficerShips();
+		if (!CanLaunchPendingMission(selectedMissionShips))
+		{
+			UpdateMissionOfficerSelectionStatus();
+			return;
+		}
+
+		_globalData.SelectedMissionOfficerShipNames = new List<string>(selectedMissionShips);
+		_globalData.SelectedMissionOfficerIDs = selectedMissionShips
+			.Select(shipName => _officerService?.GetOfficerForShip(shipName)?.OfficerID ?? string.Empty)
+			.Where(officerId => !string.IsNullOrWhiteSpace(officerId))
+			.ToList();
 
 		MissionRuntimeState state = _missionService.PrepareMissionFromInteraction(
 			_pendingMissionContext.InteractionKey,

@@ -397,7 +397,7 @@ public partial class MissionRoomBuilder : Node
 				_markerPositions[markerId] = GetCellWorldPosition(column, row, new Vector2(offsetX, offsetY));
 				_markerCells[markerId] = new Vector2I(column, row);
 				string spawnKey = string.IsNullOrEmpty(logicTargetId) ? markerId : logicTargetId;
-				if ((markerId.StartsWith("spawn_") || markerId == "npc_spawn") && !string.IsNullOrWhiteSpace(spawnKey))
+				if ((markerId.StartsWith("spawn_") || markerId == "npc_spawn" || markerId == "hostile_spawn") && !string.IsNullOrWhiteSpace(spawnKey))
 				{
 					_spawnMarkerCells[spawnKey] = new Vector2I(column, row);
 				}

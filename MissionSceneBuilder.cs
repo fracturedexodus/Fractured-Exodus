@@ -51,6 +51,7 @@ public partial class MissionSceneBuilder : Node2D
 	private LineEdit _logicNpcDefinitionPathEdit;
 	private OptionButton _logicNpcDefinitionOption;
 	private Button _logicNpcDefinitionRefreshButton;
+	private Label _logicNpcDefinitionPreviewLabel;
 	private OptionButton _logicNpcPortraitOption;
 	private LineEdit _logicRequiredFlagEdit;
 	private Label _logicRequiredFlagHelpLabel;
@@ -72,6 +73,7 @@ public partial class MissionSceneBuilder : Node2D
 	private OptionButton _contextPropDefinitionOption;
 	private LineEdit _contextNpcDefinitionPathEdit;
 	private OptionButton _contextNpcDefinitionOption;
+	private Label _contextNpcDefinitionPreviewLabel;
 	private OptionButton _contextNpcPortraitOption;
 	private LineEdit _contextRequiredFlagEdit;
 	private Label _contextRequiredFlagHelpLabel;
@@ -106,6 +108,7 @@ public partial class MissionSceneBuilder : Node2D
 	private MissionTileDefinition _selectedTile;
 	private MissionMarkerDefinition _selectedMarker;
 	private string _selectedPropDefinitionPath = string.Empty;
+	private string _selectedHostileNpcDefinitionPath = string.Empty;
 	private Sprite2D _draggedSprite;
 	private Sprite2D _selectedPlacedSprite;
 	private Vector2I _draggedCell;
@@ -156,6 +159,7 @@ public partial class MissionSceneBuilder : Node2D
 		public string Description { get; init; } = string.Empty;
 		public Texture2D Icon { get; init; }
 		public bool Exists { get; init; }
+		public bool IsHostile { get; init; }
 	}
 
 	private enum ValidationSeverity
@@ -713,6 +717,12 @@ public partial class MissionSceneBuilder : Node2D
 		_logicNpcDefinitionRefreshButton.Pressed += RefreshNpcDefinitionOptions;
 		npcDefinitionRow.AddChild(_logicNpcDefinitionRefreshButton);
 		root.AddChild(npcDefinitionRow);
+		_logicNpcDefinitionPreviewLabel = new Label
+		{
+			Text = "No NPC definition selected.",
+			AutowrapMode = TextServer.AutowrapMode.WordSmart
+		};
+		root.AddChild(_logicNpcDefinitionPreviewLabel);
 		root.AddChild(new Label { Text = "Conversation Portrait" });
 		_logicNpcPortraitOption = new OptionButton();
 		for (int i = 0; i < MissionDialoguePortraitCatalog.All.Count; i++)
@@ -902,6 +912,12 @@ public partial class MissionSceneBuilder : Node2D
 		};
 		_contextNpcDefinitionOption.ItemSelected += OnContextNpcDefinitionOptionSelected;
 		root.AddChild(_contextNpcDefinitionOption);
+		_contextNpcDefinitionPreviewLabel = new Label
+		{
+			Text = "No NPC definition selected.",
+			AutowrapMode = TextServer.AutowrapMode.WordSmart
+		};
+		root.AddChild(_contextNpcDefinitionPreviewLabel);
 
 		root.AddChild(new Label { Text = "Conversation Portrait" });
 		_contextNpcPortraitOption = new OptionButton();
@@ -1166,6 +1182,10 @@ public partial class MissionSceneBuilder : Node2D
 		CopyOptionButtonItems(_logicPropDefinitionOption, _contextPropDefinitionOption);
 		_contextNpcDefinitionPathEdit.Text = _logicNpcDefinitionPathEdit?.Text ?? string.Empty;
 		CopyOptionButtonItems(_logicNpcDefinitionOption, _contextNpcDefinitionOption);
+		if (_contextNpcDefinitionPreviewLabel != null)
+		{
+			_contextNpcDefinitionPreviewLabel.Text = _logicNpcDefinitionPreviewLabel?.Text ?? "No NPC definition selected.";
+		}
 		if (_contextNpcPortraitOption.ItemCount > 0)
 		{
 			_contextNpcPortraitOption.Select(Mathf.Clamp(_logicNpcPortraitOption?.Selected ?? 0, 0, _contextNpcPortraitOption.ItemCount - 1));
@@ -1474,7 +1494,7 @@ public partial class MissionSceneBuilder : Node2D
 		foreach (MissionMarkerCategory category in new[] { MissionMarkerCategory.Spawn, MissionMarkerCategory.Objective, MissionMarkerCategory.Trigger })
 		{
 			List<MissionMarkerDefinition> definitions = MissionMarkerCatalog.All
-				.Where(def => def.Category == category && PaletteMatchesSearch(def.DisplayName, def.Id))
+				.Where(def => def.Category == category && def.Id != "hostile_spawn" && PaletteMatchesSearch(def.DisplayName, def.Id))
 				.ToList();
 			if (definitions.Count == 0)
 			{
@@ -1493,6 +1513,24 @@ public partial class MissionSceneBuilder : Node2D
 				content.AddChild(CreatePaletteMarkerButton(definition));
 				itemCount++;
 			}
+		}
+
+		return itemCount;
+	}
+
+	private int BuildHostileSpawnPaletteContent(VBoxContainer content)
+	{
+		int itemCount = 0;
+		foreach (string npcDefinitionPath in GetAvailableHostileNpcDefinitionPaths())
+		{
+			NpcDefinitionPreview preview = GetNpcDefinitionPreview(npcDefinitionPath);
+			if (!PaletteMatchesSearch(preview.DisplayName, npcDefinitionPath, preview.Description, "hostile spawn"))
+			{
+				continue;
+			}
+
+			content.AddChild(CreatePaletteHostileSpawnButton(npcDefinitionPath, preview));
+			itemCount++;
 		}
 
 		return itemCount;
@@ -1539,6 +1577,7 @@ public partial class MissionSceneBuilder : Node2D
 			_selectedTile = definition;
 			_selectedMarker = null;
 			_selectedPropDefinitionPath = string.Empty;
+			_selectedHostileNpcDefinitionPath = string.Empty;
 			ClearPlacedSelection();
 			UpdateSelectedLabel();
 			UpdateLogicInspector();
@@ -1562,6 +1601,7 @@ public partial class MissionSceneBuilder : Node2D
 			_selectedTile = null;
 			_selectedMarker = definition;
 			_selectedPropDefinitionPath = string.Empty;
+			_selectedHostileNpcDefinitionPath = string.Empty;
 			ClearPlacedSelection();
 			UpdateSelectedLabel();
 			UpdateLogicInspector();
@@ -1585,6 +1625,31 @@ public partial class MissionSceneBuilder : Node2D
 			_selectedTile = null;
 			_selectedMarker = null;
 			_selectedPropDefinitionPath = propDefinitionPath;
+			_selectedHostileNpcDefinitionPath = string.Empty;
+			ClearPlacedSelection();
+			UpdateSelectedLabel();
+			UpdateLogicInspector();
+		};
+		return button;
+	}
+
+	private Button CreatePaletteHostileSpawnButton(string npcDefinitionPath, NpcDefinitionPreview preview)
+	{
+		Button button = new Button
+		{
+			Text = preview.DisplayName,
+			Icon = preview.Icon,
+			Alignment = HorizontalAlignment.Left,
+			ExpandIcon = true,
+			CustomMinimumSize = new Vector2(0f, 40f),
+			TooltipText = string.IsNullOrWhiteSpace(preview.Description) ? npcDefinitionPath : $"{preview.Description}\n{npcDefinitionPath}"
+		};
+		button.Pressed += () =>
+		{
+			_selectedTile = null;
+			_selectedMarker = null;
+			_selectedPropDefinitionPath = string.Empty;
+			_selectedHostileNpcDefinitionPath = npcDefinitionPath;
 			ClearPlacedSelection();
 			UpdateSelectedLabel();
 			UpdateLogicInspector();
@@ -2441,7 +2506,7 @@ public partial class MissionSceneBuilder : Node2D
 
 		string markerId = selectedSprite.GetMeta("marker_id", string.Empty).AsString();
 		string npcDefinitionPath = selectedSprite.GetMeta("npc_definition_path", string.Empty).AsString();
-		if (markerId == "npc_spawn" && !string.IsNullOrWhiteSpace(npcDefinitionPath) && ResourceLoader.Exists(npcDefinitionPath))
+		if ((markerId == "npc_spawn" || markerId == "hostile_spawn") && !string.IsNullOrWhiteSpace(npcDefinitionPath) && ResourceLoader.Exists(npcDefinitionPath))
 		{
 			MissionNpcDefinition definition = GD.Load<MissionNpcDefinition>(npcDefinitionPath);
 			binding = new DialogueBindingInfo
@@ -2449,7 +2514,7 @@ public partial class MissionSceneBuilder : Node2D
 				Kind = DialogueBindingKind.NpcDefinition,
 				Sprite = selectedSprite,
 				ConversationId = definition?.DefaultDialogueId ?? string.Empty,
-				Description = $"NPC spawn `{GetItemDisplayId(selectedSprite)}` uses its NPC definition dialogue",
+				Description = $"{(markerId == "hostile_spawn" ? "Hostile spawn" : "NPC spawn")} `{GetItemDisplayId(selectedSprite)}` uses its NPC definition dialogue",
 				NpcDefinitionPath = npcDefinitionPath
 			};
 			return true;
@@ -2621,9 +2686,10 @@ public partial class MissionSceneBuilder : Node2D
 
 		AddPaletteCollapsibleSection("map_tiles", "MAP TILES", "Use floors first to block out rooms, then add walls and visual prop tiles.", BuildMapTilesPaletteContent);
 		AddPaletteCollapsibleSection("mission_markers", "MISSION MARKERS", "Markers define officer insertion, objectives, dialogue triggers, and NPC spawn anchors.", BuildMarkerPaletteContent);
+		AddPaletteCollapsibleSection("hostile_spawns", "HOSTILE SPAWNS", "Place engaged combat enemies directly from your hostile NPC definitions.", BuildHostileSpawnPaletteContent);
 		AddPaletteCollapsibleSection("runtime_props", "RUNTIME MISSION PROPS", "These spawn real interactable prop definitions in-mission, not just decorative map art.", BuildRuntimePropPaletteContent);
 
-		if (_selectedTile == null && _selectedMarker == null && string.IsNullOrWhiteSpace(_selectedPropDefinitionPath))
+		if (_selectedTile == null && _selectedMarker == null && string.IsNullOrWhiteSpace(_selectedPropDefinitionPath) && string.IsNullOrWhiteSpace(_selectedHostileNpcDefinitionPath))
 		{
 			_selectedTile = MissionTileCatalog.All.FirstOrDefault();
 		}
@@ -2643,6 +2709,12 @@ public partial class MissionSceneBuilder : Node2D
 		if (_selectedMarker != null)
 		{
 			_selectedLabel.Text = $"Palette: {_selectedMarker.DisplayName}";
+			return;
+		}
+
+		if (!string.IsNullOrWhiteSpace(_selectedHostileNpcDefinitionPath))
+		{
+			_selectedLabel.Text = $"Palette: Hostile Spawn - {GetNpcDefinitionPreview(_selectedHostileNpcDefinitionPath).DisplayName}";
 			return;
 		}
 
@@ -2786,6 +2858,15 @@ public partial class MissionSceneBuilder : Node2D
 
 			if (_selectedMarker == null)
 			{
+				if (!string.IsNullOrWhiteSpace(_selectedHostileNpcDefinitionPath))
+				{
+					Sprite2D hostileMarker = CreateHostileSpawnMarker(_selectedHostileNpcDefinitionPath, cell.X, cell.Y);
+					GetPlacementLayer(BuilderLayer.Marker).AddChild(hostileMarker);
+					SelectPlacedSprite(hostileMarker);
+					SetStatus($"Placed hostile spawn {GetNpcDefinitionPreview(_selectedHostileNpcDefinitionPath).DisplayName} at {cell.X},{cell.Y}");
+					return;
+				}
+
 				if (string.IsNullOrWhiteSpace(_selectedPropDefinitionPath))
 				{
 					return;
@@ -2932,6 +3013,11 @@ public partial class MissionSceneBuilder : Node2D
 			return FindSpriteAtCell(_markerLayer, cell.X, cell.Y);
 		}
 
+		if (!string.IsNullOrWhiteSpace(_selectedHostileNpcDefinitionPath))
+		{
+			return FindSpriteAtCell(_markerLayer, cell.X, cell.Y);
+		}
+
 		if (!string.IsNullOrWhiteSpace(_selectedPropDefinitionPath))
 		{
 			return FindSpriteAtCell(_propLayer, cell.X, cell.Y);
@@ -2980,6 +3066,11 @@ public partial class MissionSceneBuilder : Node2D
 	private bool ShouldIncludeFloorsForSelection()
 	{
 		if (_selectedMarker != null)
+		{
+			return false;
+		}
+
+		if (!string.IsNullOrWhiteSpace(_selectedHostileNpcDefinitionPath))
 		{
 			return false;
 		}
@@ -3074,6 +3165,7 @@ public partial class MissionSceneBuilder : Node2D
 			UpdatePropDefinitionPreview(string.Empty);
 			_logicNpcDefinitionPathEdit.Text = string.Empty;
 			SelectNpcDefinitionOptionWithoutRefresh(string.Empty);
+			UpdateNpcDefinitionPreview(string.Empty);
 			_logicNpcPortraitOption.Select(0);
 			_logicRequiredFlagEdit.Text = string.Empty;
 			_logicRequiredFlagEdit.PlaceholderText = string.Empty;
@@ -3110,6 +3202,7 @@ public partial class MissionSceneBuilder : Node2D
 		EnsurePropDefinitionOptionSelection(_logicPropDefinitionPathEdit.Text);
 		_logicNpcDefinitionPathEdit.Text = item.GetMeta("npc_definition_path", string.Empty).AsString();
 		EnsureNpcDefinitionOptionSelection(_logicNpcDefinitionPathEdit.Text);
+		UpdateNpcDefinitionPreview(_logicNpcDefinitionPathEdit.Text);
 		UpdateTargetIdFieldContext(item, isMarker, isPlacedProp);
 		UpdateFlagFieldContext(item, isMarker, isPlacedProp);
 		SelectNpcPortraitOption(item.GetMeta("logic_npc_portrait", string.Empty).AsString());
@@ -3195,6 +3288,7 @@ public partial class MissionSceneBuilder : Node2D
 		}
 
 		RefreshNpcDefinitionOptions(newText);
+		UpdateNpcDefinitionPreview(newText);
 		UpdateTargetIdFieldContextForCurrentSelection();
 	}
 
@@ -3224,6 +3318,7 @@ public partial class MissionSceneBuilder : Node2D
 		_isUpdatingLogicUi = true;
 		_logicNpcDefinitionPathEdit.Text = selectedPath;
 		_isUpdatingLogicUi = false;
+		UpdateNpcDefinitionPreview(selectedPath);
 		ApplyLogicFieldChanges();
 	}
 
@@ -3307,7 +3402,7 @@ public partial class MissionSceneBuilder : Node2D
 			string path = npcDefinitionPaths[i];
 			NpcDefinitionPreview preview = GetNpcDefinitionPreview(path);
 			int itemIndex = i + 1;
-			_logicNpcDefinitionOption.AddItem(preview.DisplayName, itemIndex);
+			_logicNpcDefinitionOption.AddItem(preview.IsHostile ? $"[HOSTILE] {preview.DisplayName}" : preview.DisplayName, itemIndex);
 			_logicNpcDefinitionOption.SetItemMetadata(itemIndex, path);
 			if (preview.Icon != null)
 			{
@@ -3323,7 +3418,7 @@ public partial class MissionSceneBuilder : Node2D
 		{
 			NpcDefinitionPreview preview = GetNpcDefinitionPreview(normalizedPath);
 			selectedIndex = _logicNpcDefinitionOption.ItemCount;
-			_logicNpcDefinitionOption.AddItem($"Custom: {preview.DisplayName}", selectedIndex);
+			_logicNpcDefinitionOption.AddItem($"Custom: {(preview.IsHostile ? "[HOSTILE] " : string.Empty)}{preview.DisplayName}", selectedIndex);
 			_logicNpcDefinitionOption.SetItemMetadata(selectedIndex, normalizedPath);
 			if (preview.Icon != null)
 			{
@@ -3332,6 +3427,7 @@ public partial class MissionSceneBuilder : Node2D
 		}
 
 		_logicNpcDefinitionOption.Select(selectedIndex);
+		UpdateNpcDefinitionPreview(normalizedPath);
 	}
 
 	private void EnsurePropDefinitionOptionSelection(string selectedPath)
@@ -3488,6 +3584,11 @@ public partial class MissionSceneBuilder : Node2D
 				placeholderText = "npc_broker_veil";
 				helpText = "NPC spawn markers use Target ID as a stable spawn key. Pair them with an NPC Definition Path to spawn a named mission character.";
 			}
+			else if (markerId == "hostile_spawn")
+			{
+				placeholderText = "hostile_raider_alpha";
+				helpText = "Hostile spawn markers use Target ID as a stable enemy spawn key. Pair them with a hostile NPC Definition Path to place a combat encounter.";
+			}
 			else if (markerId == "trigger_dialogue")
 			{
 				placeholderText = "Dialogue ID";
@@ -3569,6 +3670,13 @@ public partial class MissionSceneBuilder : Node2D
 				setPlaceholder = string.Empty;
 				requiredHelp = "NPC spawn markers can require a story flag if the character should only appear after a certain mission phase.";
 				setHelp = "NPC spawn markers usually do not set flags themselves; the spawned NPC interaction should own that.";
+			}
+			else if (markerId == "hostile_spawn")
+			{
+				requiredPlaceholder = "alert_state_triggered";
+				setPlaceholder = string.Empty;
+				requiredHelp = "Hostile spawn markers can require a flag if enemies should only appear after an alarm, breach, or story escalation.";
+				setHelp = "Hostile spawn markers usually do not set flags themselves; combat outcomes or props should own those state changes.";
 			}
 			else if (markerId.StartsWith("trigger_"))
 			{
@@ -3786,10 +3894,30 @@ public partial class MissionSceneBuilder : Node2D
 		return sprite;
 	}
 
+	private Sprite2D CreateHostileSpawnMarker(string npcDefinitionPath, int column, int row)
+	{
+		if (!MissionMarkerCatalog.TryGetById("hostile_spawn", out MissionMarkerDefinition markerDefinition))
+		{
+			return CreateMarker(new MissionMarkerDefinition("hostile_spawn", "Hostile Spawn", MissionMarkerCategory.Spawn, new Color(1f, 0.2f, 0.18f, 0.92f), Vector2.Zero), column, row);
+		}
+
+		Sprite2D sprite = CreateMarker(markerDefinition, column, row);
+		NpcDefinitionPreview preview = GetNpcDefinitionPreview(npcDefinitionPath);
+		string spawnKeyBase = string.IsNullOrWhiteSpace(preview.DisplayName)
+			? "hostile_spawn"
+			: preview.DisplayName.ToLowerInvariant().Replace(' ', '_').Replace('-', '_');
+		sprite.SetMeta("npc_definition_path", npcDefinitionPath);
+		sprite.SetMeta("logic_label", $"Hostile Spawn: {preview.DisplayName}");
+		sprite.SetMeta("logic_target_id", $"{spawnKeyBase}_{column}_{row}");
+		sprite.SetMeta("logic_notes", string.IsNullOrWhiteSpace(preview.Description) ? "Hostile combat spawn." : preview.Description);
+		UpdateMarkerCaption(sprite);
+		return sprite;
+	}
+
 	private void ApplyDefaultMarkerLogic(Sprite2D sprite, MissionMarkerDefinition definition)
 	{
 		sprite.SetMeta("logic_label", definition.DisplayName);
-		sprite.SetMeta("logic_target_id", definition.Id == "npc_spawn" ? string.Empty : definition.Id);
+		sprite.SetMeta("logic_target_id", definition.Id == "npc_spawn" || definition.Id == "hostile_spawn" ? string.Empty : definition.Id);
 		sprite.SetMeta("logic_npc_portrait", string.Empty);
 		sprite.SetMeta("logic_required_flag", string.Empty);
 		sprite.SetMeta("logic_set_flag", string.Empty);
@@ -4472,15 +4600,15 @@ public partial class MissionSceneBuilder : Node2D
 					TrackDuplicateUsage(semanticIdOwners, BuildSemanticUsageKey("trigger_route", targetId), markerLabel);
 				}
 			}
-			else if (markerId == "npc_spawn")
+			else if (markerId == "npc_spawn" || markerId == "hostile_spawn")
 			{
-				if (string.IsNullOrWhiteSpace(targetId) || targetId == "npc_spawn")
+				if (string.IsNullOrWhiteSpace(targetId) || targetId == "npc_spawn" || targetId == "hostile_spawn")
 				{
 					issues.Add($"{markerLabel} needs a unique Target ID spawn key.");
 				}
 				else
 				{
-					TrackDuplicateUsage(semanticIdOwners, BuildSemanticUsageKey("npc_spawn_key", targetId), markerLabel);
+					TrackDuplicateUsage(semanticIdOwners, BuildSemanticUsageKey(markerId == "hostile_spawn" ? "hostile_spawn_key" : "npc_spawn_key", targetId), markerLabel);
 				}
 
 				if (string.IsNullOrWhiteSpace(npcDefinitionPath))
@@ -4490,6 +4618,18 @@ public partial class MissionSceneBuilder : Node2D
 				else if (!ResourceLoader.Exists(npcDefinitionPath))
 				{
 					issues.Add($"{markerLabel} points to missing NPC definition {npcDefinitionPath}.");
+				}
+				else
+				{
+					MissionNpcDefinition npcDefinition = GD.Load<MissionNpcDefinition>(npcDefinitionPath);
+					if (markerId == "hostile_spawn" && npcDefinition != null && !npcDefinition.IsHostile)
+					{
+						issues.Add($"{markerLabel} uses a non-hostile NPC definition. Hostile Spawn markers should point to hostile NPC resources.");
+					}
+					else if (markerId == "npc_spawn" && npcDefinition != null && npcDefinition.IsHostile)
+					{
+						issues.Add($"{markerLabel} uses a hostile NPC definition. Use a Hostile Spawn marker for combat enemies.");
+					}
 				}
 			}
 
@@ -5139,6 +5279,22 @@ public partial class MissionSceneBuilder : Node2D
 			.ToList();
 	}
 
+	private static List<string> GetAvailableHostileNpcDefinitionPaths()
+	{
+		return GetAvailableNpcDefinitionPaths()
+			.Where(path =>
+			{
+				if (!ResourceLoader.Exists(path))
+				{
+					return false;
+				}
+
+				MissionNpcDefinition definition = GD.Load<MissionNpcDefinition>(path);
+				return definition?.IsHostile == true;
+			})
+			.ToList();
+	}
+
 	private NpcDefinitionPreview GetNpcDefinitionPreview(string path)
 	{
 		string normalizedPath = path?.StripEdges() ?? string.Empty;
@@ -5172,10 +5328,29 @@ public partial class MissionSceneBuilder : Node2D
 			DisplayName = displayName,
 			Description = description,
 			Icon = icon,
-			Exists = exists
+			Exists = exists,
+			IsHostile = definition?.IsHostile == true
 		};
 		_npcDefinitionPreviewCache[normalizedPath] = preview;
 		return preview;
+	}
+
+	private void UpdateNpcDefinitionPreview(string path)
+	{
+		if (_logicNpcDefinitionPreviewLabel == null)
+		{
+			return;
+		}
+
+		NpcDefinitionPreview preview = GetNpcDefinitionPreview(path);
+		_logicNpcDefinitionPreviewLabel.Text = string.IsNullOrEmpty(preview.Path)
+			? "No NPC definition selected."
+			: $"{(preview.IsHostile ? "[HOSTILE] " : string.Empty)}{preview.DisplayName}\n{preview.Description}";
+
+		if (_contextNpcDefinitionPreviewLabel != null)
+		{
+			_contextNpcDefinitionPreviewLabel.Text = _logicNpcDefinitionPreviewLabel.Text;
+		}
 	}
 
 	private Texture2D GetFallbackPropPreviewTexture()

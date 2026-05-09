@@ -97,11 +97,17 @@ public sealed class MissionSpawnResolver
 
 		foreach (MissionRoomBuilder.MarkerPlacement placement in context.RoomBuilder.GetMarkerPlacements()
 			.Where(placement => placement != null
-				&& placement.MarkerId == "npc_spawn"
+				&& (placement.MarkerId == "npc_spawn" || placement.MarkerId == "hostile_spawn")
 				&& !string.IsNullOrWhiteSpace(placement.NpcDefinitionPath)))
 		{
 			MissionNpcDefinition npcDefinition = GD.Load<MissionNpcDefinition>(placement.NpcDefinitionPath);
 			if (npcDefinition == null || reservedCells.Contains(placement.Cell))
+			{
+				continue;
+			}
+
+			bool wantsHostile = placement.MarkerId == "hostile_spawn";
+			if (npcDefinition.IsHostile != wantsHostile)
 			{
 				continue;
 			}
@@ -111,7 +117,7 @@ public sealed class MissionSpawnResolver
 			{
 				Definition = new MissionSpawnDefinition
 				{
-					SpawnId = string.IsNullOrWhiteSpace(placement.TargetId) ? $"npc_spawn_{placement.Cell.X}_{placement.Cell.Y}" : placement.TargetId,
+					SpawnId = string.IsNullOrWhiteSpace(placement.TargetId) ? $"{placement.MarkerId}_{placement.Cell.X}_{placement.Cell.Y}" : placement.TargetId,
 					MarkerId = placement.TargetId,
 					ActorType = MissionActorType.MissionNpc,
 					NpcDefinitionPath = placement.NpcDefinitionPath,

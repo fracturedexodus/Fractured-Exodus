@@ -20,6 +20,7 @@ public sealed class MissionCombatantSummary
 	public int MaxAP { get; init; }
 	public int AttackRange { get; init; }
 	public int AttackDamage { get; init; }
+	public string Notes { get; init; } = string.Empty;
 }
 
 public partial class MissionUI : CanvasLayer
@@ -52,6 +53,11 @@ public partial class MissionUI : CanvasLayer
 	private PanelContainer _enemyCombatInfoPanel;
 	private TextureRect _enemyCombatIcon;
 	private Label _enemyCombatInfoLabel;
+	private PanelContainer _combatLogPanel;
+	private RichTextLabel _combatLogText;
+	private readonly List<string> _combatLogEntries = new List<string>();
+	private PanelContainer _hoverSummaryPanel;
+	private Label _hoverSummaryLabel;
 	private ColorRect _gameOverPanel;
 	private Label _gameOverLabel;
 	private Button _gameOverReturnButton;
@@ -73,6 +79,8 @@ public partial class MissionUI : CanvasLayer
 
 		BuildExtractionPrompt();
 		BuildCombatHud();
+		BuildCombatLog();
+		BuildHoverSummary();
 		BuildGameOverPanel();
 	}
 
@@ -153,6 +161,11 @@ public partial class MissionUI : CanvasLayer
 		if (_enemyCombatInfoPanel != null)
 		{
 			_enemyCombatInfoPanel.Visible = visible;
+		}
+
+		if (_combatLogPanel != null)
+		{
+			_combatLogPanel.Visible = visible;
 		}
 	}
 
@@ -247,6 +260,58 @@ public partial class MissionUI : CanvasLayer
 
 		_gameOverLabel.Text = "AWAY TEAM LOST";
 		_gameOverPanel.Visible = true;
+	}
+
+	public void AppendCombatLog(string message)
+	{
+		if (_combatLogText == null || string.IsNullOrWhiteSpace(message))
+		{
+			return;
+		}
+
+		_combatLogEntries.Add(message.Trim());
+		while (_combatLogEntries.Count > 8)
+		{
+			_combatLogEntries.RemoveAt(0);
+		}
+
+		_combatLogText.Text = string.Join("\n", _combatLogEntries);
+		_combatLogText.ScrollToLine(_combatLogEntries.Count);
+	}
+
+	public void ClearCombatLog()
+	{
+		_combatLogEntries.Clear();
+		if (_combatLogText != null)
+		{
+			_combatLogText.Text = string.Empty;
+		}
+	}
+
+	public void ShowHoverSummary(MissionCombatantSummary summary, Vector2 screenPosition)
+	{
+		if (_hoverSummaryPanel == null || _hoverSummaryLabel == null || summary == null)
+		{
+			return;
+		}
+
+		_hoverSummaryLabel.Text = $"{summary.DisplayName}\n{summary.Subtitle}\nWEAPON: {summary.WeaponName}\nHP: {summary.CurrentHP}/{summary.MaxHP}\nAP: {summary.CurrentAP}/{summary.MaxAP}\nRANGE: {summary.AttackRange} | DMG: 1-{summary.AttackDamage}" + (string.IsNullOrWhiteSpace(summary.Notes) ? string.Empty : $"\n{summary.Notes}");
+		Vector2 viewportSize = GetViewport().GetVisibleRect().Size;
+		Vector2 desiredPosition = screenPosition + new Vector2(34f, -24f);
+		float maxX = Mathf.Max(12f, viewportSize.X - _hoverSummaryPanel.Size.X - 12f);
+		float maxY = Mathf.Max(12f, viewportSize.Y - _hoverSummaryPanel.Size.Y - 12f);
+		_hoverSummaryPanel.Position = new Vector2(
+			Mathf.Clamp(desiredPosition.X, 12f, maxX),
+			Mathf.Clamp(desiredPosition.Y, 12f, maxY));
+		_hoverSummaryPanel.Visible = true;
+	}
+
+	public void HideHoverSummary()
+	{
+		if (_hoverSummaryPanel != null)
+		{
+			_hoverSummaryPanel.Visible = false;
+		}
 	}
 
 	private void BuildExtractionPrompt()
@@ -348,6 +413,84 @@ public partial class MissionUI : CanvasLayer
 		_enemyCombatInfoPanel.Visible = false;
 		_uiRoot.AddChild(_playerCombatInfoPanel);
 		_uiRoot.AddChild(_enemyCombatInfoPanel);
+	}
+
+	private void BuildCombatLog()
+	{
+		if (_uiRoot == null)
+		{
+			return;
+		}
+
+		_combatLogPanel = new PanelContainer
+		{
+			Visible = false
+		};
+		_combatLogPanel.SetAnchorsPreset(Control.LayoutPreset.BottomWide);
+		_combatLogPanel.AnchorLeft = 0.5f;
+		_combatLogPanel.AnchorRight = 0.5f;
+		_combatLogPanel.OffsetLeft = -320f;
+		_combatLogPanel.OffsetTop = -220f;
+		_combatLogPanel.OffsetRight = 320f;
+		_combatLogPanel.OffsetBottom = -18f;
+		_uiRoot.AddChild(_combatLogPanel);
+
+		MarginContainer margin = new MarginContainer();
+		margin.AddThemeConstantOverride("margin_left", 14);
+		margin.AddThemeConstantOverride("margin_top", 12);
+		margin.AddThemeConstantOverride("margin_right", 14);
+		margin.AddThemeConstantOverride("margin_bottom", 12);
+		_combatLogPanel.AddChild(margin);
+
+		VBoxContainer content = new VBoxContainer();
+		content.AddThemeConstantOverride("separation", 8);
+		margin.AddChild(content);
+
+		Label title = new Label
+		{
+			Text = "COMBAT LOG",
+			HorizontalAlignment = HorizontalAlignment.Center
+		};
+		title.AddThemeFontSizeOverride("font_size", 18);
+		content.AddChild(title);
+
+		_combatLogText = new RichTextLabel
+		{
+			FitContent = false,
+			ScrollActive = true,
+			SelectionEnabled = false,
+			CustomMinimumSize = new Vector2(0f, 132f),
+			BbcodeEnabled = false
+		};
+		content.AddChild(_combatLogText);
+	}
+
+	private void BuildHoverSummary()
+	{
+		if (_uiRoot == null)
+		{
+			return;
+		}
+
+		_hoverSummaryPanel = new PanelContainer
+		{
+			Visible = false,
+			Size = new Vector2(260f, 170f)
+		};
+		_uiRoot.AddChild(_hoverSummaryPanel);
+
+		MarginContainer margin = new MarginContainer();
+		margin.AddThemeConstantOverride("margin_left", 12);
+		margin.AddThemeConstantOverride("margin_top", 10);
+		margin.AddThemeConstantOverride("margin_right", 12);
+		margin.AddThemeConstantOverride("margin_bottom", 10);
+		_hoverSummaryPanel.AddChild(margin);
+
+		_hoverSummaryLabel = new Label
+		{
+			AutowrapMode = TextServer.AutowrapMode.WordSmart
+		};
+		margin.AddChild(_hoverSummaryLabel);
 	}
 
 	private void BuildGameOverPanel()

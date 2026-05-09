@@ -282,6 +282,18 @@ public partial class MissionManager : Node
 
 	private List<string> SelectParticipatingShips(MissionTemplate template)
 	{
+		List<string> explicitlySelectedShips = (_globalData?.SelectedMissionOfficerShipNames ?? new List<string>())
+			.Where(shipName => !string.IsNullOrWhiteSpace(shipName))
+			.Distinct()
+			.ToList();
+		if (explicitlySelectedShips.Count > 0)
+		{
+			return explicitlySelectedShips
+				.Where(shipName => _officerService?.GetOfficerForShip(shipName) != null)
+				.Take(Mathf.Max(1, template.RecommendedOfficerCount))
+				.ToList();
+		}
+
 		List<string> selectedFleet = (_globalData?.SelectedPlayerFleet ?? new List<string>())
 			.Where(shipName => !string.IsNullOrWhiteSpace(shipName))
 			.ToList();
