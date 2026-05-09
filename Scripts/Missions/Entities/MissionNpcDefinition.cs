@@ -12,8 +12,15 @@ public partial class MissionNpcDefinition : Resource
 	[Export(PropertyHint.Range, "0.05,3.0,0.01")] public float VisualScaleMultiplier { get; set; } = 0.11f;
 	[Export] public Color AccentColor { get; set; } = new Color(0.72f, 0.86f, 0.92f, 1f);
 	[Export] public bool ShowNameLabel { get; set; } = true;
+	[Export] public bool IsHostile { get; set; } = false;
 	[Export] public int InteractionRange { get; set; } = 1;
 	[Export] public bool OneShot { get; set; } = false;
+	[Export] public int MaxHP { get; set; } = 10;
+	[Export] public int MaxActions { get; set; } = 2;
+	[Export] public int AttackRange { get; set; } = 1;
+	[Export] public int AttackDamage { get; set; } = 3;
+	[Export] public int InitiativeBonus { get; set; } = 0;
+	[Export] public string WeaponName { get; set; } = "Claws";
 	[Export] public Godot.Collections.Array<string> RequiredFlags { get; set; } = new Godot.Collections.Array<string>();
 	[Export] public Godot.Collections.Array<string> SetFlags { get; set; } = new Godot.Collections.Array<string>();
 	[Export] public string SuccessMessage { get; set; } = string.Empty;

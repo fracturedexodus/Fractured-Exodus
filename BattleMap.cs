@@ -388,7 +388,7 @@ public partial class BattleMap : Node2D
 	{
 		if (UI == null) return;
 		UI.EndTurnButton.Pressed += OnEndTurnPressed;
-		UI.SaveGameButton.Pressed += OnSaveGamePressed;
+		UI.SaveGameButton.Pressed += OnManualSaveGamePressed;
 		UI.RepairFleetButton.Pressed += OnRepairFleetPressed;
 		UI.InventoryButton.Pressed += OnInventoryPressed;
 		UI.MainMenuButton.Pressed += OnMainMenuPressed;
@@ -558,7 +558,7 @@ public partial class BattleMap : Node2D
 					ItemName = item.Name,
 					ItemCategory = item.Category
 				});
-			OnSaveGamePressed(); // Auto-save after a purchase
+			SaveCampaign(true); // Auto-save after a purchase
 			
 		if (SfxPlayer != null)
 		{
@@ -579,7 +579,7 @@ public partial class BattleMap : Node2D
 		LogCombatMessage($"\n[color=green]--- EXCHANGE COMPLETED ---[/color]");
 		LogCombatMessage($"Sold 1 [color=yellow]{GameConstants.ResourceKeys.AncientTech}[/color] for [color=cyan]{GameConstants.StandardEquipment.AncientTechSaleRaw} {GameConstants.ResourceKeys.RawMaterials}[/color].");
 		ApplyOfficerApprovalEvent(OfficerApprovalEventType.SellAncientTech);
-		OnSaveGamePressed();
+		SaveCampaign(true);
 
 		OpenShop();
 	}
@@ -589,7 +589,7 @@ public partial class BattleMap : Node2D
 		if (_inventoryService == null || !_inventoryService.SellInventoryItem(itemID, rawValue)) return;
 
 		UpdateResourceUI();
-		OnSaveGamePressed();
+		SaveCampaign(true);
 
 		if (UI != null) UI.CombatLogPanel.Visible = true;
 		LogCombatMessage($"\n[color=green]--- EXCHANGE COMPLETED ---[/color]");
@@ -705,7 +705,7 @@ public partial class BattleMap : Node2D
 				ItemName = itemToEquip.Name,
 				ItemCategory = itemToEquip.Category
 			});
-		OnSaveGamePressed(); // Save state
+		SaveCampaign(true); // Save state
 
 		OpenEquipMenu(); // Refresh the UI to reflect the swap
 	}
@@ -1593,7 +1593,7 @@ public partial class BattleMap : Node2D
 			return;
 		}
 
-		OnSaveGamePressed();
+		SaveCampaign(true);
 		HideMissionPrompt();
 
 		SceneTransition transitioner = GetNodeOrNull<SceneTransition>("/root/SceneTransition");
@@ -1647,7 +1647,7 @@ public partial class BattleMap : Node2D
 	private void OnCodexPressed() 
 	{ 
 		if (IsFleetMoving) return; 
-		OnSaveGamePressed(); 
+		SaveCampaign(true); 
 		SceneTransition transitioner = GetNodeOrNull<SceneTransition>("/root/SceneTransition");
 		if (transitioner != null) transitioner.ChangeScene("res://codex.tscn");
 		else GetTree().ChangeSceneToFile("res://codex.tscn");
@@ -1815,7 +1815,7 @@ public partial class BattleMap : Node2D
 
 		warpTween.Chain().TweenCallback(Callable.From(() => 
 		{
-			OnSaveGamePressed(); 
+			SaveCampaign(true); 
 
 			SceneTransition transitioner = GetNodeOrNull<SceneTransition>("/root/SceneTransition");
 			string nextScene = _jumpService.FinalizeJump(jumpPlan.IsEmergencyJump);
@@ -1825,7 +1825,12 @@ public partial class BattleMap : Node2D
 		}));
 	}
 
-	private void OnSaveGamePressed()
+	private void OnManualSaveGamePressed()
+	{
+		SaveCampaign(false);
+	}
+
+	private void SaveCampaign(bool autoSave)
 	{
 		if (_globalData == null || _battleMapSaveSnapshotService == null) return;
 
@@ -1839,9 +1844,9 @@ public partial class BattleMap : Node2D
 			Fog != null ? Fog.GetExploredHexes() : Enumerable.Empty<Vector2I>(),
 			HexContents);
 
-		_globalData.SaveGame();
+		_globalData.SaveGame(autoSave);
 
-		if (UI != null)
+		if (!autoSave && UI != null)
 		{
 			UI.SaveGameButton.Text = "GAME SAVED!";
 			UI.SaveGameButton.AddThemeColorOverride("font_color", new Color(0.3f, 1f, 0.3f));

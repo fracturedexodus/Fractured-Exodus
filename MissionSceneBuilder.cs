@@ -59,6 +59,27 @@ public partial class MissionSceneBuilder : Node2D
 	private OptionButton _logicTriggerModeOption;
 	private CheckBox _logicOneShotCheck;
 	private TextEdit _logicNotesEdit;
+	private PanelContainer _contextObjectEditorPanel;
+	private PanelContainer _logicPanel;
+	private PanelContainer _controlsPanel;
+	private Label _contextSelectionLabel;
+	private Label _contextHintLabel;
+	private OptionButton _contextRoleOption;
+	private LineEdit _contextLabelEdit;
+	private LineEdit _contextTargetIdEdit;
+	private Label _contextTargetIdHelpLabel;
+	private LineEdit _contextPropDefinitionPathEdit;
+	private OptionButton _contextPropDefinitionOption;
+	private LineEdit _contextNpcDefinitionPathEdit;
+	private OptionButton _contextNpcDefinitionOption;
+	private OptionButton _contextNpcPortraitOption;
+	private LineEdit _contextRequiredFlagEdit;
+	private Label _contextRequiredFlagHelpLabel;
+	private LineEdit _contextSetFlagEdit;
+	private Label _contextSetFlagHelpLabel;
+	private OptionButton _contextTriggerModeOption;
+	private CheckBox _contextOneShotCheck;
+	private TextEdit _contextNotesEdit;
 	private RichTextLabel _validationReport;
 	private OptionButton _validationFilterOption;
 	private Label _dialogueSelectionContextLabel;
@@ -91,6 +112,7 @@ public partial class MissionSceneBuilder : Node2D
 	private bool _isPanning;
 	private bool _isUpdatingBackgroundUi;
 	private bool _isUpdatingLogicUi;
+	private bool _isUpdatingContextLogicUi;
 	private bool _isUpdatingDialogueUi;
 	private Vector2 _lastMouseScreenPosition;
 	private readonly List<Line2D> _gridLines = new List<Line2D>();
@@ -179,6 +201,7 @@ public partial class MissionSceneBuilder : Node2D
 		_layoutNameEdit = GetNode<LineEdit>("UILayer/TopBar/Margin/TopRow/LayoutNameEdit");
 		_selectedLabel = GetNode<Label>("UILayer/TopBar/Margin/TopRow/SelectedTileLabel");
 		_hoverLayer = GetNode<Node2D>("World/HoverLayer");
+		_controlsPanel = GetNodeOrNull<PanelContainer>("UILayer/ControlsPanel");
 
 		EnsureBackgroundPreviewNodes();
 		BuildBackgroundControls();
@@ -186,10 +209,13 @@ public partial class MissionSceneBuilder : Node2D
 		BuildGrid();
 		BuildHoverDiamond();
 		BuildLogicPanel();
+		BuildContextObjectEditorPanel();
+		ApplyBuilderPanelStyles();
 		WireUi();
 		ApplyZoom(DefaultZoom);
 		UpdateSelectedLabel();
-		SetStatus("Build floors and walls on the left, add mission markers and props, then wire logic and dialogue on the right. Right click deletes, middle mouse pans, wheel zooms.");
+		SetControlsPanelVisible(false);
+		SetStatus("Build floors and walls on the left, add mission markers and props, then wire logic and dialogue on the right. Point at any placed tile and press Y for quick setup. Right click deletes, middle mouse pans, wheel zooms.");
 		LoadLayout();
 	}
 
@@ -199,6 +225,7 @@ public partial class MissionSceneBuilder : Node2D
 		UpdateCameraPan((float)delta);
 		UpdateHoverDiamond();
 		UpdateBackgroundFeaturePlacement();
+		UpdateContextObjectEditorPosition();
 	}
 
 	public override void _UnhandledInput(InputEvent @event)
@@ -280,6 +307,20 @@ public partial class MissionSceneBuilder : Node2D
 
 		if (@event is InputEventKey keyEvent && keyEvent.Pressed && !keyEvent.Echo)
 		{
+			if (keyEvent.Keycode == Key.C)
+			{
+				ToggleControlsPanelVisibility();
+				GetViewport().SetInputAsHandled();
+				return;
+			}
+
+			if (keyEvent.Keycode == Key.Y)
+			{
+				ShowContextObjectEditorAtHoveredOrSelected();
+				GetViewport().SetInputAsHandled();
+				return;
+			}
+
 			if (keyEvent.Keycode == Key.Equal || keyEvent.Keycode == Key.KpAdd)
 			{
 				AdjustZoom(-ZoomStep);
@@ -552,18 +593,18 @@ public partial class MissionSceneBuilder : Node2D
 	private void BuildLogicPanel()
 	{
 		CanvasLayer uiLayer = GetNode<CanvasLayer>("UILayer");
-		PanelContainer panel = new PanelContainer();
-		panel.Name = "LogicPanel";
-		panel.Position = new Vector2(1540f, 332f);
-		panel.Size = new Vector2(368f, 736f);
-		uiLayer.AddChild(panel);
+		_logicPanel = new PanelContainer();
+		_logicPanel.Name = "LogicPanel";
+		_logicPanel.Position = new Vector2(1540f, 332f);
+		_logicPanel.Size = new Vector2(368f, 736f);
+		uiLayer.AddChild(_logicPanel);
 
 		MarginContainer margin = new MarginContainer();
 		margin.AddThemeConstantOverride("margin_left", 12);
 		margin.AddThemeConstantOverride("margin_top", 12);
 		margin.AddThemeConstantOverride("margin_right", 12);
 		margin.AddThemeConstantOverride("margin_bottom", 12);
-		panel.AddChild(margin);
+		_logicPanel.AddChild(margin);
 
 		ScrollContainer scroll = new ScrollContainer
 		{
@@ -760,6 +801,168 @@ public partial class MissionSceneBuilder : Node2D
 		UpdateLogicInspector();
 	}
 
+	private void BuildContextObjectEditorPanel()
+	{
+		CanvasLayer uiLayer = GetNode<CanvasLayer>("UILayer");
+		_contextObjectEditorPanel = new PanelContainer
+		{
+			Name = "ContextObjectEditorPanel",
+			Visible = false,
+			Size = new Vector2(420f, 540f),
+			CustomMinimumSize = new Vector2(420f, 540f)
+		};
+		uiLayer.AddChild(_contextObjectEditorPanel);
+
+		MarginContainer margin = new MarginContainer();
+		margin.AddThemeConstantOverride("margin_left", 12);
+		margin.AddThemeConstantOverride("margin_top", 12);
+		margin.AddThemeConstantOverride("margin_right", 12);
+		margin.AddThemeConstantOverride("margin_bottom", 12);
+		_contextObjectEditorPanel.AddChild(margin);
+
+		ScrollContainer scroll = new ScrollContainer
+		{
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+			SizeFlagsVertical = Control.SizeFlags.ExpandFill,
+			HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled
+		};
+		margin.AddChild(scroll);
+
+		VBoxContainer root = new VBoxContainer();
+		root.AddThemeConstantOverride("separation", 8);
+		scroll.AddChild(root);
+
+		HBoxContainer titleRow = new HBoxContainer();
+		titleRow.AddThemeConstantOverride("separation", 8);
+		Label title = new Label { Text = "QUICK SETUP (Y)" };
+		title.AddThemeFontSizeOverride("font_size", 18);
+		title.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+		titleRow.AddChild(title);
+		Button closeButton = new Button { Text = "Close" };
+		closeButton.Pressed += () => _contextObjectEditorPanel.Visible = false;
+		titleRow.AddChild(closeButton);
+		root.AddChild(titleRow);
+
+		Label quickHelp = new Label
+		{
+			Text = "Point at a placed tile and press Y to open fast setup beside it. The full mission editor still stays on the right for deeper dialogue and validation work.",
+			AutowrapMode = TextServer.AutowrapMode.WordSmart
+		};
+		quickHelp.AddThemeColorOverride("font_color", new Color(0.78f, 0.85f, 0.94f, 0.95f));
+		root.AddChild(quickHelp);
+
+		_contextSelectionLabel = new Label
+		{
+			Text = "No item selected.",
+			AutowrapMode = TextServer.AutowrapMode.WordSmart
+		};
+		root.AddChild(_contextSelectionLabel);
+
+		_contextHintLabel = new Label
+		{
+			Text = "This popup mirrors the current object setup fields.",
+			AutowrapMode = TextServer.AutowrapMode.WordSmart
+		};
+		root.AddChild(_contextHintLabel);
+
+		root.AddChild(new Label { Text = "Interaction Role" });
+		_contextRoleOption = new OptionButton();
+		_contextRoleOption.AddItem("None", 0);
+		_contextRoleOption.AddItem("Door", 1);
+		_contextRoleOption.AddItem("Terminal", 2);
+		_contextRoleOption.ItemSelected += _ => SyncMainInspectorFromContextPopup();
+		root.AddChild(_contextRoleOption);
+
+		_contextLabelEdit = AddContextInspectorField(root, "Item Label");
+		_contextTargetIdEdit = AddContextInspectorField(root, "Target ID");
+		_contextTargetIdHelpLabel = new Label
+		{
+			Text = "Target ID meaning depends on the selected marker or prop.",
+			AutowrapMode = TextServer.AutowrapMode.WordSmart
+		};
+		_contextTargetIdHelpLabel.AddThemeColorOverride("font_color", new Color(0.72f, 0.78f, 0.88f, 0.95f));
+		root.AddChild(_contextTargetIdHelpLabel);
+
+		_contextPropDefinitionPathEdit = AddContextInspectorField(root, "Prop Definition Path");
+		_contextPropDefinitionPathEdit.PlaceholderText = "res://Data/Missions/Props/Definitions/...";
+		root.AddChild(new Label { Text = "Prop Definition Library" });
+		_contextPropDefinitionOption = new OptionButton
+		{
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+		};
+		_contextPropDefinitionOption.ItemSelected += OnContextPropDefinitionOptionSelected;
+		root.AddChild(_contextPropDefinitionOption);
+
+		_contextNpcDefinitionPathEdit = AddContextInspectorField(root, "NPC Definition Path");
+		_contextNpcDefinitionPathEdit.PlaceholderText = "res://Data/Missions/Entities/Npcs/...";
+		root.AddChild(new Label { Text = "NPC Definition Library" });
+		_contextNpcDefinitionOption = new OptionButton
+		{
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+		};
+		_contextNpcDefinitionOption.ItemSelected += OnContextNpcDefinitionOptionSelected;
+		root.AddChild(_contextNpcDefinitionOption);
+
+		root.AddChild(new Label { Text = "Conversation Portrait" });
+		_contextNpcPortraitOption = new OptionButton();
+		for (int i = 0; i < MissionDialoguePortraitCatalog.All.Count; i++)
+		{
+			MissionDialoguePortraitDefinition definition = MissionDialoguePortraitCatalog.All[i];
+			_contextNpcPortraitOption.AddItem(definition.DisplayName, i);
+			_contextNpcPortraitOption.SetItemMetadata(i, definition.TexturePath);
+		}
+		_contextNpcPortraitOption.ItemSelected += _ => SyncMainInspectorFromContextPopup();
+		root.AddChild(_contextNpcPortraitOption);
+
+		root.AddChild(new HSeparator());
+		_contextRequiredFlagEdit = AddContextInspectorField(root, "Required Flag");
+		_contextRequiredFlagHelpLabel = new Label
+		{
+			Text = "Required Flag gates whether this interaction is available.",
+			AutowrapMode = TextServer.AutowrapMode.WordSmart
+		};
+		_contextRequiredFlagHelpLabel.AddThemeColorOverride("font_color", new Color(0.72f, 0.78f, 0.88f, 0.95f));
+		root.AddChild(_contextRequiredFlagHelpLabel);
+
+		_contextSetFlagEdit = AddContextInspectorField(root, "Set Flag");
+		_contextSetFlagHelpLabel = new Label
+		{
+			Text = "Set Flag is awarded when this interaction succeeds.",
+			AutowrapMode = TextServer.AutowrapMode.WordSmart
+		};
+		_contextSetFlagHelpLabel.AddThemeColorOverride("font_color", new Color(0.72f, 0.78f, 0.88f, 0.95f));
+		root.AddChild(_contextSetFlagHelpLabel);
+
+		root.AddChild(new Label { Text = "Trigger Mode" });
+		_contextTriggerModeOption = new OptionButton();
+		_contextTriggerModeOption.AddItem("None", 0);
+		_contextTriggerModeOption.AddItem("Enter", 1);
+		_contextTriggerModeOption.AddItem("Interact", 2);
+		_contextTriggerModeOption.ItemSelected += _ => SyncMainInspectorFromContextPopup();
+		root.AddChild(_contextTriggerModeOption);
+
+		_contextOneShotCheck = new CheckBox { Text = "One Shot Trigger" };
+		_contextOneShotCheck.Toggled += _ => SyncMainInspectorFromContextPopup();
+		root.AddChild(_contextOneShotCheck);
+
+		root.AddChild(new Label { Text = "Notes" });
+		_contextNotesEdit = new TextEdit
+		{
+			CustomMinimumSize = new Vector2(0f, 120f),
+			WrapMode = TextEdit.LineWrappingMode.Boundary
+		};
+		_contextNotesEdit.TextChanged += SyncMainInspectorFromContextPopup;
+		root.AddChild(_contextNotesEdit);
+
+		Label footerLabel = new Label
+		{
+			Text = "Use the right-side editor for conversation authoring, mission validation, and full dialogue graph editing.",
+			AutowrapMode = TextServer.AutowrapMode.WordSmart
+		};
+		footerLabel.AddThemeColorOverride("font_color", new Color(0.76f, 0.82f, 0.9f, 0.92f));
+		root.AddChild(footerLabel);
+	}
+
 	private LineEdit AddInspectorField(VBoxContainer root, string label)
 	{
 		root.AddChild(new Label { Text = label });
@@ -767,6 +970,383 @@ public partial class MissionSceneBuilder : Node2D
 		lineEdit.TextChanged += _ => ApplyLogicFieldChanges();
 		root.AddChild(lineEdit);
 		return lineEdit;
+	}
+
+	private LineEdit AddContextInspectorField(VBoxContainer root, string label)
+	{
+		root.AddChild(new Label { Text = label });
+		LineEdit lineEdit = new LineEdit();
+		lineEdit.TextChanged += _ => SyncMainInspectorFromContextPopup();
+		root.AddChild(lineEdit);
+		return lineEdit;
+	}
+
+	private void ApplyBuilderPanelStyles()
+	{
+		StyleBoxFlat sidePanelStyle = CreateBuilderPanelStyle(0.95f);
+		StyleBoxFlat popupPanelStyle = CreateBuilderPanelStyle(0.985f);
+
+		GetNodeOrNull<PanelContainer>("UILayer/PalettePanel")?.AddThemeStyleboxOverride("panel", sidePanelStyle.Duplicate() as StyleBoxFlat ?? sidePanelStyle);
+		_controlsPanel?.AddThemeStyleboxOverride("panel", sidePanelStyle.Duplicate() as StyleBoxFlat ?? sidePanelStyle);
+		_logicPanel?.AddThemeStyleboxOverride("panel", sidePanelStyle.Duplicate() as StyleBoxFlat ?? sidePanelStyle);
+		_contextObjectEditorPanel?.AddThemeStyleboxOverride("panel", popupPanelStyle);
+	}
+
+	private void ToggleControlsPanelVisibility()
+	{
+		SetControlsPanelVisible(!(_controlsPanel?.Visible ?? false));
+	}
+
+	private void SetControlsPanelVisible(bool visible)
+	{
+		if (_controlsPanel == null)
+		{
+			return;
+		}
+
+		_controlsPanel.Visible = visible;
+		SetStatus(visible
+			? "Builder controls are open. Press C to hide them again."
+			: "Builder controls are hidden. Press C any time to show the control reference.");
+	}
+
+	private static StyleBoxFlat CreateBuilderPanelStyle(float alpha)
+	{
+		return new StyleBoxFlat
+		{
+			BgColor = new Color(0.03f, 0.03f, 0.04f, alpha),
+			BorderColor = new Color(0.32f, 0.4f, 0.52f, Mathf.Clamp(alpha + 0.01f, 0f, 1f)),
+			BorderWidthLeft = 1,
+			BorderWidthTop = 1,
+			BorderWidthRight = 1,
+			BorderWidthBottom = 1,
+			CornerRadiusTopLeft = 8,
+			CornerRadiusTopRight = 8,
+			CornerRadiusBottomRight = 8,
+			CornerRadiusBottomLeft = 8,
+			ShadowColor = new Color(0f, 0f, 0f, 0.45f),
+			ShadowSize = 10
+		};
+	}
+
+	private void ShowContextObjectEditorAtHoveredOrSelected()
+	{
+		Vector2I hoveredCell = GetMouseCell();
+		List<Sprite2D> stackedSprites = GetSpritesAtCellOrdered(hoveredCell, includeFloors: true);
+		Sprite2D targetSprite = null;
+		if (stackedSprites.Count > 0)
+		{
+			targetSprite = GetNextQuickSetupSprite(stackedSprites, hoveredCell);
+		}
+
+		if (!IsLiveSprite(targetSprite) && !TryGetSelectedPlacedSprite(out targetSprite))
+		{
+			SetStatus("Point at a placed tile and press Y to open quick setup.");
+			return;
+		}
+
+		if (!IsLiveSprite(targetSprite))
+		{
+			SetStatus("Quick setup could not find a live placed tile.");
+			return;
+		}
+
+		SelectPlacedSprite(targetSprite);
+		UpdateContextObjectEditor();
+		_contextObjectEditorPanel.Visible = true;
+		UpdateContextObjectEditorPosition();
+		if (stackedSprites.Count > 1)
+		{
+			int currentIndex = stackedSprites.IndexOf(targetSprite) + 1;
+			SetStatus($"Quick setup opened for {GetItemDisplayId(targetSprite)}. Press Y again to cycle this stack ({currentIndex}/{stackedSprites.Count}).");
+			return;
+		}
+
+		SetStatus($"Quick setup opened for {GetItemDisplayId(targetSprite)}. Use the popup beside the tile to wire it up.");
+	}
+
+	private Sprite2D GetNextQuickSetupSprite(IReadOnlyList<Sprite2D> stackedSprites, Vector2I hoveredCell)
+	{
+		if (stackedSprites == null || stackedSprites.Count == 0)
+		{
+			return null;
+		}
+
+		if (!TryGetSelectedPlacedSprite(out Sprite2D selectedSprite))
+		{
+			return stackedSprites[0];
+		}
+
+		int selectedColumn = selectedSprite.GetMeta("column", int.MinValue).AsInt32();
+		int selectedRow = selectedSprite.GetMeta("row", int.MinValue).AsInt32();
+		if (selectedColumn != hoveredCell.X || selectedRow != hoveredCell.Y)
+		{
+			return stackedSprites[0];
+		}
+
+		int selectedIndex = -1;
+		for (int i = 0; i < stackedSprites.Count; i++)
+		{
+			if (stackedSprites[i] == selectedSprite)
+			{
+				selectedIndex = i;
+				break;
+			}
+		}
+		if (selectedIndex < 0)
+		{
+			return stackedSprites[0];
+		}
+
+		return stackedSprites[(selectedIndex + 1) % stackedSprites.Count];
+	}
+
+	private List<Sprite2D> GetSpritesAtCellOrdered(Vector2I cell, bool includeFloors)
+	{
+		List<Sprite2D> sprites = new List<Sprite2D>();
+		foreach (Node2D layer in GetSelectableLayers())
+		{
+			if (!includeFloors && layer == _floorLayer)
+			{
+				continue;
+			}
+
+			Godot.Collections.Array<Node> children = layer.GetChildren();
+			for (int index = children.Count - 1; index >= 0; index--)
+			{
+				if (children[index] is not Sprite2D sprite || !IsLiveSprite(sprite))
+				{
+					continue;
+				}
+
+				if (sprite.GetMeta("column", int.MinValue).AsInt32() != cell.X)
+				{
+					continue;
+				}
+
+				if (sprite.GetMeta("row", int.MinValue).AsInt32() != cell.Y)
+				{
+					continue;
+				}
+
+				sprites.Add(sprite);
+			}
+		}
+
+		return sprites;
+	}
+
+	private void UpdateContextObjectEditor()
+	{
+		if (_contextObjectEditorPanel == null)
+		{
+			return;
+		}
+
+		if (!TryGetSelectedPlacedSprite(out Sprite2D selectedSprite))
+		{
+			_contextObjectEditorPanel.Visible = false;
+			return;
+		}
+
+		bool isMarker = !string.IsNullOrEmpty(selectedSprite.GetMeta("marker_id", string.Empty).AsString());
+		bool isLogicProp = IsLogicCapableSprite(selectedSprite);
+		bool isPlacedProp = IsPlacedPropSprite(selectedSprite);
+		bool isLogicItem = isMarker || isLogicProp || isPlacedProp;
+
+		_isUpdatingContextLogicUi = true;
+		_contextSelectionLabel.Text = _logicSelectionLabel?.Text ?? $"Editing {GetItemDisplayId(selectedSprite)}";
+		_contextHintLabel.Text = _logicHintLabel?.Text ?? "Quick setup is ready.";
+		_contextRoleOption.Select(Mathf.Clamp(_logicRoleOption?.Selected ?? 0, 0, _contextRoleOption.ItemCount - 1));
+		_contextLabelEdit.Text = _logicLabelEdit?.Text ?? string.Empty;
+		_contextTargetIdEdit.Text = _logicTargetIdEdit?.Text ?? string.Empty;
+		_contextTargetIdEdit.PlaceholderText = _logicTargetIdEdit?.PlaceholderText ?? string.Empty;
+		_contextTargetIdHelpLabel.Text = _logicTargetIdHelpLabel?.Text ?? "Target ID meaning depends on the selected marker or prop.";
+		_contextPropDefinitionPathEdit.Text = _logicPropDefinitionPathEdit?.Text ?? string.Empty;
+		CopyOptionButtonItems(_logicPropDefinitionOption, _contextPropDefinitionOption);
+		_contextNpcDefinitionPathEdit.Text = _logicNpcDefinitionPathEdit?.Text ?? string.Empty;
+		CopyOptionButtonItems(_logicNpcDefinitionOption, _contextNpcDefinitionOption);
+		if (_contextNpcPortraitOption.ItemCount > 0)
+		{
+			_contextNpcPortraitOption.Select(Mathf.Clamp(_logicNpcPortraitOption?.Selected ?? 0, 0, _contextNpcPortraitOption.ItemCount - 1));
+		}
+		_contextRequiredFlagEdit.Text = _logicRequiredFlagEdit?.Text ?? string.Empty;
+		_contextRequiredFlagEdit.PlaceholderText = _logicRequiredFlagEdit?.PlaceholderText ?? string.Empty;
+		_contextRequiredFlagHelpLabel.Text = _logicRequiredFlagHelpLabel?.Text ?? "Required Flag gates whether this interaction is available.";
+		_contextSetFlagEdit.Text = _logicSetFlagEdit?.Text ?? string.Empty;
+		_contextSetFlagEdit.PlaceholderText = _logicSetFlagEdit?.PlaceholderText ?? string.Empty;
+		_contextSetFlagHelpLabel.Text = _logicSetFlagHelpLabel?.Text ?? "Set Flag is awarded when this interaction succeeds.";
+		_contextTriggerModeOption.Select(Mathf.Clamp(_logicTriggerModeOption?.Selected ?? 0, 0, _contextTriggerModeOption.ItemCount - 1));
+		_contextOneShotCheck.ButtonPressed = _logicOneShotCheck?.ButtonPressed ?? false;
+		_contextNotesEdit.Text = _logicNotesEdit?.Text ?? string.Empty;
+		_isUpdatingContextLogicUi = false;
+
+		SetContextObjectEditorEnabled(isLogicItem);
+		_contextRoleOption.Disabled = !isLogicItem || isPlacedProp;
+		if (_contextObjectEditorPanel.Visible)
+		{
+			UpdateContextObjectEditorPosition();
+		}
+	}
+
+	private void UpdateContextObjectEditorPosition()
+	{
+		if (_contextObjectEditorPanel == null || !_contextObjectEditorPanel.Visible || !TryGetSelectedPlacedSprite(out _))
+		{
+			return;
+		}
+
+		Vector2 viewportSize = GetViewportRect().Size;
+		Vector2 panelSize = _contextObjectEditorPanel.Size;
+		if (panelSize.X <= 0f || panelSize.Y <= 0f)
+		{
+			panelSize = _contextObjectEditorPanel.CustomMinimumSize;
+		}
+
+		float leftEdge = GetLeftSidebarRightEdge();
+		float rightEdge = GetRightSidebarLeftEdge(viewportSize.X);
+		float availableWidth = Mathf.Max(0f, rightEdge - leftEdge);
+		float targetX = leftEdge + ((availableWidth - panelSize.X) * 0.5f);
+		float bottomLimit = GetBottomBarTopEdge(viewportSize.Y);
+		Vector2 position = new Vector2(
+			targetX,
+			bottomLimit - panelSize.Y - 18f);
+		position.X = Mathf.Clamp(position.X, 12f, Mathf.Max(12f, viewportSize.X - panelSize.X - 12f));
+		position.Y = Mathf.Clamp(position.Y, 12f, Mathf.Max(12f, viewportSize.Y - panelSize.Y - 12f));
+		_contextObjectEditorPanel.Position = position;
+	}
+
+	private float GetLeftSidebarRightEdge()
+	{
+		Control palettePanel = GetNodeOrNull<Control>("UILayer/PalettePanel");
+		return palettePanel == null ? 12f : palettePanel.Position.X + palettePanel.Size.X + 16f;
+	}
+
+	private float GetRightSidebarLeftEdge(float viewportWidth)
+	{
+		float rightEdge = viewportWidth - 12f;
+		Control controlsPanel = GetNodeOrNull<Control>("UILayer/ControlsPanel");
+		if (controlsPanel != null)
+		{
+			rightEdge = Mathf.Min(rightEdge, controlsPanel.Position.X - 16f);
+		}
+
+		if (_logicPanel != null)
+		{
+			rightEdge = Mathf.Min(rightEdge, _logicPanel.Position.X - 16f);
+		}
+
+		return rightEdge;
+	}
+
+	private float GetBottomBarTopEdge(float viewportHeight)
+	{
+		Control bottomBar = GetNodeOrNull<Control>("UILayer/BottomBar");
+		return bottomBar == null ? viewportHeight - 12f : bottomBar.Position.Y - 10f;
+	}
+
+	private void SetContextObjectEditorEnabled(bool enabled)
+	{
+		_contextRoleOption.Disabled = !enabled;
+		_contextLabelEdit.Editable = enabled;
+		_contextTargetIdEdit.Editable = enabled;
+		_contextPropDefinitionPathEdit.Editable = enabled;
+		_contextPropDefinitionOption.Disabled = !enabled;
+		_contextNpcDefinitionPathEdit.Editable = enabled;
+		_contextNpcDefinitionOption.Disabled = !enabled;
+		_contextNpcPortraitOption.Disabled = !enabled;
+		_contextRequiredFlagEdit.Editable = enabled;
+		_contextSetFlagEdit.Editable = enabled;
+		_contextTriggerModeOption.Disabled = !enabled;
+		_contextOneShotCheck.Disabled = !enabled;
+		_contextNotesEdit.Editable = enabled;
+	}
+
+	private void SyncMainInspectorFromContextPopup()
+	{
+		if (_isUpdatingContextLogicUi || _isUpdatingLogicUi || !TryGetSelectedPlacedSprite(out _))
+		{
+			return;
+		}
+
+		_isUpdatingLogicUi = true;
+		_logicRoleOption.Select(Mathf.Clamp(_contextRoleOption.Selected, 0, _logicRoleOption.ItemCount - 1));
+		_logicLabelEdit.Text = _contextLabelEdit.Text;
+		_logicTargetIdEdit.Text = _contextTargetIdEdit.Text;
+		_logicPropDefinitionPathEdit.Text = _contextPropDefinitionPathEdit.Text;
+		_logicNpcDefinitionPathEdit.Text = _contextNpcDefinitionPathEdit.Text;
+		if (_logicNpcPortraitOption.ItemCount > 0)
+		{
+			_logicNpcPortraitOption.Select(Mathf.Clamp(_contextNpcPortraitOption.Selected, 0, _logicNpcPortraitOption.ItemCount - 1));
+		}
+		_logicRequiredFlagEdit.Text = _contextRequiredFlagEdit.Text;
+		_logicSetFlagEdit.Text = _contextSetFlagEdit.Text;
+		_logicTriggerModeOption.Select(Mathf.Clamp(_contextTriggerModeOption.Selected, 0, _logicTriggerModeOption.ItemCount - 1));
+		_logicOneShotCheck.ButtonPressed = _contextOneShotCheck.ButtonPressed;
+		_logicNotesEdit.Text = _contextNotesEdit.Text;
+		_isUpdatingLogicUi = false;
+
+		RefreshPropDefinitionOptions(_logicPropDefinitionPathEdit.Text);
+		RefreshNpcDefinitionOptions(_logicNpcDefinitionPathEdit.Text);
+		UpdatePropDefinitionPreview(_logicPropDefinitionPathEdit.Text);
+		UpdateTargetIdFieldContextForCurrentSelection();
+		UpdateFlagFieldContextForCurrentSelection();
+		ApplyLogicFieldChanges();
+		UpdateLogicInspector();
+	}
+
+	private void OnContextPropDefinitionOptionSelected(long selectedIndex)
+	{
+		if (_isUpdatingContextLogicUi || _contextPropDefinitionOption == null)
+		{
+			return;
+		}
+
+		string selectedPath = _contextPropDefinitionOption.GetItemMetadata((int)selectedIndex).AsString();
+		_isUpdatingContextLogicUi = true;
+		_contextPropDefinitionPathEdit.Text = selectedPath;
+		_isUpdatingContextLogicUi = false;
+		SyncMainInspectorFromContextPopup();
+	}
+
+	private void OnContextNpcDefinitionOptionSelected(long selectedIndex)
+	{
+		if (_isUpdatingContextLogicUi || _contextNpcDefinitionOption == null)
+		{
+			return;
+		}
+
+		string selectedPath = _contextNpcDefinitionOption.GetItemMetadata((int)selectedIndex).AsString();
+		_isUpdatingContextLogicUi = true;
+		_contextNpcDefinitionPathEdit.Text = selectedPath;
+		_isUpdatingContextLogicUi = false;
+		SyncMainInspectorFromContextPopup();
+	}
+
+	private static void CopyOptionButtonItems(OptionButton source, OptionButton target)
+	{
+		if (source == null || target == null)
+		{
+			return;
+		}
+
+		target.Clear();
+		for (int i = 0; i < source.ItemCount; i++)
+		{
+			target.AddItem(source.GetItemText(i), source.GetItemId(i));
+			target.SetItemMetadata(i, source.GetItemMetadata(i));
+			Texture2D icon = source.GetItemIcon(i);
+			if (icon != null)
+			{
+				target.SetItemIcon(i, icon);
+			}
+			target.SetItemDisabled(i, source.IsItemDisabled(i));
+		}
+
+		if (target.ItemCount > 0)
+		{
+			target.Select(Mathf.Clamp(source.Selected, 0, target.ItemCount - 1));
+		}
 	}
 
 	private static void AddPanelSectionHeader(VBoxContainer root, string title, string helpText = "")
@@ -2506,6 +3086,7 @@ public partial class MissionSceneBuilder : Node2D
 			_logicNotesEdit.Text = string.Empty;
 			_isUpdatingLogicUi = false;
 			UpdateDialogueSelectionContext();
+			UpdateContextObjectEditor();
 			return;
 		}
 
@@ -2541,6 +3122,7 @@ public partial class MissionSceneBuilder : Node2D
 		_isUpdatingLogicUi = false;
 		UpdateDialogueSelectionContext();
 		RefreshValidationReport();
+		UpdateContextObjectEditor();
 	}
 
 	private void SetLogicEditorEnabled(bool enabled)
@@ -2590,6 +3172,7 @@ public partial class MissionSceneBuilder : Node2D
 		selectedSprite.SetMeta("logic_notes", _logicNotesEdit.Text.StripEdges());
 		UpdateMarkerCaption(selectedSprite);
 		RefreshValidationReport();
+		UpdateContextObjectEditor();
 	}
 
 	private void OnPropDefinitionPathChanged(string newText)
@@ -4684,6 +5267,10 @@ public partial class MissionSceneBuilder : Node2D
 		if (!IsLiveSprite(_selectedPlacedSprite))
 		{
 			_selectedPlacedSprite = null;
+			if (_contextObjectEditorPanel != null)
+			{
+				_contextObjectEditorPanel.Visible = false;
+			}
 		}
 	}
 

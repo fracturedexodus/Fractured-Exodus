@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="MissionNpcDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://Scripts/Missions/Entities/MissionNpcDefinition.cs" id="1_mission_npc_definition"]
+
+[resource]
+script = ExtResource("1_mission_npc_definition")
+NpcId = "relay_custodian_sentry"
+DisplayName = "Custodian Sentry"
+Description = "An automated relay defender that wakes when the archive chamber is disturbed."
+SpriteTexturePath = "res://Assets/Missions/Characters/Operative01/operative_ne.png"
+VisualScaleMultiplier = 0.11
+AccentColor = Color(0.321569, 0.756863, 0.960784, 1)
+ShowNameLabel = true
+IsHostile = true
+InteractionRange = 1
+OneShot = false
+MaxHP = 12
+MaxActions = 2
+AttackRange = 4
+AttackDamage = 5
+InitiativeBonus = 1
+WeaponName = "Pulse Lance"
+Notes = "Hostile ranged sentry for black site combat."

@@ -14,6 +14,12 @@ public partial class OfficerPawn : Node2D
 	[Signal]
 	public delegate void ReachedCellEventHandler(OfficerPawn pawn, Vector2I cell);
 
+	[Signal]
+	public delegate void CombatStateChangedEventHandler(OfficerPawn pawn);
+
+	[Signal]
+	public delegate void DiedEventHandler(OfficerPawn pawn);
+
 	[Export] public float MoveSpeed = 220f;
 
 	public string OfficerID { get; private set; } = string.Empty;
@@ -21,7 +27,18 @@ public partial class OfficerPawn : Node2D
 	public string OfficerName { get; private set; } = "Officer";
 	public string PortraitPath { get; private set; } = string.Empty;
 	public string Specialty { get; private set; } = string.Empty;
+	public string CombatAbilityId { get; private set; } = string.Empty;
 	public Vector2I CurrentCell { get; private set; } = Vector2I.Zero;
+	public int MaxHP { get; private set; } = 14;
+	public int CurrentHP { get; private set; } = 14;
+	public int MaxActions { get; private set; } = 2;
+	public int CurrentActions { get; private set; } = 2;
+	public int AttackRange { get; private set; } = 3;
+	public int AttackDamage { get; private set; } = 4;
+	public int InitiativeBonus { get; private set; } = 1;
+	public string WeaponName { get; private set; } = "Sidearm";
+	public bool IsDead { get; private set; }
+	public bool IsMoving => _isMoving;
 
 	private Polygon2D _selectionRing;
 	private Polygon2D _shadow;
@@ -88,6 +105,8 @@ public partial class OfficerPawn : Node2D
 		OfficerName = officer.DisplayName;
 		PortraitPath = officer.PortraitPath;
 		Specialty = officer.Specialty;
+		CombatAbilityId = officer.CombatAbilityID;
+		ApplyCombatProfileForSpecialty(officer.Specialty);
 
 		if (_nameLabel != null)
 		{
@@ -109,6 +128,52 @@ public partial class OfficerPawn : Node2D
 		{
 			_body.Color = accentColor;
 		}
+	}
+
+	public void BeginTurn()
+	{
+		if (IsDead)
+		{
+			return;
+		}
+
+		CurrentActions = MaxActions;
+		EmitSignal(SignalName.CombatStateChanged, this);
+	}
+
+	public bool CanSpendActions(int amount)
+	{
+		return !IsDead && amount > 0 && CurrentActions >= amount;
+	}
+
+	public void SpendActions(int amount)
+	{
+		if (amount <= 0 || IsDead)
+		{
+			return;
+		}
+
+		CurrentActions = Mathf.Max(0, CurrentActions - amount);
+		EmitSignal(SignalName.CombatStateChanged, this);
+	}
+
+	public void ApplyDamage(int damage)
+	{
+		if (damage <= 0 || IsDead)
+		{
+			return;
+		}
+
+		CurrentHP = Mathf.Max(0, CurrentHP - damage);
+		if (CurrentHP <= 0)
+		{
+			IsDead = true;
+			Visible = false;
+			SetProcess(false);
+			EmitSignal(SignalName.Died, this);
+		}
+
+		EmitSignal(SignalName.CombatStateChanged, this);
 	}
 
 	public void SetSelected(bool isSelected)
@@ -208,6 +273,66 @@ public partial class OfficerPawn : Node2D
 
 		LoadDirectionalTextures();
 		RefreshSpriteTexture();
+	}
+
+	private void ApplyCombatProfileForSpecialty(string specialty)
+	{
+		switch (specialty)
+		{
+			case "Medical Triage":
+			case "Morale Support":
+				MaxHP = 16;
+				MaxActions = 2;
+				AttackRange = 1;
+				AttackDamage = 3;
+				InitiativeBonus = 0;
+				WeaponName = "Shock Baton";
+				break;
+			case "Salvage Efficiency":
+			case "Engine Routing":
+				MaxHP = 15;
+				MaxActions = 2;
+				AttackRange = 1;
+				AttackDamage = 4;
+				InitiativeBonus = 1;
+				WeaponName = "Cutting Rig";
+				break;
+			case "Missile Control":
+				MaxHP = 13;
+				MaxActions = 2;
+				AttackRange = 4;
+				AttackDamage = 5;
+				InitiativeBonus = 1;
+				WeaponName = "Heavy Sidearm";
+				break;
+			case "Tactical Command":
+				MaxHP = 14;
+				MaxActions = 2;
+				AttackRange = 4;
+				AttackDamage = 5;
+				InitiativeBonus = 2;
+				WeaponName = "Pulse Carbine";
+				break;
+			case "Shield Tuning":
+				MaxHP = 17;
+				MaxActions = 2;
+				AttackRange = 2;
+				AttackDamage = 4;
+				InitiativeBonus = 0;
+				WeaponName = "Defense Pistol";
+				break;
+			default:
+				MaxHP = 14;
+				MaxActions = 2;
+				AttackRange = 3;
+				AttackDamage = 4;
+				InitiativeBonus = 1;
+				WeaponName = "Sidearm";
+				break;
+		}
+
+		CurrentHP = MaxHP;
+		CurrentActions = MaxActions;
 	}
 
 	private Vector2[] BuildDiamond(float halfWidth, float halfHeight)

@@ -217,9 +217,9 @@ public partial class GlobalData : Node
 		GD.Print("GlobalData Singleton Initialized successfully.");
 	}
 
-	public void SaveGame()
+	public void SaveGame(bool autoSave = false)
 	{
-		_saveGameService.Save(this);
+		_saveGameService.Save(this, autoSave);
 	}
 
 	public bool LoadGame()

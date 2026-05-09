@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="MissionNpcDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://Scripts/Missions/Entities/MissionNpcDefinition.cs" id="1_mission_npc_definition"]
+
+[resource]
+script = ExtResource("1_mission_npc_definition")
+NpcId = "relay_scavenger_brute"
+DisplayName = "Scavenger Brute"
+Description = "A hulking scavenger who closes fast and finishes fights with a brutal shock maul."
+SpriteTexturePath = "res://Assets/Missions/Characters/Operative01/operative_se.png"
+VisualScaleMultiplier = 0.12
+AccentColor = Color(0.823529, 0.611765, 0.258824, 1)
+ShowNameLabel = true
+IsHostile = true
+InteractionRange = 1
+OneShot = false
+MaxHP = 16
+MaxActions = 2
+AttackRange = 1
+AttackDamage = 5
+InitiativeBonus = 0
+WeaponName = "Shock Maul"
+Notes = "Hostile melee bruiser for black site combat."

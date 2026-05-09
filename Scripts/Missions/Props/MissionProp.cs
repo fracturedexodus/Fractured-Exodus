@@ -72,6 +72,21 @@ public partial class MissionProp : Area2D, IInteractable
 		EmitSignal(SignalName.InteractionCommitted, this);
 	}
 
+	public void SetFogVisibility(bool isVisible)
+	{
+		if (IsConsumed && Definition?.HideWhenConsumed == true)
+		{
+			Visible = false;
+			Monitoring = false;
+			Monitorable = false;
+			return;
+		}
+
+		Visible = isVisible;
+		Monitoring = isVisible;
+		Monitorable = isVisible;
+	}
+
 	protected virtual PropInteractionResult BuildInteractionResult(PropInteractionContext context)
 	{
 		return PropInteractionResult.Completed();
@@ -100,14 +115,22 @@ public partial class MissionProp : Area2D, IInteractable
 			return $"{GetDisplayName()} requires {Definition.RequiredOfficerSpecialty}.";
 		}
 
+		HashSet<string> activeFlags = context.GlobalData?.StoryFlags != null
+			? context.GlobalData.StoryFlags.ToHashSet()
+			: new HashSet<string>();
+		foreach (string blockedFlag in Definition.BlockedFlags ?? new Godot.Collections.Array<string>())
+		{
+			if (!string.IsNullOrWhiteSpace(blockedFlag) && activeFlags.Contains(blockedFlag))
+			{
+				return $"{GetDisplayName()} is no longer available.";
+			}
+		}
+
 		if (Definition.RequiredFlags == null || Definition.RequiredFlags.Count == 0)
 		{
 			return string.Empty;
 		}
 
-		HashSet<string> activeFlags = context.GlobalData?.StoryFlags != null
-			? context.GlobalData.StoryFlags.ToHashSet()
-			: new HashSet<string>();
 		foreach (string requiredFlag in Definition.RequiredFlags)
 		{
 			if (!string.IsNullOrWhiteSpace(requiredFlag) && !activeFlags.Contains(requiredFlag))

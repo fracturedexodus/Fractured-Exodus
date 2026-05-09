@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="PropDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://Scripts/Missions/Props/PropDefinition.cs" id="1_prop_definition"]
+
+[resource]
+script = ExtResource("1_prop_definition")
+PropId = "relay_archive_core"
+DisplayName = "Archive Core"
+Description = "The relay's surviving archive spindle. Securing it commits the team to preserving data over lives."
+InteractionType = 1
+ScenePath = "res://Scenes/Missions/Props/LootCrateProp.tscn"
+SpriteTexturePath = "res://Assets/Missions/BlackSiteRelay/GeminiSheetSet/props/archive_core.png"
+InteractionRange = 1
+OneShot = true
+HideWhenConsumed = false
+BlockedFlags = PackedStringArray("relay_survivor_objective_complete")
+SetFlags = PackedStringArray("relay_archive_objective_complete")
+SuccessMessage = "The archive spindle is stabilized and ready for extraction."

@@ -1,6 +1,8 @@
 using Godot;
+using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 
 public partial class MissionMap : Node2D
 {
@@ -11,6 +13,17 @@ public partial class MissionMap : Node2D
 	private const float ZoomStep = 0.08f;
 	private const float CameraPanSpeed = 720f;
 	private const int FogRevealRadius = 4;
+	private const int CombatAttackActionCost = 1;
+	private const int CombatInteractionActionCost = 1;
+
+	private sealed class MissionCombatTurnEntry
+	{
+		public string CombatantId { get; init; } = string.Empty;
+		public bool IsOfficer { get; init; }
+		public int InitiativeScore { get; init; }
+		public OfficerPawn Officer { get; init; }
+		public MissionNpcPawn Enemy { get; init; }
+	}
 
 	private GlobalData _globalData;
 	private MissionService _missionService;
@@ -32,6 +45,7 @@ public partial class MissionMap : Node2D
 	private readonly Dictionary<string, MissionRoomBuilder.MarkerPlacement> _propPlacementsByInstanceId = new Dictionary<string, MissionRoomBuilder.MarkerPlacement>();
 	private readonly MissionSpawner _missionSpawner = new MissionSpawner();
 	private readonly HashSet<string> _consumedTriggerKeys = new HashSet<string>();
+	private readonly HashSet<string> _engagedEnemyIds = new HashSet<string>();
 	private readonly HashSet<Vector2I> _exploredCells = new HashSet<Vector2I>();
 	private readonly HashSet<Vector2I> _visibleCells = new HashSet<Vector2I>();
 	private readonly List<Node2D> _evacZoneVisualRoots = new List<Node2D>();
@@ -45,9 +59,21 @@ public partial class MissionMap : Node2D
 	private string _pendingPropInstanceId = string.Empty;
 	private string _pendingNpcId = string.Empty;
 	private float _evacPulseClock;
+	private readonly RandomNumberGenerator _combatRng = new RandomNumberGenerator();
+	private readonly List<MissionCombatTurnEntry> _combatQueue = new List<MissionCombatTurnEntry>();
+	private bool _combatActive;
+	private int _combatRound = 1;
+	private int _combatActiveIndex = -1;
+	private string _pendingCombatMoveOfficerId = string.Empty;
+	private string _pendingCombatAttackEnemyId = string.Empty;
+	private int _pendingCombatMoveCost;
+	private MissionNpcPawn _focusedEnemy;
+	private bool _enemyTurnInProgress;
+	private bool _missionGameOver;
 
 	public override void _Ready()
 	{
+		_combatRng.Randomize();
 		_globalData = GetNodeOrNull<GlobalData>("/root/GlobalData");
 		_missionService = new MissionService(_globalData);
 		_missionState = _missionService.GetCurrentMissionState();
@@ -78,6 +104,7 @@ public partial class MissionMap : Node2D
 		WireUi();
 		WireDialogue();
 		UpdateSelectedOfficerDisplay();
+		RefreshCombatHud();
 	}
 
 	public override void _Process(double delta)
@@ -88,6 +115,11 @@ public partial class MissionMap : Node2D
 
 	public override void _UnhandledInput(InputEvent @event)
 	{
+		if (_missionGameOver)
+		{
+			return;
+		}
+
 		if (_dialogueUi != null && _dialogueUi.IsConversationOpen)
 		{
 			return;
@@ -95,21 +127,21 @@ public partial class MissionMap : Node2D
 
 		if (@event is InputEventKey keyEvent && keyEvent.Pressed && !keyEvent.Echo)
 		{
-			if (keyEvent.Keycode == Key.Tab)
+			if (keyEvent.Keycode == Key.Tab && !_combatActive)
 			{
 				CycleOfficerSelection();
 				GetViewport().SetInputAsHandled();
 				return;
 			}
 
-			if (keyEvent.Keycode == Key.Key1)
+			if (keyEvent.Keycode == Key.Key1 && !_combatActive)
 			{
 				SelectOfficer(0);
 				GetViewport().SetInputAsHandled();
 				return;
 			}
 
-			if (keyEvent.Keycode == Key.Key2)
+			if (keyEvent.Keycode == Key.Key2 && !_combatActive)
 			{
 				SelectOfficer(1);
 				GetViewport().SetInputAsHandled();
@@ -158,6 +190,12 @@ public partial class MissionMap : Node2D
 
 		if (@event is InputEventMouseButton mouseButton && mouseButton.Pressed && mouseButton.ButtonIndex == MouseButton.Left)
 		{
+			if (_combatActive && !IsPlayerTurnActive())
+			{
+				GetViewport().SetInputAsHandled();
+				return;
+			}
+
 			if (TrySelectOfficerAtMouse())
 			{
 				GetViewport().SetInputAsHandled();
@@ -171,6 +209,12 @@ public partial class MissionMap : Node2D
 			}
 
 			if (TryHandleInteractionClick(activeOfficer))
+			{
+				GetViewport().SetInputAsHandled();
+				return;
+			}
+
+			if (_combatActive && TryHandleCombatAttackClick(activeOfficer))
 			{
 				GetViewport().SetInputAsHandled();
 				return;
@@ -493,6 +537,8 @@ public partial class MissionMap : Node2D
 			{
 				pawn.EnteredCell += OnOfficerEnteredCell;
 				pawn.ReachedCell += OnOfficerReachedCell;
+				pawn.CombatStateChanged += OnOfficerCombatStateChanged;
+				pawn.Died += OnOfficerDied;
 			}));
 
 		SelectOfficer(0);
@@ -516,6 +562,10 @@ public partial class MissionMap : Node2D
 			GetCellGlobalPosition));
 		foreach (MissionNpcPawn npc in _missionNpcs.Where(npc => npc != null))
 		{
+			npc.EnteredCell += OnMissionNpcEnteredCell;
+			npc.ReachedCell += OnMissionNpcReachedCell;
+			npc.CombatStateChanged += OnMissionNpcCombatStateChanged;
+			npc.Died += OnMissionNpcDied;
 			_missionNpcsByCell[npc.CurrentCell] = npc;
 		}
 	}
@@ -545,6 +595,12 @@ public partial class MissionMap : Node2D
 		ApplyFogToLayer(GetNodeOrNull<Node2D>("IsoWorld/FloorLayer"));
 		ApplyFogToLayer(GetNodeOrNull<Node2D>("IsoWorld/WallLayer"));
 		ApplyFogToLayer(GetNodeOrNull<Node2D>("IsoWorld/PropLayer"));
+		ApplyFogToMissionProps();
+		ApplyFogToMissionNpcs();
+		if (!IsAnyCombatActorMoving())
+		{
+			EvaluateCombatState();
+		}
 	}
 
 	private void ApplyFogToLayer(Node2D layer)
@@ -611,6 +667,32 @@ public partial class MissionMap : Node2D
 			color.A);
 	}
 
+	private void ApplyFogToMissionNpcs()
+	{
+		foreach (MissionNpcPawn npc in _missionNpcs)
+		{
+			if (npc == null)
+			{
+				continue;
+			}
+
+			npc.SetFogVisibility(_visibleCells.Contains(npc.CurrentCell));
+		}
+	}
+
+	private void ApplyFogToMissionProps()
+	{
+		foreach (KeyValuePair<Vector2I, MissionProp> kvp in _missionPropsByCell)
+		{
+			if (kvp.Value == null)
+			{
+				continue;
+			}
+
+			kvp.Value.SetFogVisibility(_visibleCells.Contains(kvp.Key));
+		}
+	}
+
 	private void WireUi()
 	{
 		if (_missionUi == null)
@@ -623,6 +705,11 @@ public partial class MissionMap : Node2D
 			GetMissionObjectiveText(),
 			GetMissionPromptText());
 		_missionUi.ExtractionOutcomeChosen += OnExtractionOutcomeChosen;
+		_missionUi.CombatEndTurnPressed += OnCombatEndTurnPressed;
+		if (_missionUi.GameOverReturnButton != null)
+		{
+			_missionUi.GameOverReturnButton.Pressed += ReturnToMainMenu;
+		}
 		UpdateMissionCompletionActions();
 	}
 
@@ -645,12 +732,25 @@ public partial class MissionMap : Node2D
 		}
 
 		_selectedOfficerIndex = Mathf.Clamp(index, 0, _officerPawns.Count - 1);
+		if (_officerPawns[_selectedOfficerIndex]?.IsDead == true)
+		{
+			int livingIndex = _officerPawns.FindIndex(pawn => pawn != null && !pawn.IsDead);
+			if (livingIndex >= 0)
+			{
+				_selectedOfficerIndex = livingIndex;
+			}
+		}
+
 		for (int i = 0; i < _officerPawns.Count; i++)
 		{
-			_officerPawns[i].SetSelected(i == _selectedOfficerIndex);
+			if (_officerPawns[i] != null)
+			{
+				_officerPawns[i].SetSelected(i == _selectedOfficerIndex && !_officerPawns[i].IsDead);
+			}
 		}
 
 		UpdateSelectedOfficerDisplay();
+		RefreshCombatHud();
 	}
 
 	private void CycleOfficerSelection()
@@ -665,9 +765,13 @@ public partial class MissionMap : Node2D
 
 	private OfficerPawn GetSelectedOfficer()
 	{
-		return _selectedOfficerIndex >= 0 && _selectedOfficerIndex < _officerPawns.Count
-			? _officerPawns[_selectedOfficerIndex]
-			: null;
+		if (_selectedOfficerIndex < 0 || _selectedOfficerIndex >= _officerPawns.Count)
+		{
+			return null;
+		}
+
+		OfficerPawn pawn = _officerPawns[_selectedOfficerIndex];
+		return pawn != null && !pawn.IsDead ? pawn : null;
 	}
 
 	private void UpdateSelectedOfficerDisplay()
@@ -823,6 +927,11 @@ public partial class MissionMap : Node2D
 	private string GetMissionPromptText()
 	{
 		string basePrompt = GetBaseMissionPromptText();
+		if (_combatActive)
+		{
+			return $"{basePrompt} Combat is active: click a visible hostile to attack, click the ground to reposition, and use END TURN when your active officer is done.";
+		}
+
 		List<MissionExtractionOption> extractionOptions = GetAvailableExtractionOptions();
 		bool allOfficersOnEvac = AreAllOfficersOnEvacZone();
 		if (!allOfficersOnEvac)
@@ -855,12 +964,14 @@ public partial class MissionMap : Node2D
 	{
 		if (outcomeId == GetPrimaryOutcomeId())
 		{
-			return AreRequiredFlagsSatisfied(_missionTemplate?.PrimaryOutcomeRequiredFlags);
+			return AreRequiredFlagsSatisfied(_missionTemplate?.PrimaryOutcomeRequiredFlags)
+				&& AreBlockedFlagsClear(_missionTemplate?.PrimaryOutcomeBlockedFlags);
 		}
 
 		if (outcomeId == GetSecondaryOutcomeId())
 		{
-			return AreRequiredFlagsSatisfied(_missionTemplate?.SecondaryOutcomeRequiredFlags);
+			return AreRequiredFlagsSatisfied(_missionTemplate?.SecondaryOutcomeRequiredFlags)
+				&& AreBlockedFlagsClear(_missionTemplate?.SecondaryOutcomeBlockedFlags);
 		}
 
 		return false;
@@ -956,6 +1067,11 @@ public partial class MissionMap : Node2D
 			return false;
 		}
 
+		if (IsCellOccupiedByLivingActor(targetCell, officer))
+		{
+			return false;
+		}
+
 		if (!_roomBuilder.TryGetPath(officer.CurrentCell, targetCell, out List<Vector2I> pathCells))
 		{
 			return false;
@@ -966,12 +1082,32 @@ public partial class MissionMap : Node2D
 			return false;
 		}
 
-		List<Vector2> pathPoints = pathCells
-			.Skip(1)
-			.Select(GetCellGlobalPosition)
-			.ToList();
 		List<Vector2I> steppedCells = pathCells
 			.Skip(1)
+			.TakeWhile(cell => !IsCellOccupiedByLivingActor(cell, officer))
+			.ToList();
+		if (steppedCells.Count == 0)
+		{
+			return false;
+		}
+
+		if (_combatActive)
+		{
+			int moveCost = Mathf.Min(steppedCells.Count, officer.CurrentActions);
+			if (!officer.CanSpendActions(moveCost))
+			{
+				return false;
+			}
+
+			steppedCells = steppedCells.Take(moveCost).ToList();
+			targetCell = steppedCells[^1];
+			officer.SpendActions(moveCost);
+			_pendingCombatMoveOfficerId = officer.OfficerID;
+			_pendingCombatMoveCost = moveCost;
+		}
+
+		List<Vector2> pathPoints = steppedCells
+			.Select(GetCellGlobalPosition)
 			.ToList();
 		officer.MoveAlongPath(pathPoints, steppedCells, targetCell);
 		return true;
@@ -985,6 +1121,11 @@ public partial class MissionMap : Node2D
 		}
 
 		Vector2I clickedCell = _roomBuilder.GetNearestCell(_isoWorld.ToLocal(GetGlobalMousePosition()));
+		if (!_visibleCells.Contains(clickedCell))
+		{
+			return false;
+		}
+
 		if (TryHandleNpcInteractionClick(officer, clickedCell))
 		{
 			return true;
@@ -1035,6 +1176,11 @@ public partial class MissionMap : Node2D
 			return false;
 		}
 
+		if (!_visibleCells.Contains(clickedCell))
+		{
+			return false;
+		}
+
 		if (CanOfficerExecutePropInteraction(officer, prop))
 		{
 			ExecutePropInteraction(officer, prop);
@@ -1057,6 +1203,29 @@ public partial class MissionMap : Node2D
 			return false;
 		}
 
+		if (!_visibleCells.Contains(npc.CurrentCell))
+		{
+			return false;
+		}
+
+		if (npc.IsHostile)
+		{
+			_focusedEnemy = npc;
+			if (!string.IsNullOrWhiteSpace(npc.NpcId))
+			{
+				_engagedEnemyIds.Add(npc.NpcId);
+			}
+			if (!_combatActive)
+			{
+				StartMissionCombat();
+			}
+			else
+			{
+				RefreshCombatHud();
+			}
+			return false;
+		}
+
 		if (CanOfficerExecuteNpcInteraction(officer, npc))
 		{
 			ExecuteNpcInteraction(officer, npc);
@@ -1075,6 +1244,11 @@ public partial class MissionMap : Node2D
 
 	private bool CanOfficerExecuteInteraction(OfficerPawn officer, MissionRoomBuilder.MarkerPlacement interaction)
 	{
+		if (_combatActive && (officer == null || officer.CurrentActions < CombatInteractionActionCost))
+		{
+			return false;
+		}
+
 		return GetInteractionDistance(officer.CurrentCell, interaction) <= 1;
 	}
 
@@ -1157,6 +1331,10 @@ public partial class MissionMap : Node2D
 
 		if (interaction.MarkerId == "evac_zone")
 		{
+			if (_combatActive)
+			{
+				officer.SpendActions(CombatInteractionActionCost);
+			}
 			UpdateMissionCompletionActions();
 			if (interaction.OneShot)
 			{
@@ -1167,6 +1345,10 @@ public partial class MissionMap : Node2D
 
 		if (interaction.LogicRole == "door")
 		{
+			if (_combatActive)
+			{
+				officer.SpendActions(CombatInteractionActionCost);
+			}
 			ToggleDoorInteraction(interaction);
 			if (interaction.OneShot)
 			{
@@ -1179,6 +1361,10 @@ public partial class MissionMap : Node2D
 
 		if (interaction.LogicRole == "terminal")
 		{
+			if (_combatActive)
+			{
+				officer.SpendActions(CombatInteractionActionCost);
+			}
 			if (!string.IsNullOrEmpty(interaction.TargetId))
 			{
 				bool nextOpenState = !_roomBuilder.IsDoorOpen(interaction.TargetId);
@@ -1195,6 +1381,10 @@ public partial class MissionMap : Node2D
 
 		if (interaction.MarkerId == "trigger_dialogue")
 		{
+			if (_combatActive)
+			{
+				officer.SpendActions(CombatInteractionActionCost);
+			}
 			_dialogueUi.StartConversation(
 				ResolveDialogueTargetId(interaction),
 				officer.OfficerName,
@@ -1215,6 +1405,11 @@ public partial class MissionMap : Node2D
 			return false;
 		}
 
+		if (_combatActive && officer.CurrentActions < CombatInteractionActionCost)
+		{
+			return false;
+		}
+
 		Vector2I propCell = GetPropCell(prop);
 		int interactionRange = Mathf.Max(1, prop.Definition?.InteractionRange ?? 1);
 		int distance = Mathf.Abs(officer.CurrentCell.X - propCell.X) + Mathf.Abs(officer.CurrentCell.Y - propCell.Y);
@@ -1224,6 +1419,11 @@ public partial class MissionMap : Node2D
 	private bool CanOfficerExecuteNpcInteraction(OfficerPawn officer, MissionNpcPawn npc)
 	{
 		if (officer == null || npc == null)
+		{
+			return false;
+		}
+
+		if (_combatActive && officer.CurrentActions < CombatInteractionActionCost)
 		{
 			return false;
 		}
@@ -1338,11 +1538,16 @@ public partial class MissionMap : Node2D
 
 	private bool TrySelectOfficerAtMouse()
 	{
+		if (_combatActive)
+		{
+			return false;
+		}
+
 		Vector2 mousePosition = GetGlobalMousePosition();
 		for (int i = 0; i < _officerPawns.Count; i++)
 		{
 			OfficerPawn pawn = _officerPawns[i];
-			if (pawn == null)
+			if (pawn == null || pawn.IsDead)
 			{
 				continue;
 			}
@@ -1419,6 +1624,794 @@ public partial class MissionMap : Node2D
 		}
 	}
 
+	private IEnumerable<OfficerPawn> GetAliveOfficers()
+	{
+		return _officerPawns.Where(pawn => pawn != null && !pawn.IsDead);
+	}
+
+	private IEnumerable<MissionNpcPawn> GetAliveHostileEnemies()
+	{
+		return _missionNpcs.Where(npc => npc != null && npc.IsHostile && !npc.IsDead);
+	}
+
+	private IEnumerable<MissionNpcPawn> GetEngagedHostileEnemies()
+	{
+		return GetAliveHostileEnemies().Where(npc => !string.IsNullOrWhiteSpace(npc.NpcId) && _engagedEnemyIds.Contains(npc.NpcId));
+	}
+
+	private IEnumerable<MissionNpcPawn> GetVisibleAliveHostileEnemies()
+	{
+		return GetAliveHostileEnemies().Where(npc => _visibleCells.Contains(npc.CurrentCell));
+	}
+
+	private bool IsAnyCombatActorMoving()
+	{
+		return _officerPawns.Any(pawn => pawn != null && pawn.IsMoving)
+			|| _missionNpcs.Any(npc => npc != null && npc.IsMoving);
+	}
+
+	private bool IsCellOccupiedByLivingActor(Vector2I cell, OfficerPawn ignoreOfficer = null, MissionNpcPawn ignoreEnemy = null)
+	{
+		foreach (OfficerPawn pawn in _officerPawns)
+		{
+			if (pawn == null || pawn == ignoreOfficer || pawn.IsDead)
+			{
+				continue;
+			}
+
+			if (pawn.CurrentCell == cell)
+			{
+				return true;
+			}
+		}
+
+		foreach (MissionNpcPawn npc in _missionNpcs)
+		{
+			if (npc == null || npc == ignoreEnemy || npc.IsDead)
+			{
+				continue;
+			}
+
+			if (npc.CurrentCell == cell)
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	private MissionCombatTurnEntry GetActiveCombatTurnEntry()
+	{
+		return _combatActiveIndex >= 0 && _combatActiveIndex < _combatQueue.Count
+			? _combatQueue[_combatActiveIndex]
+			: null;
+	}
+
+	private OfficerPawn GetActiveCombatOfficer()
+	{
+		MissionCombatTurnEntry entry = GetActiveCombatTurnEntry();
+		return entry != null && entry.IsOfficer ? entry.Officer : null;
+	}
+
+	private MissionNpcPawn GetActiveCombatEnemy()
+	{
+		MissionCombatTurnEntry entry = GetActiveCombatTurnEntry();
+		return entry != null && !entry.IsOfficer ? entry.Enemy : null;
+	}
+
+	private bool IsPlayerTurnActive()
+	{
+		return _combatActive && GetActiveCombatOfficer() != null && !_enemyTurnInProgress;
+	}
+
+	private void EvaluateCombatState()
+	{
+		if (_missionGameOver || IsAnyCombatActorMoving())
+		{
+			return;
+		}
+
+		if (!GetAliveOfficers().Any())
+		{
+			HandleMissionGameOver();
+			return;
+		}
+
+		List<MissionNpcPawn> visibleHostiles = GetVisibleAliveHostileEnemies().ToList();
+		foreach (MissionNpcPawn hostile in visibleHostiles)
+		{
+			if (!string.IsNullOrWhiteSpace(hostile.NpcId))
+			{
+				_engagedEnemyIds.Add(hostile.NpcId);
+			}
+		}
+
+		bool anyVisibleHostiles = visibleHostiles.Count > 0;
+		if (!_combatActive)
+		{
+			if (_engagedEnemyIds.Count > 0 && anyVisibleHostiles)
+			{
+				StartMissionCombat();
+			}
+			else
+			{
+				RefreshCombatHud();
+			}
+
+			return;
+		}
+
+		if (!GetEngagedHostileEnemies().Any())
+		{
+			EndMissionCombat();
+			return;
+		}
+
+		CleanupCombatQueue();
+		if (_combatQueue.Count == 0 && !_enemyTurnInProgress)
+		{
+			_combatActiveIndex = -1;
+			RebuildCombatQueue();
+			BeginNextCombatTurn();
+			return;
+		}
+
+		RefreshCombatHud();
+	}
+
+	private void StartMissionCombat()
+	{
+		if (_missionGameOver || _combatActive)
+		{
+			return;
+		}
+
+		_combatActive = true;
+		_enemyTurnInProgress = false;
+		_combatRound = 1;
+		_combatActiveIndex = -1;
+		RebuildCombatQueue();
+		RefreshCombatHud();
+		BeginNextCombatTurn();
+	}
+
+	private void EndMissionCombat()
+	{
+		_combatActive = false;
+		_enemyTurnInProgress = false;
+		_combatQueue.Clear();
+		_combatActiveIndex = -1;
+		_pendingCombatMoveOfficerId = string.Empty;
+		_pendingCombatAttackEnemyId = string.Empty;
+		_focusedEnemy = null;
+		_engagedEnemyIds.Clear();
+		RefreshCombatHud();
+	}
+
+	private void CleanupCombatQueue()
+	{
+		string activeCombatantId = GetActiveCombatTurnEntry()?.CombatantId ?? string.Empty;
+		_combatQueue.RemoveAll(entry => entry == null
+			|| (entry.IsOfficer && (entry.Officer == null || entry.Officer.IsDead))
+			|| (!entry.IsOfficer && (entry.Enemy == null || entry.Enemy.IsDead || !_engagedEnemyIds.Contains(entry.Enemy.NpcId))));
+
+		if (_combatQueue.Count == 0)
+		{
+			_combatActiveIndex = -1;
+			return;
+		}
+
+		if (!string.IsNullOrWhiteSpace(activeCombatantId))
+		{
+			int newIndex = _combatQueue.FindIndex(entry => entry.CombatantId == activeCombatantId);
+			_combatActiveIndex = newIndex >= 0 ? newIndex : Mathf.Clamp(_combatActiveIndex, -1, _combatQueue.Count - 1);
+			return;
+		}
+
+		_combatActiveIndex = Mathf.Clamp(_combatActiveIndex, -1, _combatQueue.Count - 1);
+	}
+
+	private void RebuildCombatQueue()
+	{
+		List<MissionCombatTurnEntry> nextQueue = new List<MissionCombatTurnEntry>();
+		foreach (OfficerPawn officer in GetAliveOfficers())
+		{
+			nextQueue.Add(new MissionCombatTurnEntry
+			{
+				CombatantId = officer.OfficerID,
+				IsOfficer = true,
+				InitiativeScore = _combatRng.RandiRange(1, 20) + officer.InitiativeBonus,
+				Officer = officer
+			});
+		}
+
+		foreach (MissionNpcPawn enemy in GetEngagedHostileEnemies())
+		{
+			nextQueue.Add(new MissionCombatTurnEntry
+			{
+				CombatantId = enemy.NpcId,
+				IsOfficer = false,
+				InitiativeScore = _combatRng.RandiRange(1, 20) + enemy.InitiativeBonus,
+				Enemy = enemy
+			});
+		}
+
+		_combatQueue.Clear();
+		_combatQueue.AddRange(nextQueue
+			.OrderByDescending(entry => entry.InitiativeScore)
+			.ThenBy(entry => entry.IsOfficer ? entry.Officer?.OfficerName : entry.Enemy?.DisplayName)
+			.ToList());
+	}
+
+	private async void BeginNextCombatTurn()
+	{
+		if (_missionGameOver || _enemyTurnInProgress)
+		{
+			return;
+		}
+
+		if (!_combatActive)
+		{
+			RefreshCombatHud();
+			return;
+		}
+
+		if (!GetAliveOfficers().Any())
+		{
+			HandleMissionGameOver();
+			return;
+		}
+
+		if (!GetEngagedHostileEnemies().Any())
+		{
+			EndMissionCombat();
+			return;
+		}
+
+		if (_combatQueue.Count == 0)
+		{
+			RebuildCombatQueue();
+			if (_combatQueue.Count == 0)
+			{
+				EndMissionCombat();
+				return;
+			}
+		}
+
+		_combatActiveIndex++;
+		if (_combatActiveIndex >= _combatQueue.Count)
+		{
+			_combatRound++;
+			RebuildCombatQueue();
+			if (_combatQueue.Count == 0)
+			{
+				EndMissionCombat();
+				return;
+			}
+
+			_combatActiveIndex = 0;
+		}
+
+		MissionCombatTurnEntry entry = GetActiveCombatTurnEntry();
+		if (entry == null)
+		{
+			EndMissionCombat();
+			return;
+		}
+
+		if (entry.IsOfficer)
+		{
+			entry.Officer?.BeginTurn();
+			int officerIndex = _officerPawns.IndexOf(entry.Officer);
+			if (officerIndex >= 0)
+			{
+				SelectOfficer(officerIndex);
+			}
+
+			_focusedEnemy = GetClosestVisibleEnemy(entry.Officer?.CurrentCell ?? Vector2I.Zero);
+			RefreshCombatHud();
+			return;
+		}
+
+		enemy_turn:
+		MissionNpcPawn activeEnemy = entry.Enemy;
+		if (activeEnemy == null || activeEnemy.IsDead)
+		{
+			EndCurrentCombatTurn();
+			return;
+		}
+
+		activeEnemy.BeginTurn();
+		_focusedEnemy = activeEnemy;
+		RefreshCombatHud();
+		_enemyTurnInProgress = true;
+		await ToSignal(GetTree().CreateTimer(0.35f), SceneTreeTimer.SignalName.Timeout);
+		await ExecuteEnemyTurnAsync(activeEnemy);
+		_enemyTurnInProgress = false;
+
+		if (_missionGameOver)
+		{
+			return;
+		}
+
+		if (!_combatActive)
+		{
+			RefreshCombatHud();
+			return;
+		}
+
+		CleanupCombatQueue();
+		if (GetActiveCombatTurnEntry() != entry && GetActiveCombatTurnEntry() != null)
+		{
+			goto enemy_turn;
+		}
+
+		EndCurrentCombatTurn();
+	}
+
+	private void EndCurrentCombatTurn()
+	{
+		if (_missionGameOver || !_combatActive)
+		{
+			RefreshCombatHud();
+			return;
+		}
+
+		_pendingCombatMoveOfficerId = string.Empty;
+		_pendingCombatAttackEnemyId = string.Empty;
+		RefreshCombatHud();
+		BeginNextCombatTurn();
+	}
+
+	private void OnCombatEndTurnPressed()
+	{
+		if (!_combatActive || _missionGameOver || _enemyTurnInProgress)
+		{
+			return;
+		}
+
+		EndCurrentCombatTurn();
+	}
+
+	private bool TryHandleCombatAttackClick(OfficerPawn officer)
+	{
+		if (!_combatActive || officer == null || officer != GetActiveCombatOfficer() || !officer.CanSpendActions(CombatAttackActionCost) || _roomBuilder == null || _isoWorld == null)
+		{
+			return false;
+		}
+
+		Vector2I clickedCell = _roomBuilder.GetNearestCell(_isoWorld.ToLocal(GetGlobalMousePosition()));
+		if (!_visibleCells.Contains(clickedCell))
+		{
+			return false;
+		}
+
+		if (!_missionNpcsByCell.TryGetValue(clickedCell, out MissionNpcPawn enemy) || enemy == null || enemy.IsDead || !enemy.IsHostile)
+		{
+			return false;
+		}
+
+		_focusedEnemy = enemy;
+		if (GetManhattanDistance(officer.CurrentCell, enemy.CurrentCell) <= officer.AttackRange)
+		{
+			PerformOfficerAttack(officer, enemy);
+			return true;
+		}
+
+		Vector2I? approachCell = FindBestCombatApproachCell(officer.CurrentCell, enemy.CurrentCell, officer.AttackRange, officer.CurrentActions, officer, null);
+		if (approachCell.HasValue && TryMoveOfficerToCell(officer, approachCell.Value))
+		{
+			_pendingCombatAttackEnemyId = enemy.NpcId;
+			_pendingInteractionOfficerId = string.Empty;
+			_pendingNpcId = string.Empty;
+			_pendingPropInstanceId = string.Empty;
+			_pendingInteractionKey = string.Empty;
+		}
+
+		RefreshCombatHud();
+		return true;
+	}
+
+	private async Task ExecuteEnemyTurnAsync(MissionNpcPawn enemy)
+	{
+		if (enemy == null || enemy.IsDead || !_combatActive || _missionGameOver)
+		{
+			return;
+		}
+
+		while (enemy.CurrentActions > 0 && !_missionGameOver && _combatActive)
+		{
+			OfficerPawn targetOfficer = GetClosestLivingOfficer(enemy.CurrentCell);
+			if (targetOfficer == null)
+			{
+				return;
+			}
+
+			if (GetManhattanDistance(enemy.CurrentCell, targetOfficer.CurrentCell) <= enemy.AttackRange)
+			{
+				PerformEnemyAttack(enemy, targetOfficer);
+				RefreshCombatHud();
+				if (_missionGameOver || !_combatActive)
+				{
+					return;
+				}
+
+				await ToSignal(GetTree().CreateTimer(0.28f), SceneTreeTimer.SignalName.Timeout);
+				continue;
+			}
+
+			bool moved = await TryMoveEnemyTowardOfficerAsync(enemy, targetOfficer);
+			RefreshCombatHud();
+			if (!moved)
+			{
+				return;
+			}
+
+			await ToSignal(GetTree().CreateTimer(0.22f), SceneTreeTimer.SignalName.Timeout);
+			if (GetManhattanDistance(enemy.CurrentCell, targetOfficer.CurrentCell) <= enemy.AttackRange && enemy.CurrentActions > 0)
+			{
+				PerformEnemyAttack(enemy, targetOfficer);
+				RefreshCombatHud();
+				if (_missionGameOver || !_combatActive)
+				{
+					return;
+				}
+
+				await ToSignal(GetTree().CreateTimer(0.28f), SceneTreeTimer.SignalName.Timeout);
+			}
+			else
+			{
+				return;
+			}
+		}
+	}
+
+	private async Task<bool> TryMoveEnemyTowardOfficerAsync(MissionNpcPawn enemy, OfficerPawn targetOfficer)
+	{
+		if (enemy == null || targetOfficer == null || _roomBuilder == null || !enemy.CanSpendActions(1))
+		{
+			return false;
+		}
+
+		Vector2I? approachCell = FindBestCombatApproachCell(enemy.CurrentCell, targetOfficer.CurrentCell, enemy.AttackRange, enemy.CurrentActions, null, enemy);
+		if (!approachCell.HasValue || !_roomBuilder.TryGetPath(enemy.CurrentCell, approachCell.Value, out List<Vector2I> pathCells) || pathCells.Count <= 1)
+		{
+			return false;
+		}
+
+		List<Vector2I> steppedCells = pathCells
+			.Skip(1)
+			.TakeWhile(cell => !IsCellOccupiedByLivingActor(cell, null, enemy))
+			.ToList();
+		if (steppedCells.Count == 0)
+		{
+			return false;
+		}
+
+		int moveCost = Mathf.Min(steppedCells.Count, enemy.CurrentActions);
+		if (!enemy.CanSpendActions(moveCost))
+		{
+			return false;
+		}
+
+		steppedCells = steppedCells.Take(moveCost).ToList();
+		Vector2I destinationCell = steppedCells[^1];
+		enemy.SpendActions(moveCost);
+		List<Vector2> pathPoints = steppedCells
+			.Select(GetCellGlobalPosition)
+			.ToList();
+		enemy.MoveAlongPath(pathPoints, steppedCells, destinationCell);
+		await ToSignal(enemy, MissionNpcPawn.SignalName.ReachedCell);
+		return true;
+	}
+
+	private Vector2I? FindBestCombatApproachCell(
+		Vector2I startCell,
+		Vector2I targetCell,
+		int attackRange,
+		int maxSteps,
+		OfficerPawn movingOfficer,
+		MissionNpcPawn movingEnemy)
+	{
+		if (_roomBuilder == null || maxSteps <= 0)
+		{
+			return null;
+		}
+
+		List<(Vector2I Cell, int PathLength, int TargetDistance)> candidates = new List<(Vector2I, int, int)>();
+		foreach (Vector2I candidate in _roomBuilder.GetReachableCells(targetCell, attackRange))
+		{
+			if (candidate == targetCell || !_roomBuilder.IsWalkableCell(candidate) || IsCellOccupiedByLivingActor(candidate, movingOfficer, movingEnemy))
+			{
+				continue;
+			}
+
+			if (!_roomBuilder.TryGetPath(startCell, candidate, out List<Vector2I> pathCells))
+			{
+				continue;
+			}
+
+			int pathLength = Math.Max(0, pathCells.Count - 1);
+			if (pathLength <= 0 || pathLength > maxSteps)
+			{
+				continue;
+			}
+
+			candidates.Add((candidate, pathLength, GetManhattanDistance(candidate, targetCell)));
+		}
+
+		if (candidates.Count == 0)
+		{
+			return null;
+		}
+
+		return candidates
+			.OrderBy(candidate => candidate.PathLength)
+			.ThenBy(candidate => candidate.TargetDistance)
+			.Select(candidate => (Vector2I?)candidate.Cell)
+			.FirstOrDefault();
+	}
+
+	private void PerformOfficerAttack(OfficerPawn officer, MissionNpcPawn enemy)
+	{
+		if (!_combatActive || officer == null || enemy == null || officer.IsDead || enemy.IsDead || !officer.CanSpendActions(CombatAttackActionCost))
+		{
+			return;
+		}
+
+		if (GetManhattanDistance(officer.CurrentCell, enemy.CurrentCell) > officer.AttackRange)
+		{
+			return;
+		}
+
+		officer.SpendActions(CombatAttackActionCost);
+		int minimumDamage = Math.Max(1, officer.AttackDamage / 2);
+		int damage = _combatRng.RandiRange(minimumDamage, officer.AttackDamage);
+		enemy.ApplyDamage(damage);
+		_focusedEnemy = enemy;
+		_pendingCombatAttackEnemyId = string.Empty;
+		ReindexMissionNpcCells();
+		UpdateFogOfWar();
+		RefreshCombatHud();
+
+		if (!GetEngagedHostileEnemies().Any())
+		{
+			EndMissionCombat();
+			return;
+		}
+
+		if (officer.CurrentActions <= 0)
+		{
+			EndCurrentCombatTurn();
+		}
+	}
+
+	private void PerformEnemyAttack(MissionNpcPawn enemy, OfficerPawn officer)
+	{
+		if (!_combatActive || enemy == null || officer == null || enemy.IsDead || officer.IsDead || !enemy.CanSpendActions(CombatAttackActionCost))
+		{
+			return;
+		}
+
+		if (GetManhattanDistance(enemy.CurrentCell, officer.CurrentCell) > enemy.AttackRange)
+		{
+			return;
+		}
+
+		enemy.SpendActions(CombatAttackActionCost);
+		int minimumDamage = Math.Max(1, enemy.AttackDamage / 2);
+		int damage = _combatRng.RandiRange(minimumDamage, enemy.AttackDamage);
+		officer.ApplyDamage(damage);
+		UpdateFogOfWar();
+		RefreshCombatHud();
+		if (!GetAliveOfficers().Any())
+		{
+			HandleMissionGameOver();
+		}
+	}
+
+	private MissionNpcPawn GetClosestVisibleEnemy(Vector2I fromCell)
+	{
+		return GetVisibleAliveHostileEnemies()
+			.OrderBy(enemy => GetManhattanDistance(fromCell, enemy.CurrentCell))
+			.FirstOrDefault();
+	}
+
+	private OfficerPawn GetClosestLivingOfficer(Vector2I fromCell)
+	{
+		return GetAliveOfficers()
+			.OrderBy(officer => GetManhattanDistance(fromCell, officer.CurrentCell))
+			.FirstOrDefault();
+	}
+
+	private static int GetManhattanDistance(Vector2I a, Vector2I b)
+	{
+		return Mathf.Abs(a.X - b.X) + Mathf.Abs(a.Y - b.Y);
+	}
+
+	private void ReindexMissionNpcCells()
+	{
+		_missionNpcsByCell.Clear();
+		foreach (MissionNpcPawn npc in _missionNpcs.Where(npc => npc != null && !npc.IsDead))
+		{
+			_missionNpcsByCell[npc.CurrentCell] = npc;
+		}
+	}
+
+	private void OnOfficerCombatStateChanged(OfficerPawn pawn)
+	{
+		RefreshCombatHud();
+	}
+
+	private void OnMissionNpcCombatStateChanged(MissionNpcPawn pawn)
+	{
+		RefreshCombatHud();
+	}
+
+	private void OnOfficerDied(OfficerPawn pawn)
+	{
+		RefreshCombatHud();
+		UpdateFogOfWar();
+		if (!GetAliveOfficers().Any())
+		{
+			HandleMissionGameOver();
+			return;
+		}
+
+		int nextLivingIndex = _officerPawns.FindIndex(candidate => candidate != null && !candidate.IsDead);
+		if (nextLivingIndex >= 0)
+		{
+			SelectOfficer(nextLivingIndex);
+		}
+	}
+
+	private void OnMissionNpcDied(MissionNpcPawn pawn)
+	{
+		if (pawn != null && !string.IsNullOrWhiteSpace(pawn.NpcId))
+		{
+			_engagedEnemyIds.Remove(pawn.NpcId);
+		}
+
+		ReindexMissionNpcCells();
+		UpdateFogOfWar();
+		RefreshCombatHud();
+	}
+
+	private void OnMissionNpcEnteredCell(MissionNpcPawn pawn, Vector2I cell)
+	{
+		ReindexMissionNpcCells();
+	}
+
+	private void OnMissionNpcReachedCell(MissionNpcPawn pawn, Vector2I cell)
+	{
+		ReindexMissionNpcCells();
+		UpdateFogOfWar();
+		RefreshCombatHud();
+	}
+
+	private void RefreshCombatHud()
+	{
+		if (_missionUi == null)
+		{
+			return;
+		}
+
+		bool showCombatHud = _combatActive && !_missionGameOver;
+		_missionUi.SetCombatHudVisible(showCombatHud);
+		if (!showCombatHud)
+		{
+			_missionUi.SetCombatEndTurnEnabled(false, false);
+			_missionUi.SetPlayerCombatInfo(null);
+			_missionUi.SetEnemyCombatInfo(null);
+			_missionUi.SetCombatTurnLabel("MISSION COMBAT");
+			_missionUi.SetCombatInitiative(Array.Empty<MissionCombatantSummary>(), -1);
+			RefreshMissionPrompt();
+			return;
+		}
+
+		MissionCombatTurnEntry activeEntry = GetActiveCombatTurnEntry();
+		string turnLabel = activeEntry == null
+			? $"ROUND {_combatRound}"
+			: activeEntry.IsOfficer
+				? $"ROUND {_combatRound} - {activeEntry.Officer.OfficerName.ToUpperInvariant()} TURN"
+				: $"ROUND {_combatRound} - {activeEntry.Enemy.DisplayName.ToUpperInvariant()} TURN";
+		_missionUi.SetCombatTurnLabel(turnLabel);
+		_missionUi.SetCombatInitiative(_combatQueue
+			.Select(entry => entry.IsOfficer ? BuildOfficerSummary(entry.Officer) : BuildEnemySummary(entry.Enemy))
+			.ToList(), _combatActiveIndex);
+
+		OfficerPawn playerOfficer = GetActiveCombatOfficer() ?? GetSelectedOfficer();
+		MissionNpcPawn enemyFocus = GetActiveCombatEnemy() ?? (_focusedEnemy != null && !_focusedEnemy.IsDead ? _focusedEnemy : GetClosestVisibleEnemy(playerOfficer?.CurrentCell ?? Vector2I.Zero));
+		_missionUi.SetPlayerCombatInfo(BuildOfficerSummary(playerOfficer));
+		_missionUi.SetEnemyCombatInfo(BuildEnemySummary(enemyFocus));
+		bool canPlayerEndTurn = _combatActive && !_enemyTurnInProgress && playerOfficer != null;
+		_missionUi.SetCombatEndTurnEnabled(canPlayerEndTurn, _combatActive);
+		RefreshMissionPrompt();
+	}
+
+	private MissionCombatantSummary BuildOfficerSummary(OfficerPawn officer)
+	{
+		if (officer == null)
+		{
+			return null;
+		}
+
+		Texture2D icon = !string.IsNullOrWhiteSpace(officer.PortraitPath)
+			? GD.Load<Texture2D>(officer.PortraitPath)
+			: null;
+		return new MissionCombatantSummary
+		{
+			DisplayName = officer.OfficerName,
+			Subtitle = $"{officer.Specialty} | {officer.ShipName}",
+			WeaponName = officer.WeaponName,
+			Icon = icon,
+			CurrentHP = officer.CurrentHP,
+			MaxHP = officer.MaxHP,
+			CurrentAP = officer.CurrentActions,
+			MaxAP = officer.MaxActions,
+			AttackRange = officer.AttackRange,
+			AttackDamage = officer.AttackDamage
+		};
+	}
+
+	private MissionCombatantSummary BuildEnemySummary(MissionNpcPawn enemy)
+	{
+		if (enemy == null)
+		{
+			return null;
+		}
+
+		Texture2D icon = !string.IsNullOrWhiteSpace(enemy.PortraitPath)
+			? GD.Load<Texture2D>(enemy.PortraitPath)
+			: null;
+		if (icon == null && enemy.GetNodeOrNull<Sprite2D>("Sprite2D") is Sprite2D sprite)
+		{
+			icon = sprite.Texture;
+		}
+
+		return new MissionCombatantSummary
+		{
+			DisplayName = enemy.DisplayName,
+			Subtitle = enemy.IsHostile ? "Hostile Contact" : "Mission Contact",
+			WeaponName = enemy.WeaponName,
+			Icon = icon,
+			CurrentHP = enemy.CurrentHP,
+			MaxHP = enemy.MaxHP,
+			CurrentAP = enemy.CurrentActions,
+			MaxAP = enemy.MaxActions,
+			AttackRange = enemy.AttackRange,
+			AttackDamage = enemy.AttackDamage
+		};
+	}
+
+	private void HandleMissionGameOver()
+	{
+		if (_missionGameOver)
+		{
+			return;
+		}
+
+		_missionGameOver = true;
+		_combatActive = false;
+		_enemyTurnInProgress = false;
+		_missionUi?.HideExtractionPrompt();
+		_missionUi?.ShowMissionGameOver();
+		RefreshCombatHud();
+	}
+
+	private void ReturnToMainMenu()
+	{
+		SceneTransition transitioner = GetNodeOrNull<SceneTransition>("/root/SceneTransition");
+		if (transitioner != null)
+		{
+			transitioner.ChangeScene("res://main_menu.tscn");
+			return;
+		}
+
+		GetTree().ChangeSceneToFile("res://main_menu.tscn");
+	}
+
 	private string ResolveDialogueTargetId(MissionRoomBuilder.MarkerPlacement marker)
 	{
 		if (!string.IsNullOrEmpty(marker.TargetId))
@@ -1454,6 +2447,24 @@ public partial class MissionMap : Node2D
 	private void OnOfficerReachedCell(OfficerPawn pawn, Vector2I cell)
 	{
 		UpdateMissionCompletionActions();
+		RefreshCombatHud();
+		EvaluateCombatState();
+
+		if (!string.IsNullOrEmpty(_pendingCombatMoveOfficerId) && pawn != null && pawn.OfficerID == _pendingCombatMoveOfficerId)
+		{
+			_pendingCombatMoveOfficerId = string.Empty;
+			_pendingCombatMoveCost = 0;
+
+			if (!string.IsNullOrEmpty(_pendingCombatAttackEnemyId))
+			{
+				MissionNpcPawn pendingEnemy = _missionNpcs.FirstOrDefault(npc => npc != null && npc.NpcId == _pendingCombatAttackEnemyId && !npc.IsDead);
+				_pendingCombatAttackEnemyId = string.Empty;
+				if (pendingEnemy != null && _combatActive)
+				{
+					PerformOfficerAttack(pawn, pendingEnemy);
+				}
+			}
+		}
 
 		if (pawn == null || pawn.OfficerID != _pendingInteractionOfficerId)
 		{
@@ -1632,6 +2643,11 @@ public partial class MissionMap : Node2D
 			return;
 		}
 
+		if (_combatActive && context?.Officer != null)
+		{
+			context.Officer.SpendActions(CombatInteractionActionCost);
+		}
+
 		foreach (string doorId in result.DoorIdsToToggle ?? new List<string>())
 		{
 			if (string.IsNullOrWhiteSpace(doorId))
@@ -1671,6 +2687,11 @@ public partial class MissionMap : Node2D
 		if (npc == null || result == null || !result.Success)
 		{
 			return;
+		}
+
+		if (_combatActive && context?.Officer != null)
+		{
+			context.Officer.SpendActions(CombatInteractionActionCost);
 		}
 
 		if (_globalData?.StoryFlags != null && result.FlagsToSet != null)
@@ -1732,23 +2753,60 @@ public partial class MissionMap : Node2D
 		return options;
 	}
 
+	private HashSet<Vector2I> GetEvacRallyCells()
+	{
+		HashSet<Vector2I> rallyCells = new HashSet<Vector2I>();
+		if (_roomBuilder == null)
+		{
+			return rallyCells;
+		}
+
+		Vector2I[] directions =
+		{
+			Vector2I.Zero,
+			new Vector2I(1, 0),
+			new Vector2I(-1, 0),
+			new Vector2I(0, 1),
+			new Vector2I(0, -1)
+		};
+
+		foreach (Vector2I evacCell in _roomBuilder.GetMarkerPlacements()
+			.Where(marker => marker.MarkerId == "evac_zone")
+			.Select(marker => marker.Cell))
+		{
+			foreach (Vector2I direction in directions)
+			{
+				Vector2I candidate = evacCell + direction;
+				if (_roomBuilder.IsWalkableCell(candidate))
+				{
+					rallyCells.Add(candidate);
+				}
+			}
+		}
+
+		return rallyCells;
+	}
+
 	private bool AreAllOfficersOnEvacZone()
 	{
-		if (_officerPawns.Count == 0 || _roomBuilder == null)
+		if (_roomBuilder == null)
 		{
 			return false;
 		}
 
-		HashSet<Vector2I> evacCells = _roomBuilder.GetMarkerPlacements()
-			.Where(marker => marker.MarkerId == "evac_zone")
-			.Select(marker => marker.Cell)
-			.ToHashSet();
+		List<OfficerPawn> survivingOfficers = GetAliveOfficers().ToList();
+		if (survivingOfficers.Count == 0)
+		{
+			return false;
+		}
+
+		HashSet<Vector2I> evacCells = GetEvacRallyCells();
 		if (evacCells.Count == 0)
 		{
 			return false;
 		}
 
-		return _officerPawns.All(pawn => pawn != null && evacCells.Contains(pawn.CurrentCell));
+		return survivingOfficers.All(pawn => evacCells.Contains(pawn.CurrentCell));
 	}
 
 	private void UpdateMissionCompletionActions()
@@ -1789,6 +2847,29 @@ public partial class MissionMap : Node2D
 		foreach (string flag in requiredFlags)
 		{
 			if (!string.IsNullOrWhiteSpace(flag) && !_globalData.StoryFlags.Contains(flag))
+			{
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	private bool AreBlockedFlagsClear(Godot.Collections.Array<string> blockedFlags)
+	{
+		if (blockedFlags == null || blockedFlags.Count == 0)
+		{
+			return true;
+		}
+
+		if (_globalData?.StoryFlags == null)
+		{
+			return true;
+		}
+
+		foreach (string flag in blockedFlags)
+		{
+			if (!string.IsNullOrWhiteSpace(flag) && _globalData.StoryFlags.Contains(flag))
 			{
 				return false;
 			}

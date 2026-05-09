@@ -317,11 +317,27 @@ public partial class MissionManager : Node
 			RecommendedOfficerCount = 2,
 			SourceNodeType = "Planet",
 			ObjectiveText = "OBJECTIVE: Investigate the relay, assess the survivors, and decide what to save.",
-			PromptText = "Controls: left click an officer to select, left click a floor tile to move, TAB or 1-2 to switch officers, middle mouse drag or WASD to pan, mouse wheel or +/- to zoom, ESC to return.",
+			PromptText = "Controls: left click an officer to select, left click a floor tile to move, TAB or 1-2 to switch officers, middle mouse drag or WASD to pan, mouse wheel or +/- to zoom. Use the relay uplink to assess the crisis, complete either the survivor shelter or archive core objective, then rally the whole team at evac to extract.",
 			PrimaryActionText = "SAVE SURVIVORS",
 			PrimaryOutcomeId = "survivors_saved",
+			PrimaryOutcomeRequiredFlags = new Godot.Collections.Array<string>
+			{
+				"relay_survivor_objective_complete"
+			},
+			PrimaryOutcomeBlockedFlags = new Godot.Collections.Array<string>
+			{
+				"relay_archive_objective_complete"
+			},
 			SecondaryActionText = "SECURE ARCHIVE",
 			SecondaryOutcomeId = "archive_secured",
+			SecondaryOutcomeRequiredFlags = new Godot.Collections.Array<string>
+			{
+				"relay_archive_objective_complete"
+			},
+			SecondaryOutcomeBlockedFlags = new Godot.Collections.Array<string>
+			{
+				"relay_survivor_objective_complete"
+			},
 			DefaultDialogueId = "trigger_dialogue",
 			InteractionKeys = new Godot.Collections.Array<string>
 			{

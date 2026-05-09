@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="MissionNpcDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://Scripts/Missions/Entities/MissionNpcDefinition.cs" id="1_mission_npc_definition"]
+
+[resource]
+script = ExtResource("1_mission_npc_definition")
+NpcId = "relay_scavenger_raider"
+DisplayName = "Scavenger Raider"
+Description = "A fast-moving scavenger armed with a stripped-down sidearm and a talent for ambushes."
+SpriteTexturePath = "res://Assets/Missions/Characters/Operative01/operative_sw.png"
+VisualScaleMultiplier = 0.11
+AccentColor = Color(0.913725, 0.34902, 0.317647, 1)
+ShowNameLabel = true
+IsHostile = true
+InteractionRange = 1
+OneShot = false
+MaxHP = 10
+MaxActions = 2
+AttackRange = 3
+AttackDamage = 4
+InitiativeBonus = 2
+WeaponName = "Scrap Pistol"
+Notes = "Hostile ranged scavenger for black site combat."
