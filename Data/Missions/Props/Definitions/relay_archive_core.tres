@@ -15,4 +15,7 @@ OneShot = true
 HideWhenConsumed = false
 BlockedFlags = PackedStringArray("relay_survivor_objective_complete")
 SetFlags = PackedStringArray("relay_archive_objective_complete")
+StoryImagePath = "res://Assets/Missions/Cutscenes/archive.png"
+StoryDescriptionText = "The archive core unlocks in a wash of fractured light. Long-buried relay records spill across your interface: survivor manifests, custodian directives, sealed traffic logs, and fragments of a wider network the fleet was never meant to see. Whatever this black site was hiding, the data is real, and it is far more valuable than salvage."
+StoryConfirmButtonText = "Aquire Archive Core"
 SuccessMessage = "The archive spindle is stabilized and ready for extraction."

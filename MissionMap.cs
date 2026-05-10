@@ -74,6 +74,9 @@ public partial class MissionMap : Node2D
 	private bool _missionGameOver;
 	private Node2D _hoveredCombatActor;
 	private float _hostileRoamClock;
+	private MissionProp _pendingStoryProp;
+	private PropInteractionResult _pendingStoryResult;
+	private PropInteractionContext _pendingStoryContext;
 
 	public override void _Ready()
 	{
@@ -127,7 +130,7 @@ public partial class MissionMap : Node2D
 			return;
 		}
 
-		if (_dialogueUi != null && _dialogueUi.IsConversationOpen)
+		if ((_dialogueUi != null && _dialogueUi.IsConversationOpen) || (_missionUi?.IsStoryEventVisible ?? false))
 		{
 			return;
 		}
@@ -734,6 +737,7 @@ public partial class MissionMap : Node2D
 			GetMissionPromptText());
 		_missionUi.ExtractionOutcomeChosen += OnExtractionOutcomeChosen;
 		_missionUi.CombatEndTurnPressed += OnCombatEndTurnPressed;
+		_missionUi.StoryEventConfirmed += OnStoryEventConfirmed;
 		if (_missionUi.GameOverReturnButton != null)
 		{
 			_missionUi.GameOverReturnButton.Pressed += ReturnToMainMenu;
@@ -1508,6 +1512,12 @@ public partial class MissionMap : Node2D
 		PropInteractionResult result = prop.Interact(context);
 		if (result == null || !result.Success)
 		{
+			return;
+		}
+
+		if (ShouldShowStoryEvent(prop))
+		{
+			ShowPropStoryEvent(prop, result, context);
 			return;
 		}
 
@@ -3175,6 +3185,45 @@ public partial class MissionMap : Node2D
 				context.Officer?.PortraitPath ?? string.Empty,
 				context.NpcPortraitPath ?? string.Empty);
 		}
+	}
+
+	private bool ShouldShowStoryEvent(MissionProp prop)
+	{
+		return prop?.Definition != null
+			&& (!string.IsNullOrWhiteSpace(prop.Definition.StoryImagePath)
+				|| !string.IsNullOrWhiteSpace(prop.Definition.StoryDescriptionText)
+				|| !string.IsNullOrWhiteSpace(prop.Definition.StoryConfirmButtonText));
+	}
+
+	private void ShowPropStoryEvent(MissionProp prop, PropInteractionResult result, PropInteractionContext context)
+	{
+		if (_missionUi == null || prop?.Definition == null)
+		{
+			ApplyPropInteractionResult(prop, result, context);
+			return;
+		}
+
+		_pendingStoryProp = prop;
+		_pendingStoryResult = result;
+		_pendingStoryContext = context;
+		_missionUi.ShowStoryEvent(
+			prop.Definition.DisplayName,
+			prop.Definition.StoryDescriptionText,
+			prop.Definition.StoryImagePath,
+			prop.Definition.StoryConfirmButtonText);
+	}
+
+	private void OnStoryEventConfirmed()
+	{
+		_missionUi?.HideStoryEvent();
+		if (_pendingStoryProp != null && _pendingStoryResult != null && _pendingStoryContext != null)
+		{
+			ApplyPropInteractionResult(_pendingStoryProp, _pendingStoryResult, _pendingStoryContext);
+		}
+
+		_pendingStoryProp = null;
+		_pendingStoryResult = null;
+		_pendingStoryContext = null;
 	}
 
 	private void ApplyNpcInteractionResult(MissionNpcPawn npc, PropInteractionResult result, PropInteractionContext context)

@@ -15,4 +15,7 @@ OneShot = true
 HideWhenConsumed = false
 BlockedFlags = PackedStringArray("relay_archive_objective_complete")
 SetFlags = PackedStringArray("relay_survivor_objective_complete")
+StoryImagePath = "res://Assets/Missions/Cutscenes/survivors.png"
+StoryDescriptionText = "The shelter seals grind open under failing power, and the surviving pods finally vent their frost. Three lives remain where the relay expected none. Their records are fragmented, their bodies weakened, but they are alive, and that alone changes the meaning of this mission. Whatever secrets the archive held, you chose to bring people home."
+StoryConfirmButtonText = "Save Survivors"
 SuccessMessage = "The cryo pods are stabilized and marked for immediate evac."

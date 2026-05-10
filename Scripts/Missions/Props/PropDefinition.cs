@@ -19,6 +19,9 @@ public partial class PropDefinition : Resource
 	[Export] public Godot.Collections.Array<string> SetFlags { get; set; } = new Godot.Collections.Array<string>();
 	[Export] public string DialogueId { get; set; } = string.Empty;
 	[Export] public string MissionEventId { get; set; } = string.Empty;
+	[Export(PropertyHint.File, "*.png,*.jpg,*.jpeg,*.webp,*.svg")] public string StoryImagePath { get; set; } = string.Empty;
+	[Export(PropertyHint.MultilineText)] public string StoryDescriptionText { get; set; } = string.Empty;
+	[Export] public string StoryConfirmButtonText { get; set; } = string.Empty;
 	[Export] public Godot.Collections.Array<string> DoorTargetIds { get; set; } = new Godot.Collections.Array<string>();
 	[Export] public string SuccessMessage { get; set; } = string.Empty;
 	[Export] public int RewardRawMaterials { get; set; } = 0;

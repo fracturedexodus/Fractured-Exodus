@@ -35,11 +35,15 @@ public partial class MissionUI : CanvasLayer
 	[Signal]
 	public delegate void CombatEndTurnPressedEventHandler();
 
+	[Signal]
+	public delegate void StoryEventConfirmedEventHandler();
+
 	public Label TitleLabel { get; private set; }
 	public Label ObjectiveLabel { get; private set; }
 	public Label SelectedOfficerLabel { get; private set; }
 	public Label PromptLabel { get; private set; }
 	public bool IsExtractionPromptVisible => _extractionPromptPanel?.Visible ?? false;
+	public bool IsStoryEventVisible => _storyEventPanel?.Visible ?? false;
 
 	private Control _uiRoot;
 	private PanelContainer _legacyActionPanel;
@@ -62,6 +66,10 @@ public partial class MissionUI : CanvasLayer
 	private readonly List<string> _combatLogEntries = new List<string>();
 	private PanelContainer _hoverSummaryPanel;
 	private Label _hoverSummaryLabel;
+	private PanelContainer _storyEventPanel;
+	private TextureRect _storyEventImage;
+	private RichTextLabel _storyEventDescription;
+	private Button _storyEventConfirmButton;
 	private ColorRect _gameOverPanel;
 	private Label _gameOverLabel;
 	private Button _gameOverReturnButton;
@@ -85,6 +93,7 @@ public partial class MissionUI : CanvasLayer
 		BuildCombatHud();
 		BuildCombatLog();
 		BuildHoverSummary();
+		BuildStoryEventPanel();
 		BuildGameOverPanel();
 	}
 
@@ -318,6 +327,36 @@ public partial class MissionUI : CanvasLayer
 		}
 	}
 
+	public void ShowStoryEvent(string title, string description, string imagePath, string confirmButtonText)
+	{
+		if (_storyEventPanel == null || _storyEventDescription == null || _storyEventConfirmButton == null || _storyEventImage == null)
+		{
+			return;
+		}
+
+		if (_storyEventPanel.GetNodeOrNull<Label>("TitleLabel") is Label titleLabel)
+		{
+			titleLabel.Text = string.IsNullOrWhiteSpace(title) ? "MISSION EVENT" : title.ToUpperInvariant();
+		}
+
+		_storyEventDescription.Text = string.IsNullOrWhiteSpace(description)
+			? string.Empty
+			: description;
+		_storyEventImage.Texture = !string.IsNullOrWhiteSpace(imagePath) && ResourceLoader.Exists(imagePath)
+			? GD.Load<Texture2D>(imagePath)
+			: null;
+		_storyEventConfirmButton.Text = string.IsNullOrWhiteSpace(confirmButtonText) ? "CONTINUE" : confirmButtonText;
+		_storyEventPanel.Visible = true;
+	}
+
+	public void HideStoryEvent()
+	{
+		if (_storyEventPanel != null)
+		{
+			_storyEventPanel.Visible = false;
+		}
+	}
+
 	private void BuildExtractionPrompt()
 	{
 		if (_uiRoot == null)
@@ -495,6 +534,87 @@ public partial class MissionUI : CanvasLayer
 			AutowrapMode = TextServer.AutowrapMode.WordSmart
 		};
 		margin.AddChild(_hoverSummaryLabel);
+	}
+
+	private void BuildStoryEventPanel()
+	{
+		if (_uiRoot == null)
+		{
+			return;
+		}
+
+		_storyEventPanel = new PanelContainer
+		{
+			Visible = false
+		};
+		_storyEventPanel.SetAnchorsPreset(Control.LayoutPreset.Center);
+		_storyEventPanel.OffsetLeft = -624f;
+		_storyEventPanel.OffsetTop = -420f;
+		_storyEventPanel.OffsetRight = 624f;
+		_storyEventPanel.OffsetBottom = 420f;
+		_uiRoot.AddChild(_storyEventPanel);
+
+		StyleBoxFlat panelStyle = new StyleBoxFlat
+		{
+			BgColor = new Color(0.01f, 0.02f, 0.04f, 0.97f),
+			BorderColor = new Color(0.32f, 0.9f, 1f, 0.85f),
+			BorderWidthLeft = 2,
+			BorderWidthTop = 2,
+			BorderWidthRight = 2,
+			BorderWidthBottom = 2,
+			CornerRadiusTopLeft = 10,
+			CornerRadiusTopRight = 10,
+			CornerRadiusBottomLeft = 10,
+			CornerRadiusBottomRight = 10
+		};
+		_storyEventPanel.AddThemeStyleboxOverride("panel", panelStyle);
+
+		MarginContainer margin = new MarginContainer();
+		margin.AddThemeConstantOverride("margin_left", 18);
+		margin.AddThemeConstantOverride("margin_top", 18);
+		margin.AddThemeConstantOverride("margin_right", 18);
+		margin.AddThemeConstantOverride("margin_bottom", 18);
+		_storyEventPanel.AddChild(margin);
+
+		VBoxContainer content = new VBoxContainer();
+		content.AddThemeConstantOverride("separation", 12);
+		margin.AddChild(content);
+
+		Label titleLabel = new Label
+		{
+			Name = "TitleLabel",
+			Text = "MISSION EVENT",
+			HorizontalAlignment = HorizontalAlignment.Center
+		};
+		titleLabel.AddThemeFontSizeOverride("font_size", 26);
+		titleLabel.AddThemeColorOverride("font_color", new Color(0.82f, 0.96f, 1f));
+		content.AddChild(titleLabel);
+
+		_storyEventImage = new TextureRect
+		{
+			CustomMinimumSize = new Vector2(0f, 504f),
+			ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+			StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered
+		};
+		content.AddChild(_storyEventImage);
+
+		_storyEventDescription = new RichTextLabel
+		{
+			BbcodeEnabled = false,
+			FitContent = true,
+			ScrollActive = true,
+			CustomMinimumSize = new Vector2(0f, 120f)
+		};
+		content.AddChild(_storyEventDescription);
+
+		_storyEventConfirmButton = new Button
+		{
+			Text = "CONTINUE",
+			CustomMinimumSize = new Vector2(0f, 48f),
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+		};
+		_storyEventConfirmButton.Pressed += () => EmitSignal(SignalName.StoryEventConfirmed);
+		content.AddChild(_storyEventConfirmButton);
 	}
 
 	private void BuildGameOverPanel()
