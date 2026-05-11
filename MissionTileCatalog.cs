@@ -55,6 +55,10 @@ public static class MissionTileCatalog
 		new MissionTileDefinition("wall_ne_panel", "Wall NE Panel", MissionTileCategory.Wall, 'e', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_NE_panel_a.png"),
 		new MissionTileDefinition("wall_se_panel", "Wall SE Panel", MissionTileCategory.Wall, 's', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_SE_panel_a.png"),
 		new MissionTileDefinition("wall_sw_panel", "Wall SW Panel", MissionTileCategory.Wall, 'z', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_SW_panel_a.png"),
+		new MissionTileDefinition("wall_nw_outpost", "Outpost NW Panel", MissionTileCategory.Wall, '1', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_NW_outpost_panel.png"),
+		new MissionTileDefinition("wall_ne_outpost", "Outpost NE Panel", MissionTileCategory.Wall, '2', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_NE_outpost_panel.png"),
+		new MissionTileDefinition("wall_se_outpost", "Outpost SE Panel", MissionTileCategory.Wall, '3', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_SE_outpost_panel.png"),
+		new MissionTileDefinition("wall_sw_outpost", "Outpost SW Panel", MissionTileCategory.Wall, '4', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_SW_outpost_panel.png"),
 
 		new MissionTileDefinition("wall_nw_window", "Window NW Wall", MissionTileCategory.Wall, 'n', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_NW_panel_window.png"),
 		new MissionTileDefinition("wall_ne_window", "Window NE Wall", MissionTileCategory.Wall, 'N', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_NE_panel_window.png"),
