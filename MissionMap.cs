@@ -58,6 +58,7 @@ public partial class MissionMap : Node2D
 	private Vector2 _lastMouseScreenPosition;
 	private string _pendingInteractionKey = string.Empty;
 	private string _pendingInteractionOfficerId = string.Empty;
+	private string _pendingDoorId = string.Empty;
 	private string _pendingPropInstanceId = string.Empty;
 	private string _pendingNpcId = string.Empty;
 	private float _evacPulseClock;
@@ -156,6 +157,16 @@ public partial class MissionMap : Node2D
 				SelectOfficer(1);
 				GetViewport().SetInputAsHandled();
 				return;
+			}
+
+			if (keyEvent.Keycode == Key.O)
+			{
+				OfficerPawn activeOfficer = GetSelectedOfficer();
+				if (activeOfficer != null && TryHandleDoorKeyAction(activeOfficer))
+				{
+					GetViewport().SetInputAsHandled();
+					return;
+				}
 			}
 
 			if (keyEvent.Keycode == Key.Equal || keyEvent.Keycode == Key.KpAdd)
@@ -623,6 +634,8 @@ public partial class MissionMap : Node2D
 			}
 		}
 
+		RevealAdjacentDoorCells();
+
 		ApplyFogToLayer(GetNodeOrNull<Node2D>("IsoWorld/FloorLayer"));
 		ApplyFogToLayer(GetNodeOrNull<Node2D>("IsoWorld/WallLayer"));
 		ApplyFogToLayer(GetNodeOrNull<Node2D>("IsoWorld/PropLayer"));
@@ -646,9 +659,11 @@ public partial class MissionMap : Node2D
 			if (child is MissionDoor2D door)
 			{
 				Vector2I doorCell = door.Cell;
-				Color fogColor = _visibleCells.Contains(doorCell)
+				bool isVisible = IsStructureCellVisible(doorCell);
+				bool isExplored = IsStructureCellExplored(doorCell);
+				Color fogColor = isVisible
 					? Colors.White
-					: (_exploredCells.Contains(doorCell) ? MultiplyColor(Colors.White, 0.38f) : MultiplyColor(Colors.White, 0.08f));
+					: (isExplored ? MultiplyColor(Colors.White, 0.38f) : MultiplyColor(Colors.White, 0.08f));
 				door.SetVisualModulate(fogColor);
 				continue;
 			}
@@ -687,6 +702,77 @@ public partial class MissionMap : Node2D
 				sprite.Modulate = MultiplyColor(baseColor, 0.08f);
 			}
 		}
+	}
+
+	private void RevealAdjacentDoorCells()
+	{
+		if (_roomBuilder == null || _visibleCells.Count == 0)
+		{
+			return;
+		}
+
+		Vector2I[] directions =
+		{
+			new Vector2I(1, 0),
+			new Vector2I(-1, 0),
+			new Vector2I(0, 1),
+			new Vector2I(0, -1)
+		};
+
+		HashSet<Vector2I> additionalVisibleCells = new HashSet<Vector2I>();
+		foreach (Vector2I cell in _visibleCells)
+		{
+			foreach (Vector2I direction in directions)
+			{
+				Vector2I candidate = cell + direction;
+				if (_roomBuilder.TryGetDoorIdAtCell(candidate, out string doorId) && !string.IsNullOrWhiteSpace(doorId))
+				{
+					additionalVisibleCells.Add(candidate);
+				}
+			}
+		}
+
+		foreach (Vector2I cell in additionalVisibleCells)
+		{
+			_visibleCells.Add(cell);
+			_exploredCells.Add(cell);
+		}
+	}
+
+	private bool IsStructureCellVisible(Vector2I cell)
+	{
+		if (_visibleCells.Contains(cell))
+		{
+			return true;
+		}
+
+		Vector2I[] directions =
+		{
+			new Vector2I(1, 0),
+			new Vector2I(-1, 0),
+			new Vector2I(0, 1),
+			new Vector2I(0, -1)
+		};
+
+		return directions.Any(direction => _visibleCells.Contains(cell + direction));
+	}
+
+	private bool IsStructureCellExplored(Vector2I cell)
+	{
+		if (_exploredCells.Contains(cell))
+		{
+			return true;
+		}
+
+		Vector2I[] directions =
+		{
+			new Vector2I(1, 0),
+			new Vector2I(-1, 0),
+			new Vector2I(0, 1),
+			new Vector2I(0, -1)
+		};
+
+		return directions.Any(direction => _exploredCells.Contains(cell + direction));
 	}
 
 	private static Color MultiplyColor(Color color, float factor)
@@ -1154,6 +1240,12 @@ public partial class MissionMap : Node2D
 		}
 
 		Vector2I clickedCell = _roomBuilder.GetNearestCell(_isoWorld.ToLocal(GetGlobalMousePosition()));
+		if (_roomBuilder.IsDoorCell(clickedCell))
+		{
+			// Door bulkheads are keyboard-only for now. Left-click should always remain a move order.
+			return false;
+		}
+
 		if (!_visibleCells.Contains(clickedCell))
 		{
 			return false;
@@ -1170,8 +1262,8 @@ public partial class MissionMap : Node2D
 		}
 
 		List<MissionRoomBuilder.MarkerPlacement> interactions = _roomBuilder.GetInteractPlacementsAtCell(clickedCell)
-			.Where(placement => string.Equals(placement.TriggerMode, "interact", System.StringComparison.OrdinalIgnoreCase)
-				|| placement.LogicRole == "door"
+			.Where(placement =>
+				(placement.LogicRole != "door" && string.Equals(placement.TriggerMode, "interact", System.StringComparison.OrdinalIgnoreCase))
 				|| placement.LogicRole == "terminal")
 			.Where(placement => !HasRuntimePropForPlacement(placement))
 			.ToList();
@@ -1181,8 +1273,7 @@ public partial class MissionMap : Node2D
 		}
 
 		MissionRoomBuilder.MarkerPlacement interaction = interactions
-			.OrderByDescending(placement => placement.LogicRole == "door")
-			.ThenByDescending(placement => placement.LogicRole == "terminal")
+			.OrderByDescending(placement => placement.LogicRole == "terminal")
 			.First();
 
 		if (CanOfficerExecuteInteraction(officer, interaction))
@@ -1200,6 +1291,83 @@ public partial class MissionMap : Node2D
 		}
 
 		return true;
+	}
+
+	private bool TryHandleDoorKeyAction(OfficerPawn officer)
+	{
+		if (officer == null || _roomBuilder == null || _isoWorld == null || (_dialogueUi?.IsConversationOpen ?? false))
+		{
+			return false;
+		}
+
+		Vector2I hoveredCell = _roomBuilder.GetNearestCell(_isoWorld.ToLocal(GetGlobalMousePosition()));
+		if (_roomBuilder.TryGetDoorIdAtCell(hoveredCell, out string hoveredDoorId) && !string.IsNullOrWhiteSpace(hoveredDoorId))
+		{
+			return TryHandleDirectDoorInteraction(officer, hoveredCell, hoveredDoorId);
+		}
+
+		Vector2I[] directions =
+		{
+			new Vector2I(1, 0),
+			new Vector2I(-1, 0),
+			new Vector2I(0, 1),
+			new Vector2I(0, -1)
+		};
+		foreach (Vector2I direction in directions)
+		{
+			Vector2I candidate = officer.CurrentCell + direction;
+			if (_roomBuilder.TryGetDoorIdAtCell(candidate, out string adjacentDoorId) && !string.IsNullOrWhiteSpace(adjacentDoorId))
+			{
+				return TryHandleDirectDoorInteraction(officer, candidate, adjacentDoorId);
+			}
+		}
+
+		return false;
+	}
+
+	private bool TryHandleDirectDoorClick(OfficerPawn officer, Vector2I clickedCell)
+	{
+		if (officer == null || _roomBuilder == null)
+		{
+			return false;
+		}
+
+		if (!_roomBuilder.TryGetDoorIdAtCell(clickedCell, out string doorId) || string.IsNullOrWhiteSpace(doorId))
+		{
+			return false;
+		}
+
+		return TryHandleDirectDoorInteraction(officer, clickedCell, doorId);
+	}
+
+	private bool TryHandleDirectDoorInteraction(OfficerPawn officer, Vector2I clickedCell, string doorId)
+	{
+		if (officer == null || _roomBuilder == null || string.IsNullOrWhiteSpace(doorId))
+		{
+			return false;
+		}
+
+		if (!IsStructureCellVisible(clickedCell))
+		{
+			return false;
+		}
+
+		MissionRoomBuilder.MarkerPlacement directDoorInteraction = new MissionRoomBuilder.MarkerPlacement
+		{
+			LogicRole = "door",
+			Label = "Bulkhead Door",
+			TargetId = doorId,
+			TriggerMode = "interact",
+			Cell = clickedCell
+		};
+
+		if (CanOfficerExecuteInteraction(officer, directDoorInteraction))
+		{
+			ExecuteInteraction(officer, directDoorInteraction);
+			return true;
+		}
+
+		return false;
 	}
 
 	private bool TryHandlePropInteractionClick(OfficerPawn officer, Vector2I clickedCell)
@@ -2996,6 +3164,26 @@ public partial class MissionMap : Node2D
 			if (pendingProp != null && CanOfficerExecutePropInteraction(pawn, pendingProp))
 			{
 				ExecutePropInteraction(pawn, pendingProp);
+			}
+			return;
+		}
+
+		if (!string.IsNullOrEmpty(_pendingDoorId))
+		{
+			string pendingDoorId = _pendingDoorId;
+			_pendingDoorId = string.Empty;
+			_pendingInteractionOfficerId = string.Empty;
+			MissionRoomBuilder.MarkerPlacement directDoorInteraction = new MissionRoomBuilder.MarkerPlacement
+			{
+				LogicRole = "door",
+				Label = "Bulkhead Door",
+				TargetId = pendingDoorId,
+				TriggerMode = "interact",
+				Cell = cell
+			};
+			if (CanOfficerExecuteInteraction(pawn, directDoorInteraction))
+			{
+				ExecuteInteraction(pawn, directDoorInteraction);
 			}
 			return;
 		}

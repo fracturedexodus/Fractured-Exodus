@@ -13,6 +13,7 @@ public partial class MissionDoor2D : Node2D
 
 	public string DoorId { get; private set; } = string.Empty;
 	public Vector2I Cell { get; private set; } = Vector2I.Zero;
+	public string OrientationSuffix { get; private set; } = "nw";
 	public bool IsOpen { get; private set; }
 
 	public void Configure(Texture2D sourceTexture, Vector2 scale, Vector2 worldPosition, string doorId, Vector2I cell, bool startsOpen)
@@ -20,6 +21,7 @@ public partial class MissionDoor2D : Node2D
 		DoorId = doorId ?? string.Empty;
 		Cell = cell;
 		Position = worldPosition;
+		OrientationSuffix = ResolveOrientationSuffix(sourceTexture?.ResourcePath ?? string.Empty);
 		BuildPanels(sourceTexture, scale);
 		_isConfigured = true;
 		SetOpen(startsOpen, false);
@@ -182,5 +184,25 @@ public partial class MissionDoor2D : Node2D
 		float slideDistance = halfWidth * scale.X * 0.48f;
 		_openLeftPosition = _closedLeftPosition + new Vector2(-slideDistance, 0f);
 		_openRightPosition = _closedRightPosition + new Vector2(slideDistance, 0f);
+	}
+
+	private static string ResolveOrientationSuffix(string sourcePath)
+	{
+		if (sourcePath.Contains("_ne_"))
+		{
+			return "ne";
+		}
+
+		if (sourcePath.Contains("_se_"))
+		{
+			return "se";
+		}
+
+		if (sourcePath.Contains("_sw_"))
+		{
+			return "sw";
+		}
+
+		return "nw";
 	}
 }

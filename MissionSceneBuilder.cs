@@ -3183,6 +3183,7 @@ public partial class MissionSceneBuilder : Node2D
 		}
 
 		Sprite2D item = selectedSprite;
+		EnsureTileRuntimeDefaults(item);
 		string itemId = GetItemDisplayId(item);
 		string logicLabel = item.GetMeta("logic_label", itemId).AsString();
 		int column = item.GetMeta("column", 0).AsInt32();
@@ -3263,7 +3264,13 @@ public partial class MissionSceneBuilder : Node2D
 		selectedSprite.SetMeta("logic_trigger_mode", GetTriggerModeValue(_logicTriggerModeOption.Selected));
 		selectedSprite.SetMeta("logic_once", _logicOneShotCheck.ButtonPressed);
 		selectedSprite.SetMeta("logic_notes", _logicNotesEdit.Text.StripEdges());
+		EnsureTileRuntimeDefaults(selectedSprite);
 		UpdateMarkerCaption(selectedSprite);
+		_isUpdatingLogicUi = true;
+		_logicRoleOption.Select(GetLogicRoleIndex(selectedSprite.GetMeta("logic_role", isMarker ? "marker" : string.Empty).AsString()));
+		_logicTargetIdEdit.Text = selectedSprite.GetMeta("logic_target_id", string.Empty).AsString();
+		_logicTriggerModeOption.Select(GetTriggerModeIndex(selectedSprite.GetMeta("logic_trigger_mode", "none").AsString()));
+		_isUpdatingLogicUi = false;
 		RefreshValidationReport();
 		UpdateContextObjectEditor();
 	}
@@ -4162,6 +4169,8 @@ public partial class MissionSceneBuilder : Node2D
 					continue;
 				}
 
+				EnsureTileRuntimeDefaults(sprite);
+
 				Godot.Collections.Dictionary<string, Variant> item = new Godot.Collections.Dictionary<string, Variant>
 				{
 					{ "item_type", sprite.GetMeta("item_type", "tile").AsString() },
@@ -4332,6 +4341,7 @@ public partial class MissionSceneBuilder : Node2D
 			sprite.SetMeta("logic_once", tile.TryGetValue("logic_once", out Variant tileLogicOnceVariant) ? tileLogicOnceVariant.AsBool() : sprite.GetMeta("logic_once", false).AsBool());
 			sprite.SetMeta("logic_notes", tile.TryGetValue("logic_notes", out Variant tileLogicNotesVariant) ? tileLogicNotesVariant.AsString() : string.Empty);
 			sprite.SetMeta("prop_definition_path", tile.TryGetValue("prop_definition_path", out Variant tilePropDefinitionVariant) ? tilePropDefinitionVariant.AsString() : string.Empty);
+			EnsureTileRuntimeDefaults(sprite);
 			sprite.RotationDegrees = rotationDegrees;
 			MoveSpriteToCell(sprite, column, row);
 			GetPlacementLayer(GetLayerForTile(definition)).AddChild(sprite);
@@ -5150,6 +5160,62 @@ public partial class MissionSceneBuilder : Node2D
 	private static bool IsDoorTileId(string tileId)
 	{
 		return tileId.StartsWith("door_");
+	}
+
+	private static string BuildDefaultDoorTargetId(Sprite2D sprite)
+	{
+		if (sprite == null)
+		{
+			return string.Empty;
+		}
+
+		string tileId = sprite.GetMeta("tile_id", string.Empty).AsString();
+		if (string.IsNullOrWhiteSpace(tileId))
+		{
+			return string.Empty;
+		}
+
+		int column = sprite.GetMeta("column", 0).AsInt32();
+		int row = sprite.GetMeta("row", 0).AsInt32();
+		return $"{tileId}_{column}_{row}";
+	}
+
+	private void EnsureTileRuntimeDefaults(Sprite2D sprite)
+	{
+		if (sprite == null)
+		{
+			return;
+		}
+
+		string tileId = sprite.GetMeta("tile_id", string.Empty).AsString();
+		if (!IsDoorTileId(tileId))
+		{
+			return;
+		}
+
+		string currentRole = sprite.GetMeta("logic_role", string.Empty).AsString();
+		if (!string.Equals(currentRole, "door", System.StringComparison.OrdinalIgnoreCase))
+		{
+			sprite.SetMeta("logic_role", "door");
+		}
+
+		string currentTargetId = sprite.GetMeta("logic_target_id", string.Empty).AsString();
+		if (string.IsNullOrWhiteSpace(currentTargetId))
+		{
+			sprite.SetMeta("logic_target_id", BuildDefaultDoorTargetId(sprite));
+		}
+
+		string currentTriggerMode = sprite.GetMeta("logic_trigger_mode", string.Empty).AsString();
+		if (string.IsNullOrWhiteSpace(currentTriggerMode) || string.Equals(currentTriggerMode, "none", System.StringComparison.OrdinalIgnoreCase))
+		{
+			sprite.SetMeta("logic_trigger_mode", "interact");
+		}
+
+		string currentLabel = sprite.GetMeta("logic_label", string.Empty).AsString();
+		if (string.IsNullOrWhiteSpace(currentLabel) && MissionTileCatalog.TryGetById(tileId, out MissionTileDefinition definition))
+		{
+			sprite.SetMeta("logic_label", definition.DisplayName);
+		}
 	}
 
 	private static bool IsTerminalTileId(string tileId)

@@ -45,6 +45,7 @@ public partial class MissionRoomBuilder : Node
 	private readonly Dictionary<string, MissionDoor2D> _doorsById = new Dictionary<string, MissionDoor2D>();
 	private readonly Dictionary<Vector2I, string> _doorIdsByCell = new Dictionary<Vector2I, string>();
 	private readonly HashSet<Vector2I> _closedDoorCells = new HashSet<Vector2I>();
+	private readonly Dictionary<string, string> _doorTransitionKeysById = new Dictionary<string, string>();
 	private string _selectedBackgroundId = MissionBackgroundCatalog.DefaultId;
 
 	[Export] public Texture2D TilesetTexture { get; set; }
@@ -146,6 +147,16 @@ public partial class MissionRoomBuilder : Node
 		return _floorCells.Contains(cell) && !_closedDoorCells.Contains(cell);
 	}
 
+	public bool IsDoorCell(Vector2I cell)
+	{
+		return _doorIdsByCell.ContainsKey(cell);
+	}
+
+	public bool IsClosedDoorCell(Vector2I cell)
+	{
+		return _closedDoorCells.Contains(cell);
+	}
+
 	public bool IsDoorOpen(string doorId)
 	{
 		return _doorsById.TryGetValue(doorId, out MissionDoor2D door) && door.IsOpen;
@@ -162,10 +173,16 @@ public partial class MissionRoomBuilder : Node
 		if (open)
 		{
 			_closedDoorCells.Remove(door.Cell);
+			if (_doorTransitionKeysById.TryGetValue(doorId, out string transitionKey))
+			{
+				_blockedTransitions.Remove(transitionKey);
+				_doorTransitionKeysById.Remove(doorId);
+			}
 		}
 		else
 		{
 			_closedDoorCells.Add(door.Cell);
+			RegisterDoorBlockedTransition(doorId, door.Cell, door.OrientationSuffix);
 		}
 
 		return true;
@@ -208,7 +225,9 @@ public partial class MissionRoomBuilder : Node
 	public bool TryGetPath(Vector2I startCell, Vector2I targetCell, out List<Vector2I> path)
 	{
 		path = new List<Vector2I>();
-		if (!IsWalkableCell(startCell) || !IsWalkableCell(targetCell))
+		bool startIsClosedDoor = IsClosedDoorCell(startCell);
+		bool targetIsClosedDoor = IsClosedDoorCell(targetCell);
+		if ((!IsWalkableCell(startCell) && !startIsClosedDoor) || (!IsWalkableCell(targetCell) && !targetIsClosedDoor))
 		{
 			return false;
 		}
@@ -238,7 +257,14 @@ public partial class MissionRoomBuilder : Node
 			foreach (Vector2I direction in directions)
 			{
 				Vector2I next = current + direction;
-				if (cameFrom.ContainsKey(next) || !IsWalkableCell(next) || IsTransitionBlocked(current, next))
+				if (cameFrom.ContainsKey(next) || IsTransitionBlocked(current, next))
+				{
+					continue;
+				}
+
+				bool nextIsWalkable = IsWalkableCell(next);
+				bool nextIsClosedDoorTarget = next == targetCell && IsClosedDoorCell(next);
+				if (!nextIsWalkable && !nextIsClosedDoorTarget)
 				{
 					continue;
 				}
@@ -260,7 +286,7 @@ public partial class MissionRoomBuilder : Node
 	public HashSet<Vector2I> GetReachableCells(Vector2I startCell, int maxSteps)
 	{
 		HashSet<Vector2I> reachable = new HashSet<Vector2I>();
-		if (!IsWalkableCell(startCell) || maxSteps < 0)
+		if ((!IsWalkableCell(startCell) && !IsClosedDoorCell(startCell)) || maxSteps < 0)
 		{
 			return reachable;
 		}
@@ -323,6 +349,7 @@ public partial class MissionRoomBuilder : Node
 		_doorsById.Clear();
 		_doorIdsByCell.Clear();
 		_closedDoorCells.Clear();
+		_doorTransitionKeysById.Clear();
 		_selectedBackgroundId = MissionBackgroundCatalog.DefaultId;
 
 		if (!BuildFromSavedLayout(floorLayer, wallLayer, propLayer))
@@ -459,9 +486,11 @@ public partial class MissionRoomBuilder : Node
 			{
 				MissionDoor2D doorNode = CreateDoorNode(definition, cell, extraOffset, logicTargetId, rotationDegrees);
 				targetLayer.AddChild(doorNode);
-				_doorsById[logicTargetId] = doorNode;
-				_doorIdsByCell[cell] = logicTargetId;
+				string resolvedDoorId = doorNode.DoorId;
+				_doorsById[resolvedDoorId] = doorNode;
+				_doorIdsByCell[cell] = resolvedDoorId;
 				_closedDoorCells.Add(cell);
+				RegisterDoorBlockedTransition(resolvedDoorId, cell, doorNode.OrientationSuffix);
 			}
 			else
 			{
@@ -558,6 +587,12 @@ public partial class MissionRoomBuilder : Node
 			return;
 		}
 
+		if (definition.Category == MissionTileCategory.Prop && definition.Id.StartsWith("door_"))
+		{
+			_floorCells.Add(cell);
+			return;
+		}
+
 		if (definition.Category == MissionTileCategory.Wall)
 		{
 			RegisterBlockedTransition(definition.Id, cell);
@@ -566,14 +601,14 @@ public partial class MissionRoomBuilder : Node
 
 	private void RegisterBlockedTransition(string tileId, Vector2I cell)
 	{
-		Vector2I neighbor = tileId switch
+		Vector2I neighbor = GetBlockedNeighborForOrientation(tileId switch
 		{
-			"wall_nw_panel" or "wall_nw_window" => cell + new Vector2I(-1, 0),
-			"wall_ne_panel" or "wall_ne_window" => cell + new Vector2I(0, -1),
-			"wall_se_panel" or "wall_se_window" => cell + new Vector2I(1, 0),
-			"wall_sw_panel" or "wall_sw_window" => cell + new Vector2I(0, 1),
-			_ => new Vector2I(int.MinValue, int.MinValue)
-		};
+			"wall_nw_panel" or "wall_nw_window" => "nw",
+			"wall_ne_panel" or "wall_ne_window" => "ne",
+			"wall_se_panel" or "wall_se_window" => "se",
+			"wall_sw_panel" or "wall_sw_window" => "sw",
+			_ => string.Empty
+		}, cell);
 
 		if (neighbor.X == int.MinValue)
 		{
@@ -586,6 +621,36 @@ public partial class MissionRoomBuilder : Node
 	private bool IsTransitionBlocked(Vector2I fromCell, Vector2I toCell)
 	{
 		return _blockedTransitions.Contains(GetTransitionKey(fromCell, toCell));
+	}
+
+	private void RegisterDoorBlockedTransition(string doorId, Vector2I cell, string orientationSuffix)
+	{
+		if (string.IsNullOrWhiteSpace(doorId))
+		{
+			return;
+		}
+
+		Vector2I neighbor = GetBlockedNeighborForOrientation(orientationSuffix, cell);
+		if (neighbor.X == int.MinValue)
+		{
+			return;
+		}
+
+		string transitionKey = GetTransitionKey(cell, neighbor);
+		_doorTransitionKeysById[doorId] = transitionKey;
+		_blockedTransitions.Add(transitionKey);
+	}
+
+	private static Vector2I GetBlockedNeighborForOrientation(string orientationSuffix, Vector2I cell)
+	{
+		return orientationSuffix switch
+		{
+			"nw" => cell + new Vector2I(-1, 0),
+			"ne" => cell + new Vector2I(0, -1),
+			"se" => cell + new Vector2I(1, 0),
+			"sw" => cell + new Vector2I(0, 1),
+			_ => new Vector2I(int.MinValue, int.MinValue)
+		};
 	}
 
 	private static string GetTransitionKey(Vector2I a, Vector2I b)
