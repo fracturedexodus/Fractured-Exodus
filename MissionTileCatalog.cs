@@ -59,6 +59,10 @@ public static class MissionTileCatalog
 		new MissionTileDefinition("wall_ne_outpost", "Outpost NE Panel", MissionTileCategory.Wall, '2', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_NE_outpost_panel.png"),
 		new MissionTileDefinition("wall_se_outpost", "Outpost SE Panel", MissionTileCategory.Wall, '3', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_SE_outpost_panel.png"),
 		new MissionTileDefinition("wall_sw_outpost", "Outpost SW Panel", MissionTileCategory.Wall, '4', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_SW_outpost_panel.png"),
+		new MissionTileDefinition("wall_nw_derelict", "Derelict NW Panel", MissionTileCategory.Wall, '5', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_NW_derelict_panel.png"),
+		new MissionTileDefinition("wall_ne_derelict", "Derelict NE Panel", MissionTileCategory.Wall, '6', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_NE_derelict_panel.png"),
+		new MissionTileDefinition("wall_se_derelict", "Derelict SE Panel", MissionTileCategory.Wall, '7', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_SE_derelict_panel.png"),
+		new MissionTileDefinition("wall_sw_derelict", "Derelict SW Panel", MissionTileCategory.Wall, '8', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_SW_derelict_panel.png"),
 
 		new MissionTileDefinition("wall_nw_window", "Window NW Wall", MissionTileCategory.Wall, 'n', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_NW_panel_window.png"),
 		new MissionTileDefinition("wall_ne_window", "Window NE Wall", MissionTileCategory.Wall, 'N', new Rect2(0, 0, 226, 360), Vector2.Zero, Vector2.One, AlignedRoot + "walls/wall_NE_panel_window.png"),
@@ -85,6 +89,7 @@ public static class MissionTileCatalog
 
 		new MissionTileDefinition("door_survivors", "Door Survivors", MissionTileCategory.Prop, 'd', new Rect2(0, 0, 226, 360), Vector2.Zero, DoorScale, AlignedRoot + "doors/door_survivors_nw_closed.png"),
 		new MissionTileDefinition("door_archive", "Door Archive", MissionTileCategory.Prop, 'D', new Rect2(0, 0, 226, 360), Vector2.Zero, DoorScale, AlignedRoot + "doors/door_archive_nw_closed.png"),
+		new MissionTileDefinition("door_bulkhead", "Door Bulkhead", MissionTileCategory.Prop, '9', new Rect2(0, 0, 226, 360), Vector2.Zero, DoorScale, AlignedRoot + "doors/door_bulkhead_nw_closed.png"),
 		new MissionTileDefinition("console_survivor", "Console Single", MissionTileCategory.Prop, 'S', new Rect2(0, 0, 318, 311), AnchorBottomCenter(318f, 311f, PropScale.X), PropScale, AlignedRoot + "props/console_single.png"),
 		new MissionTileDefinition("medical_station", "Medical Bed", MissionTileCategory.Prop, 'm', new Rect2(0, 0, 378, 346), AnchorBottomCenter(378f, 346f, PropScale.X), PropScale, AlignedRoot + "props/medical_bed.png"),
 		new MissionTileDefinition("crate_survivor", "Crate Small", MissionTileCategory.Prop, 'c', new Rect2(0, 0, 251, 241), AnchorBottomCenter(251f, 241f, PropScale.X), PropScale, AlignedRoot + "props/crate_small.png"),
