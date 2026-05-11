@@ -89,7 +89,11 @@ public static class MissionTileCatalog
 
 		new MissionTileDefinition("door_survivors", "Door Survivors", MissionTileCategory.Prop, 'd', new Rect2(0, 0, 226, 360), Vector2.Zero, DoorScale, AlignedRoot + "doors/door_survivors_nw_closed.png"),
 		new MissionTileDefinition("door_archive", "Door Archive", MissionTileCategory.Prop, 'D', new Rect2(0, 0, 226, 360), Vector2.Zero, DoorScale, AlignedRoot + "doors/door_archive_nw_closed.png"),
-		new MissionTileDefinition("door_bulkhead", "Door Bulkhead", MissionTileCategory.Prop, '9', new Rect2(0, 0, 226, 360), Vector2.Zero, DoorScale, AlignedRoot + "doors/door_bulkhead_nw_closed.png"),
+		new MissionTileDefinition("door_bulkhead", "Door Bulkhead (Auto)", MissionTileCategory.Prop, '9', new Rect2(0, 0, 226, 360), Vector2.Zero, DoorScale, AlignedRoot + "doors/door_bulkhead_nw_closed.png"),
+		new MissionTileDefinition("door_bulkhead_nw", "Door Bulkhead NW", MissionTileCategory.Prop, '0', new Rect2(0, 0, 226, 360), Vector2.Zero, DoorScale, AlignedRoot + "doors/door_bulkhead_nw_closed.png"),
+		new MissionTileDefinition("door_bulkhead_ne", "Door Bulkhead NE", MissionTileCategory.Prop, 'Q', new Rect2(0, 0, 226, 360), Vector2.Zero, DoorScale, AlignedRoot + "doors/door_bulkhead_ne_closed.png"),
+		new MissionTileDefinition("door_bulkhead_se", "Door Bulkhead SE", MissionTileCategory.Prop, 'T', new Rect2(0, 0, 226, 360), Vector2.Zero, DoorScale, AlignedRoot + "doors/door_bulkhead_se_closed.png"),
+		new MissionTileDefinition("door_bulkhead_sw", "Door Bulkhead SW", MissionTileCategory.Prop, 'K', new Rect2(0, 0, 226, 360), Vector2.Zero, DoorScale, AlignedRoot + "doors/door_bulkhead_sw_closed.png"),
 		new MissionTileDefinition("console_survivor", "Console Single", MissionTileCategory.Prop, 'S', new Rect2(0, 0, 318, 311), AnchorBottomCenter(318f, 311f, PropScale.X), PropScale, AlignedRoot + "props/console_single.png"),
 		new MissionTileDefinition("medical_station", "Medical Bed", MissionTileCategory.Prop, 'm', new Rect2(0, 0, 378, 346), AnchorBottomCenter(378f, 346f, PropScale.X), PropScale, AlignedRoot + "props/medical_bed.png"),
 		new MissionTileDefinition("crate_survivor", "Crate Small", MissionTileCategory.Prop, 'c', new Rect2(0, 0, 251, 241), AnchorBottomCenter(251f, 241f, PropScale.X), PropScale, AlignedRoot + "props/crate_small.png"),

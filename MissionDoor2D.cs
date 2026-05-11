@@ -131,7 +131,9 @@ public partial class MissionDoor2D : Node2D
 		_closedLeftPosition = Vector2.Zero;
 		_closedRightPosition = Vector2.Zero;
 
-		bool opensRightUp = sourcePath.Contains("_nw_") || sourcePath.Contains("_sw_");
+		// Door slide direction should follow the wall face diagonal, not simply north/south.
+		// NW and SE share one diagonal; NE and SW share the opposite.
+		bool opensRightUp = sourcePath.Contains("_nw_") || sourcePath.Contains("_se_");
 		float slideX = 11f * scale.X;
 		float slideY = 5f * scale.Y;
 		_openLeftPosition = opensRightUp
