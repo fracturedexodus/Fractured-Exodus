@@ -6,6 +6,9 @@ using System.Linq;
 public partial class MissionRoomBuilder : Node
 {
 	private const string DefaultLayoutPath = "res://Data/MissionLayouts/black_site_relay_builder.json";
+	private const int MovementSubdivisionsPerTile = 8;
+	private const int MovementCellMinOffset = 3;
+	private const int MovementCellMaxOffset = 4;
 
 	public sealed class MarkerPlacement
 	{
@@ -41,11 +44,15 @@ public partial class MissionRoomBuilder : Node
 	private readonly Dictionary<string, Vector2I> _spawnMarkerCells = new Dictionary<string, Vector2I>();
 	private readonly List<MarkerPlacement> _markerPlacements = new List<MarkerPlacement>();
 	private readonly HashSet<Vector2I> _floorCells = new HashSet<Vector2I>();
+	private readonly HashSet<Vector2I> _movementCells = new HashSet<Vector2I>();
 	private readonly HashSet<string> _blockedTransitions = new HashSet<string>();
+	private readonly HashSet<string> _movementBlockedTransitions = new HashSet<string>();
 	private readonly Dictionary<string, MissionDoor2D> _doorsById = new Dictionary<string, MissionDoor2D>();
 	private readonly Dictionary<Vector2I, string> _doorIdsByCell = new Dictionary<Vector2I, string>();
 	private readonly HashSet<Vector2I> _closedDoorCells = new HashSet<Vector2I>();
+	private readonly HashSet<Vector2I> _closedDoorMovementCells = new HashSet<Vector2I>();
 	private readonly Dictionary<string, string> _doorTransitionKeysById = new Dictionary<string, string>();
+	private readonly Dictionary<string, List<string>> _doorMovementTransitionKeysById = new Dictionary<string, List<string>>();
 	private string _selectedBackgroundId = MissionBackgroundCatalog.DefaultId;
 
 	[Export] public Texture2D TilesetTexture { get; set; }
@@ -85,6 +92,8 @@ public partial class MissionRoomBuilder : Node
 		BuildRoom();
 	}
 
+	public int MovementSubdivision => MovementSubdivisionsPerTile;
+
 	public Vector2 GetCellWorldPosition(int column, int row, Vector2 extraOffset)
 	{
 		return IsoGridHelper.GridToWorld(column, row, TileStep, Origin) + extraOffset;
@@ -93,6 +102,16 @@ public partial class MissionRoomBuilder : Node
 	public Vector2 GetCellWorldPosition(int column, int row)
 	{
 		return GetCellWorldPosition(column, row, Vector2.Zero);
+	}
+
+	public Vector2 GetMovementCellWorldPosition(int column, int row, Vector2 extraOffset)
+	{
+		return IsoGridHelper.GridToWorld(column, row, TileStep / MovementSubdivisionsPerTile, Origin) + extraOffset;
+	}
+
+	public Vector2 GetMovementCellWorldPosition(int column, int row)
+	{
+		return GetMovementCellWorldPosition(column, row, Vector2.Zero);
 	}
 
 	public bool TryGetMarkerWorldPosition(string markerId, Vector2 extraOffset, out Vector2 position)
@@ -142,9 +161,40 @@ public partial class MissionRoomBuilder : Node
 		return _floorCells;
 	}
 
+	public Vector2I GetMovementCellForBuildCell(Vector2I buildCell)
+	{
+		return new Vector2I(
+			buildCell.X * MovementSubdivisionsPerTile,
+			buildCell.Y * MovementSubdivisionsPerTile);
+	}
+
+	public Vector2I GetBuildCellForMovementCell(Vector2I movementCell)
+	{
+		return new Vector2I(
+			Mathf.FloorToInt((movementCell.X + MovementCellMinOffset) / (float)MovementSubdivisionsPerTile),
+			Mathf.FloorToInt((movementCell.Y + MovementCellMinOffset) / (float)MovementSubdivisionsPerTile));
+	}
+
+	public IEnumerable<Vector2I> GetMovementCellsForBuildCell(Vector2I buildCell)
+	{
+		Vector2I center = GetMovementCellForBuildCell(buildCell);
+		for (int offsetY = -MovementCellMinOffset; offsetY <= MovementCellMaxOffset; offsetY++)
+		{
+			for (int offsetX = -MovementCellMinOffset; offsetX <= MovementCellMaxOffset; offsetX++)
+			{
+				yield return new Vector2I(center.X + offsetX, center.Y + offsetY);
+			}
+		}
+	}
+
 	public bool IsWalkableCell(Vector2I cell)
 	{
 		return _floorCells.Contains(cell) && !_closedDoorCells.Contains(cell);
+	}
+
+	public bool IsWalkableMovementCell(Vector2I cell)
+	{
+		return _movementCells.Contains(cell) && !_closedDoorMovementCells.Contains(cell);
 	}
 
 	public bool IsDoorCell(Vector2I cell)
@@ -173,15 +223,25 @@ public partial class MissionRoomBuilder : Node
 		if (open)
 		{
 			_closedDoorCells.Remove(door.Cell);
+			SetClosedDoorMovementArea(door.Cell, false);
 			if (_doorTransitionKeysById.TryGetValue(doorId, out string transitionKey))
 			{
 				_blockedTransitions.Remove(transitionKey);
 				_doorTransitionKeysById.Remove(doorId);
 			}
+			if (_doorMovementTransitionKeysById.TryGetValue(doorId, out List<string> movementTransitionKeys))
+			{
+				foreach (string movementTransitionKey in movementTransitionKeys)
+				{
+					_movementBlockedTransitions.Remove(movementTransitionKey);
+				}
+				_doorMovementTransitionKeysById.Remove(doorId);
+			}
 		}
 		else
 		{
 			_closedDoorCells.Add(door.Cell);
+			SetClosedDoorMovementArea(door.Cell, true);
 			RegisterDoorBlockedTransition(doorId, door.Cell, door.OrientationSuffix);
 		}
 
@@ -193,9 +253,19 @@ public partial class MissionRoomBuilder : Node
 		return _doorIdsByCell.TryGetValue(cell, out doorId);
 	}
 
+	public bool TryGetDoorIdAtMovementCell(Vector2I movementCell, out string doorId)
+	{
+		return _doorIdsByCell.TryGetValue(GetBuildCellForMovementCell(movementCell), out doorId);
+	}
+
 	public Vector2I GetNearestCell(Vector2 localPosition)
 	{
 		return IsoGridHelper.WorldToGrid(localPosition, TileStep, Origin);
+	}
+
+	public Vector2I GetNearestMovementCell(Vector2 localPosition)
+	{
+		return IsoGridHelper.WorldToGrid(localPosition, TileStep / MovementSubdivisionsPerTile, Origin);
 	}
 
 	public Vector2 GetRoomCenterWorldPosition()
@@ -283,6 +353,67 @@ public partial class MissionRoomBuilder : Node
 		return false;
 	}
 
+	public bool TryGetMovementPath(Vector2I startCell, Vector2I targetCell, out List<Vector2I> path)
+	{
+		path = new List<Vector2I>();
+		bool startIsClosedDoor = _closedDoorMovementCells.Contains(startCell);
+		bool targetIsClosedDoor = _closedDoorMovementCells.Contains(targetCell);
+		if ((!IsWalkableMovementCell(startCell) && !startIsClosedDoor) || (!IsWalkableMovementCell(targetCell) && !targetIsClosedDoor))
+		{
+			return false;
+		}
+
+		if (startCell == targetCell)
+		{
+			path.Add(startCell);
+			return true;
+		}
+
+		Queue<Vector2I> frontier = new Queue<Vector2I>();
+		Dictionary<Vector2I, Vector2I> cameFrom = new Dictionary<Vector2I, Vector2I>();
+		frontier.Enqueue(startCell);
+		cameFrom[startCell] = startCell;
+
+		Vector2I[] directions =
+		{
+			new Vector2I(1, 0),
+			new Vector2I(-1, 0),
+			new Vector2I(0, 1),
+			new Vector2I(0, -1)
+		};
+
+		while (frontier.Count > 0)
+		{
+			Vector2I current = frontier.Dequeue();
+			foreach (Vector2I direction in directions)
+			{
+				Vector2I next = current + direction;
+				if (cameFrom.ContainsKey(next) || IsMovementTransitionBlocked(current, next))
+				{
+					continue;
+				}
+
+				bool nextIsWalkable = IsWalkableMovementCell(next);
+				bool nextIsClosedDoorTarget = next == targetCell && _closedDoorMovementCells.Contains(next);
+				if (!nextIsWalkable && !nextIsClosedDoorTarget)
+				{
+					continue;
+				}
+
+				cameFrom[next] = current;
+				if (next == targetCell)
+				{
+					path = ReconstructPath(cameFrom, startCell, targetCell);
+					return true;
+				}
+
+				frontier.Enqueue(next);
+			}
+		}
+
+		return false;
+	}
+
 	public HashSet<Vector2I> GetReachableCells(Vector2I startCell, int maxSteps)
 	{
 		HashSet<Vector2I> reachable = new HashSet<Vector2I>();
@@ -327,6 +458,51 @@ public partial class MissionRoomBuilder : Node
 		return reachable;
 	}
 
+	public HashSet<Vector2I> GetReachableMovementCells(Vector2I startCell, int maxTiles)
+	{
+		HashSet<Vector2I> reachable = new HashSet<Vector2I>();
+		if ((!IsWalkableMovementCell(startCell) && !_closedDoorMovementCells.Contains(startCell)) || maxTiles < 0)
+		{
+			return reachable;
+		}
+
+		int maxSteps = maxTiles * MovementSubdivisionsPerTile;
+		Queue<(Vector2I Cell, int Steps)> frontier = new Queue<(Vector2I Cell, int Steps)>();
+		frontier.Enqueue((startCell, 0));
+		reachable.Add(startCell);
+
+		Vector2I[] directions =
+		{
+			new Vector2I(1, 0),
+			new Vector2I(-1, 0),
+			new Vector2I(0, 1),
+			new Vector2I(0, -1)
+		};
+
+		while (frontier.Count > 0)
+		{
+			(Vector2I current, int steps) = frontier.Dequeue();
+			if (steps >= maxSteps)
+			{
+				continue;
+			}
+
+			foreach (Vector2I direction in directions)
+			{
+				Vector2I next = current + direction;
+				if (reachable.Contains(next) || !IsWalkableMovementCell(next) || IsMovementTransitionBlocked(current, next))
+				{
+					continue;
+				}
+
+				reachable.Add(next);
+				frontier.Enqueue((next, steps + 1));
+			}
+		}
+
+		return reachable;
+	}
+
 	public void BuildRoom()
 	{
 		Node2D floorLayer = GetNodeOrNull<Node2D>(FloorLayerPath);
@@ -345,11 +521,15 @@ public partial class MissionRoomBuilder : Node
 		_spawnMarkerCells.Clear();
 		_markerPlacements.Clear();
 		_floorCells.Clear();
+		_movementCells.Clear();
 		_blockedTransitions.Clear();
+		_movementBlockedTransitions.Clear();
 		_doorsById.Clear();
 		_doorIdsByCell.Clear();
 		_closedDoorCells.Clear();
+		_closedDoorMovementCells.Clear();
 		_doorTransitionKeysById.Clear();
+		_doorMovementTransitionKeysById.Clear();
 		_selectedBackgroundId = MissionBackgroundCatalog.DefaultId;
 
 		if (!BuildFromSavedLayout(floorLayer, wallLayer, propLayer))
@@ -490,6 +670,7 @@ public partial class MissionRoomBuilder : Node
 				_doorsById[resolvedDoorId] = doorNode;
 				_doorIdsByCell[cell] = resolvedDoorId;
 				_closedDoorCells.Add(cell);
+				SetClosedDoorMovementArea(cell, true);
 				RegisterDoorBlockedTransition(resolvedDoorId, cell, doorNode.OrientationSuffix);
 			}
 			else
@@ -584,12 +765,14 @@ public partial class MissionRoomBuilder : Node
 		if (definition.Category == MissionTileCategory.Floor)
 		{
 			_floorCells.Add(cell);
+			RegisterWalkableMovementArea(cell);
 			return;
 		}
 
 		if (definition.Category == MissionTileCategory.Prop && definition.Id.StartsWith("door_"))
 		{
 			_floorCells.Add(cell);
+			RegisterWalkableMovementArea(cell);
 			return;
 		}
 
@@ -616,6 +799,7 @@ public partial class MissionRoomBuilder : Node
 		}
 
 		_blockedTransitions.Add(GetTransitionKey(cell, neighbor));
+		RegisterMovementBlockedTransition(cell, neighbor);
 	}
 
 	private bool IsTransitionBlocked(Vector2I fromCell, Vector2I toCell)
@@ -639,6 +823,11 @@ public partial class MissionRoomBuilder : Node
 		string transitionKey = GetTransitionKey(cell, neighbor);
 		_doorTransitionKeysById[doorId] = transitionKey;
 		_blockedTransitions.Add(transitionKey);
+		List<string> movementTransitionKeys = RegisterMovementBlockedTransition(cell, neighbor);
+		if (movementTransitionKeys.Count > 0)
+		{
+			_doorMovementTransitionKeysById[doorId] = movementTransitionKeys;
+		}
 	}
 
 	private static Vector2I GetBlockedNeighborForOrientation(string orientationSuffix, Vector2I cell)
@@ -661,6 +850,89 @@ public partial class MissionRoomBuilder : Node
 		}
 
 		return $"{b.X},{b.Y}|{a.X},{a.Y}";
+	}
+
+	private bool IsMovementTransitionBlocked(Vector2I fromCell, Vector2I toCell)
+	{
+		return _movementBlockedTransitions.Contains(GetTransitionKey(fromCell, toCell));
+	}
+
+	private void RegisterWalkableMovementArea(Vector2I buildCell)
+	{
+		foreach (Vector2I movementCell in GetMovementCellsForBuildCell(buildCell))
+		{
+			_movementCells.Add(movementCell);
+		}
+	}
+
+	private void SetClosedDoorMovementArea(Vector2I buildCell, bool closed)
+	{
+		foreach (Vector2I movementCell in GetMovementCellsForBuildCell(buildCell))
+		{
+			if (closed)
+			{
+				_closedDoorMovementCells.Add(movementCell);
+			}
+			else
+			{
+				_closedDoorMovementCells.Remove(movementCell);
+			}
+		}
+	}
+
+	private List<string> RegisterMovementBlockedTransition(Vector2I buildCell, Vector2I neighborBuildCell)
+	{
+		Vector2I center = GetMovementCellForBuildCell(buildCell);
+		Vector2I neighborCenter = GetMovementCellForBuildCell(neighborBuildCell);
+		Vector2I delta = neighborCenter - center;
+		List<(Vector2I From, Vector2I To)> transitionPairs = new List<(Vector2I, Vector2I)>();
+
+		if (delta == new Vector2I(-MovementSubdivisionsPerTile, 0))
+		{
+			for (int offset = -MovementCellMinOffset; offset <= MovementCellMaxOffset; offset++)
+			{
+				transitionPairs.Add((
+					new Vector2I(center.X - MovementCellMinOffset, center.Y + offset),
+					new Vector2I(center.X - MovementCellMinOffset - 1, center.Y + offset)));
+			}
+		}
+		else if (delta == new Vector2I(MovementSubdivisionsPerTile, 0))
+		{
+			for (int offset = -MovementCellMinOffset; offset <= MovementCellMaxOffset; offset++)
+			{
+				transitionPairs.Add((
+					new Vector2I(center.X + MovementCellMaxOffset, center.Y + offset),
+					new Vector2I(center.X + MovementCellMaxOffset + 1, center.Y + offset)));
+			}
+		}
+		else if (delta == new Vector2I(0, -MovementSubdivisionsPerTile))
+		{
+			for (int offset = -MovementCellMinOffset; offset <= MovementCellMaxOffset; offset++)
+			{
+				transitionPairs.Add((
+					new Vector2I(center.X + offset, center.Y - MovementCellMinOffset),
+					new Vector2I(center.X + offset, center.Y - MovementCellMinOffset - 1)));
+			}
+		}
+		else if (delta == new Vector2I(0, MovementSubdivisionsPerTile))
+		{
+			for (int offset = -MovementCellMinOffset; offset <= MovementCellMaxOffset; offset++)
+			{
+				transitionPairs.Add((
+					new Vector2I(center.X + offset, center.Y + MovementCellMaxOffset),
+					new Vector2I(center.X + offset, center.Y + MovementCellMaxOffset + 1)));
+			}
+		}
+
+		List<string> transitionKeys = new List<string>();
+		foreach ((Vector2I fromCell, Vector2I toCell) in transitionPairs)
+		{
+			string transitionKey = GetTransitionKey(fromCell, toCell);
+			_movementBlockedTransitions.Add(transitionKey);
+			transitionKeys.Add(transitionKey);
+		}
+
+		return transitionKeys;
 	}
 
 	private static List<Vector2I> ReconstructPath(Dictionary<Vector2I, Vector2I> cameFrom, Vector2I startCell, Vector2I targetCell)

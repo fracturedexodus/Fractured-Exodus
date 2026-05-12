@@ -41,14 +41,14 @@ public sealed class MissionSpawnResolver
 
 			Vector2I fallbackCell = GetFallbackCellForOfficerSlot(definition, officerSlot);
 			bool usedFallbackCell = false;
-			Vector2I spawnCell = ResolveSpawnCell(context.RoomBuilder, definition.MarkerId, fallbackCell, reservedCells, ref usedFallbackCell);
-			reservedCells.Add(spawnCell);
+			Vector2I spawnBuildCell = ResolveSpawnCell(context.RoomBuilder, definition.MarkerId, fallbackCell, reservedCells, ref usedFallbackCell);
+			reservedCells.Add(spawnBuildCell);
 
 			results.Add(new MissionSpawnResult
 			{
 				Definition = definition,
 				Officer = officer,
-				Cell = spawnCell,
+				Cell = context.RoomBuilder.GetMovementCellForBuildCell(spawnBuildCell),
 				UsedFallbackCell = usedFallbackCell
 			});
 		}
@@ -83,14 +83,14 @@ public sealed class MissionSpawnResolver
 			}
 
 			bool usedFallbackCell = false;
-			Vector2I spawnCell = ResolveSpawnCell(context.RoomBuilder, definition.MarkerId, definition.FallbackCell, reservedCells, ref usedFallbackCell);
-			reservedCells.Add(spawnCell);
+			Vector2I spawnBuildCell = ResolveSpawnCell(context.RoomBuilder, definition.MarkerId, definition.FallbackCell, reservedCells, ref usedFallbackCell);
+			reservedCells.Add(spawnBuildCell);
 
 			results.Add(new MissionSpawnResult
 			{
 				Definition = definition,
 				NpcDefinition = npcDefinition,
-				Cell = spawnCell,
+				Cell = context.RoomBuilder.GetMovementCellForBuildCell(spawnBuildCell),
 				UsedFallbackCell = usedFallbackCell
 			});
 		}
@@ -125,7 +125,7 @@ public sealed class MissionSpawnResolver
 					Notes = placement.Notes
 				},
 				NpcDefinition = npcDefinition,
-				Cell = placement.Cell,
+				Cell = context.RoomBuilder.GetMovementCellForBuildCell(placement.Cell),
 				UsedFallbackCell = false
 			});
 		}

@@ -12,6 +12,7 @@ public partial class MissionMap : Node2D
 	private const float MaxZoom = 2.00f;
 	private const float ZoomStep = 0.08f;
 	private const float CameraPanSpeed = 720f;
+	private const float CameraEdgePanMargin = 30f;
 	private const int FogRevealRadius = 4;
 	private const int CombatAttackActionCost = 1;
 	private const int CombatInteractionActionCost = 1;
@@ -38,8 +39,13 @@ public partial class MissionMap : Node2D
 	private MissionRoomBuilder _roomBuilder;
 	private TextureRect _backgroundBackdrop;
 	private Sprite2D _backgroundFeatureSprite;
+	private Node2D _movementGridLayer;
+	private Node2D _movementCursorLayer;
 	private Node2D _evacZoneLayer;
 	private Node2D _combatEffectLayer;
+	private SelectionBox _selectionBox;
+	private Polygon2D _movementCursorFill;
+	private Line2D _movementCursorOutline;
 	private readonly List<OfficerPawn> _officerPawns = new List<OfficerPawn>();
 	private readonly List<MissionNpcPawn> _missionNpcs = new List<MissionNpcPawn>();
 	private readonly Dictionary<Vector2I, MissionNpcPawn> _missionNpcsByCell = new Dictionary<Vector2I, MissionNpcPawn>();
@@ -50,12 +56,18 @@ public partial class MissionMap : Node2D
 	private readonly HashSet<string> _engagedEnemyIds = new HashSet<string>();
 	private readonly HashSet<Vector2I> _exploredCells = new HashSet<Vector2I>();
 	private readonly HashSet<Vector2I> _visibleCells = new HashSet<Vector2I>();
+	private readonly HashSet<Vector2I> _exploredBuildCells = new HashSet<Vector2I>();
+	private readonly HashSet<Vector2I> _visibleBuildCells = new HashSet<Vector2I>();
 	private readonly List<Node2D> _evacZoneVisualRoots = new List<Node2D>();
 	private readonly List<Polygon2D> _evacZoneHighlightPolygons = new List<Polygon2D>();
 	private readonly List<Line2D> _evacZoneHighlightOutlines = new List<Line2D>();
+	private readonly List<Line2D> _movementGridOutlines = new List<Line2D>();
+	private readonly HashSet<string> _selectedOfficerIds = new HashSet<string>();
 	private int _selectedOfficerIndex;
 	private bool _isPanning;
+	private bool _isSelectionDragging;
 	private Vector2 _lastMouseScreenPosition;
+	private Vector2 _selectionDragStartWorldPosition;
 	private string _pendingInteractionKey = string.Empty;
 	private string _pendingInteractionOfficerId = string.Empty;
 	private string _pendingDoorId = string.Empty;
@@ -104,6 +116,9 @@ public partial class MissionMap : Node2D
 		_roomBuilder?.BuildRoom();
 		SpawnMissionProps();
 		ApplyMissionBackground();
+		BuildMovementGridOverlay();
+		BuildMovementCursorHighlight();
+		EnsureSelectionBox();
 		BuildEvacZoneHighlights();
 		EnsureCombatEffectLayer();
 		ConfigureMissionView();
@@ -118,7 +133,10 @@ public partial class MissionMap : Node2D
 
 	public override void _Process(double delta)
 	{
+		UpdateHeldOfficerMovement();
 		UpdateCameraPan((float)delta);
+		UpdateSelectionDrag();
+		UpdateMovementCursorHighlight();
 		UpdateEvacZoneHighlightVisuals((float)delta);
 		UpdateHostileRoaming((float)delta);
 		UpdateCombatHoverSummary();
@@ -155,6 +173,12 @@ public partial class MissionMap : Node2D
 			if (keyEvent.Keycode == Key.Key2 && !_combatActive)
 			{
 				SelectOfficer(1);
+				GetViewport().SetInputAsHandled();
+				return;
+			}
+
+			if (TryHandleOfficerMoveKey(keyEvent.Keycode))
+			{
 				GetViewport().SetInputAsHandled();
 				return;
 			}
@@ -209,40 +233,36 @@ public partial class MissionMap : Node2D
 			}
 		}
 
-		if (@event is InputEventMouseButton mouseButton && mouseButton.Pressed && mouseButton.ButtonIndex == MouseButton.Left)
+		if (@event is InputEventMouseButton mouseButton && mouseButton.ButtonIndex == MouseButton.Left)
 		{
-			if (_combatActive && !IsPlayerTurnActive())
+			if (mouseButton.Pressed)
 			{
+				if (_combatActive && !IsPlayerTurnActive())
+				{
+					GetViewport().SetInputAsHandled();
+					return;
+				}
+
+				_isSelectionDragging = true;
+				_selectionDragStartWorldPosition = GetGlobalMousePosition();
+				if (_selectionBox != null)
+				{
+					_selectionBox.StartPos = _selectionDragStartWorldPosition;
+					_selectionBox.EndPos = _selectionDragStartWorldPosition;
+					_selectionBox.IsDragging = true;
+					_selectionBox.QueueRedraw();
+				}
+
 				GetViewport().SetInputAsHandled();
 				return;
 			}
 
-			if (TrySelectOfficerAtMouse())
+			if (_isSelectionDragging)
 			{
+				FinalizeLeftMouseAction();
 				GetViewport().SetInputAsHandled();
 				return;
 			}
-
-			OfficerPawn activeOfficer = GetSelectedOfficer();
-			if (activeOfficer == null)
-			{
-				return;
-			}
-
-			if (TryHandleInteractionClick(activeOfficer))
-			{
-				GetViewport().SetInputAsHandled();
-				return;
-			}
-
-			if (_combatActive && TryHandleCombatAttackClick(activeOfficer))
-			{
-				GetViewport().SetInputAsHandled();
-				return;
-			}
-
-			TryMoveSelectedOfficer();
-			GetViewport().SetInputAsHandled();
 		}
 
 		if (@event is InputEventMouseButton middleRelease && !middleRelease.Pressed && middleRelease.ButtonIndex == MouseButton.Middle)
@@ -447,6 +467,206 @@ public partial class MissionMap : Node2D
 		UpdateEvacZoneHighlightVisuals(0f);
 	}
 
+	private void BuildMovementGridOverlay()
+	{
+		EnsureMovementGridLayer();
+		if (_movementGridLayer == null || _roomBuilder == null)
+		{
+			return;
+		}
+
+		foreach (Node child in _movementGridLayer.GetChildren())
+		{
+			_movementGridLayer.RemoveChild(child);
+			child.QueueFree();
+		}
+
+		_movementGridOutlines.Clear();
+
+		Vector2 movementTileStep = _roomBuilder.TileStep / _roomBuilder.MovementSubdivision;
+		Vector2[] diamondPoints =
+		{
+			new Vector2(0f, -movementTileStep.Y * 0.5f),
+			new Vector2(movementTileStep.X * 0.5f, 0f),
+			new Vector2(0f, movementTileStep.Y * 0.5f),
+			new Vector2(-movementTileStep.X * 0.5f, 0f)
+		};
+
+		foreach (Vector2I buildCell in _roomBuilder.GetFloorCells())
+		{
+			foreach (Vector2I movementCell in _roomBuilder.GetMovementCellsForBuildCell(buildCell))
+			{
+				Line2D outline = new Line2D
+				{
+					Name = $"MovementGrid_{movementCell.X}_{movementCell.Y}",
+					Points = diamondPoints,
+					Closed = true,
+					Width = 1.15f,
+					DefaultColor = new Color(0.20f, 0.68f, 1.00f, 0.28f),
+					Position = _roomBuilder.GetMovementCellWorldPosition(movementCell.X, movementCell.Y),
+					ZIndex = 0,
+					Visible = false
+				};
+				outline.SetMeta("movement_cell_x", movementCell.X);
+				outline.SetMeta("movement_cell_y", movementCell.Y);
+				_movementGridLayer.AddChild(outline);
+				_movementGridOutlines.Add(outline);
+			}
+		}
+
+		UpdateMovementGridVisibility();
+	}
+
+	private void EnsureMovementGridLayer()
+	{
+		if (_isoWorld == null)
+		{
+			return;
+		}
+
+		_movementGridLayer = _isoWorld.GetNodeOrNull<Node2D>("MovementGridLayer");
+		if (_movementGridLayer != null)
+		{
+			return;
+		}
+
+		_movementGridLayer = new Node2D
+		{
+			Name = "MovementGridLayer",
+			ZIndex = 0
+		};
+		_isoWorld.AddChild(_movementGridLayer);
+		_isoWorld.MoveChild(_movementGridLayer, 1);
+	}
+
+	private void BuildMovementCursorHighlight()
+	{
+		EnsureMovementCursorLayer();
+		if (_movementCursorLayer == null || _roomBuilder == null)
+		{
+			return;
+		}
+
+		Vector2 movementTileStep = _roomBuilder.TileStep / _roomBuilder.MovementSubdivision;
+		Vector2[] diamondPoints =
+		{
+			new Vector2(0f, -movementTileStep.Y * 0.5f),
+			new Vector2(movementTileStep.X * 0.5f, 0f),
+			new Vector2(0f, movementTileStep.Y * 0.5f),
+			new Vector2(-movementTileStep.X * 0.5f, 0f)
+		};
+
+		if (_movementCursorFill == null)
+		{
+			_movementCursorFill = new Polygon2D
+			{
+				Name = "MovementCursorFill",
+				Color = new Color(0.24f, 0.76f, 1.00f, 0.10f),
+				Visible = false
+			};
+			_movementCursorLayer.AddChild(_movementCursorFill);
+		}
+		_movementCursorFill.Polygon = diamondPoints;
+
+		if (_movementCursorOutline == null)
+		{
+			_movementCursorOutline = new Line2D
+			{
+				Name = "MovementCursorOutline",
+				Closed = true,
+				Width = 2.2f,
+				DefaultColor = new Color(0.38f, 0.88f, 1.00f, 0.74f),
+				Visible = false
+			};
+			_movementCursorLayer.AddChild(_movementCursorOutline);
+		}
+		_movementCursorOutline.Points = diamondPoints;
+	}
+
+	private void EnsureMovementCursorLayer()
+	{
+		if (_isoWorld == null)
+		{
+			return;
+		}
+
+		_movementCursorLayer = _isoWorld.GetNodeOrNull<Node2D>("MovementCursorLayer");
+		if (_movementCursorLayer != null)
+		{
+			return;
+		}
+
+		_movementCursorLayer = new Node2D
+		{
+			Name = "MovementCursorLayer",
+			ZIndex = 0
+		};
+		_isoWorld.AddChild(_movementCursorLayer);
+		_isoWorld.MoveChild(_movementCursorLayer, 2);
+	}
+
+	private void UpdateMovementCursorHighlight()
+	{
+		if (_movementCursorFill == null || _movementCursorOutline == null || _roomBuilder == null || _isoWorld == null)
+		{
+			return;
+		}
+
+		if (_missionGameOver || (_dialogueUi?.IsConversationOpen ?? false) || (_missionUi?.IsStoryEventVisible ?? false))
+		{
+			_movementCursorFill.Visible = false;
+			_movementCursorOutline.Visible = false;
+			return;
+		}
+
+		Vector2 mousePosition = GetViewport().GetMousePosition();
+		Vector2 screenSize = GetViewportRect().Size;
+		if (mousePosition.X < 0f || mousePosition.Y < 0f || mousePosition.X > screenSize.X || mousePosition.Y > screenSize.Y)
+		{
+			_movementCursorFill.Visible = false;
+			_movementCursorOutline.Visible = false;
+			return;
+		}
+
+		Vector2I hoveredCell = ResolveMovementTargetCell(_roomBuilder.GetNearestMovementCell(_isoWorld.ToLocal(GetGlobalMousePosition())));
+		if (!_roomBuilder.IsWalkableMovementCell(hoveredCell))
+		{
+			_movementCursorFill.Visible = false;
+			_movementCursorOutline.Visible = false;
+			return;
+		}
+
+		Vector2 hoverPosition = _roomBuilder.GetMovementCellWorldPosition(hoveredCell.X, hoveredCell.Y);
+		_movementCursorFill.Position = hoverPosition;
+		_movementCursorOutline.Position = hoverPosition;
+		_movementCursorFill.Visible = true;
+		_movementCursorOutline.Visible = true;
+	}
+
+	private void UpdateMovementGridVisibility()
+	{
+		if (_movementGridLayer == null)
+		{
+			return;
+		}
+
+		_movementGridLayer.Visible = _combatActive;
+		if (_combatActive)
+		{
+			ApplyFogToMovementGrid();
+		}
+		else
+		{
+			foreach (Line2D outline in _movementGridOutlines)
+			{
+				if (outline != null)
+				{
+					outline.Visible = false;
+				}
+			}
+		}
+	}
+
 	private void EnsureEvacZoneLayer()
 	{
 		if (_isoWorld == null)
@@ -574,7 +794,7 @@ public partial class MissionMap : Node2D
 		_officerPawns.AddRange(_missionSpawner.SpawnPlayerOfficers(
 			spawnContext,
 			_characterLayer,
-			GetCellGlobalPosition,
+			GetMovementCellGlobalPosition,
 			pawn =>
 			{
 				pawn.EnteredCell += OnOfficerEnteredCell;
@@ -601,7 +821,7 @@ public partial class MissionMap : Node2D
 		_missionNpcs.AddRange(_missionSpawner.SpawnMissionNpcs(
 			spawnContext,
 			_characterLayer,
-			GetCellGlobalPosition));
+			GetMovementCellGlobalPosition));
 		foreach (MissionNpcPawn npc in _missionNpcs.Where(npc => npc != null))
 		{
 			npc.EnteredCell += OnMissionNpcEnteredCell;
@@ -620,6 +840,8 @@ public partial class MissionMap : Node2D
 		}
 
 		_visibleCells.Clear();
+		_visibleBuildCells.Clear();
+		_exploredBuildCells.Clear();
 		foreach (OfficerPawn pawn in _officerPawns)
 		{
 			if (pawn == null)
@@ -627,16 +849,25 @@ public partial class MissionMap : Node2D
 				continue;
 			}
 
-			foreach (Vector2I cell in _roomBuilder.GetReachableCells(pawn.CurrentCell, FogRevealRadius))
+			foreach (Vector2I cell in _roomBuilder.GetReachableMovementCells(pawn.CurrentCell, FogRevealRadius))
 			{
 				_visibleCells.Add(cell);
 				_exploredCells.Add(cell);
+				Vector2I buildCell = GetBuildCell(cell);
+				_visibleBuildCells.Add(buildCell);
+				_exploredBuildCells.Add(buildCell);
 			}
+		}
+
+		foreach (Vector2I exploredCell in _exploredCells)
+		{
+			_exploredBuildCells.Add(GetBuildCell(exploredCell));
 		}
 
 		RevealAdjacentDoorCells();
 
 		ApplyFogToLayer(GetNodeOrNull<Node2D>("IsoWorld/FloorLayer"));
+		ApplyFogToMovementGrid();
 		ApplyFogToLayer(GetNodeOrNull<Node2D>("IsoWorld/WallLayer"));
 		ApplyFogToLayer(GetNodeOrNull<Node2D>("IsoWorld/PropLayer"));
 		ApplyFogToMissionProps();
@@ -689,11 +920,11 @@ public partial class MissionMap : Node2D
 				sprite.SetMeta("fog_base_modulate", baseColor);
 			}
 
-			if (_visibleCells.Contains(cell))
+			if (_visibleBuildCells.Contains(cell))
 			{
 				sprite.Modulate = baseColor;
 			}
-			else if (_exploredCells.Contains(cell))
+			else if (_exploredBuildCells.Contains(cell))
 			{
 				sprite.Modulate = MultiplyColor(baseColor, 0.38f);
 			}
@@ -706,7 +937,7 @@ public partial class MissionMap : Node2D
 
 	private void RevealAdjacentDoorCells()
 	{
-		if (_roomBuilder == null || _visibleCells.Count == 0)
+		if (_roomBuilder == null || _visibleBuildCells.Count == 0)
 		{
 			return;
 		}
@@ -720,7 +951,7 @@ public partial class MissionMap : Node2D
 		};
 
 		HashSet<Vector2I> additionalVisibleCells = new HashSet<Vector2I>();
-		foreach (Vector2I cell in _visibleCells)
+		foreach (Vector2I cell in _visibleBuildCells)
 		{
 			foreach (Vector2I direction in directions)
 			{
@@ -734,45 +965,19 @@ public partial class MissionMap : Node2D
 
 		foreach (Vector2I cell in additionalVisibleCells)
 		{
-			_visibleCells.Add(cell);
-			_exploredCells.Add(cell);
+			_visibleBuildCells.Add(cell);
+			_exploredBuildCells.Add(cell);
 		}
 	}
 
 	private bool IsStructureCellVisible(Vector2I cell)
 	{
-		if (_visibleCells.Contains(cell))
-		{
-			return true;
-		}
-
-		Vector2I[] directions =
-		{
-			new Vector2I(1, 0),
-			new Vector2I(-1, 0),
-			new Vector2I(0, 1),
-			new Vector2I(0, -1)
-		};
-
-		return directions.Any(direction => _visibleCells.Contains(cell + direction));
+		return _visibleBuildCells.Contains(cell);
 	}
 
 	private bool IsStructureCellExplored(Vector2I cell)
 	{
-		if (_exploredCells.Contains(cell))
-		{
-			return true;
-		}
-
-		Vector2I[] directions =
-		{
-			new Vector2I(1, 0),
-			new Vector2I(-1, 0),
-			new Vector2I(0, 1),
-			new Vector2I(0, -1)
-		};
-
-		return directions.Any(direction => _exploredCells.Contains(cell + direction));
+		return _exploredBuildCells.Contains(cell);
 	}
 
 	private static Color MultiplyColor(Color color, float factor)
@@ -806,7 +1011,53 @@ public partial class MissionMap : Node2D
 				continue;
 			}
 
-			kvp.Value.SetFogVisibility(_visibleCells.Contains(kvp.Key));
+			kvp.Value.SetFogVisibility(_visibleBuildCells.Contains(kvp.Key));
+		}
+	}
+
+	private void ApplyFogToMovementGrid()
+	{
+		if (!_combatActive)
+		{
+			foreach (Line2D outline in _movementGridOutlines)
+			{
+				if (outline != null)
+				{
+					outline.Visible = false;
+				}
+			}
+			return;
+		}
+
+		foreach (Line2D outline in _movementGridOutlines)
+		{
+			if (outline == null)
+			{
+				continue;
+			}
+
+			Vector2I movementCell = new Vector2I(
+				outline.GetMeta("movement_cell_x", int.MinValue).AsInt32(),
+				outline.GetMeta("movement_cell_y", int.MinValue).AsInt32());
+			if (movementCell.X == int.MinValue || movementCell.Y == int.MinValue)
+			{
+				continue;
+			}
+
+			if (_visibleCells.Contains(movementCell))
+			{
+				outline.Visible = true;
+				outline.DefaultColor = new Color(0.20f, 0.68f, 1.00f, 0.26f);
+			}
+			else if (_exploredCells.Contains(movementCell))
+			{
+				outline.Visible = true;
+				outline.DefaultColor = new Color(0.14f, 0.34f, 0.56f, 0.16f);
+			}
+			else
+			{
+				outline.Visible = false;
+			}
 		}
 	}
 
@@ -842,6 +1093,22 @@ public partial class MissionMap : Node2D
 		_dialogueUi.DialogueStateChanged += OnMissionDialogueStateChanged;
 	}
 
+	private void EnsureSelectionBox()
+	{
+		_selectionBox = GetNodeOrNull<SelectionBox>("SelectionBox");
+		if (_selectionBox != null)
+		{
+			return;
+		}
+
+		_selectionBox = new SelectionBox
+		{
+			Name = "SelectionBox",
+			ZIndex = 200
+		};
+		AddChild(_selectionBox);
+	}
+
 	private void SelectOfficer(int index)
 	{
 		if (_officerPawns.Count == 0)
@@ -859,16 +1126,61 @@ public partial class MissionMap : Node2D
 			}
 		}
 
-		for (int i = 0; i < _officerPawns.Count; i++)
+		OfficerPawn selectedOfficer = _officerPawns[_selectedOfficerIndex];
+		_selectedOfficerIds.Clear();
+		if (selectedOfficer != null && !selectedOfficer.IsDead && !string.IsNullOrWhiteSpace(selectedOfficer.OfficerID))
 		{
-			if (_officerPawns[i] != null)
-			{
-				_officerPawns[i].SetSelected(i == _selectedOfficerIndex && !_officerPawns[i].IsDead);
-			}
+			_selectedOfficerIds.Add(selectedOfficer.OfficerID);
 		}
 
+		UpdateOfficerSelectionVisuals();
 		UpdateSelectedOfficerDisplay();
 		RefreshCombatHud();
+	}
+
+	private void SetSelectedOfficers(IEnumerable<OfficerPawn> officers, OfficerPawn primaryOfficer = null)
+	{
+		List<OfficerPawn> selectedOfficers = officers?
+			.Where(officer => officer != null && !officer.IsDead && !string.IsNullOrWhiteSpace(officer.OfficerID))
+			.Distinct()
+			.ToList() ?? new List<OfficerPawn>();
+		if (selectedOfficers.Count == 0)
+		{
+			return;
+		}
+
+		_selectedOfficerIds.Clear();
+		foreach (OfficerPawn officer in selectedOfficers)
+		{
+			_selectedOfficerIds.Add(officer.OfficerID);
+		}
+
+		OfficerPawn resolvedPrimary = primaryOfficer != null && _selectedOfficerIds.Contains(primaryOfficer.OfficerID)
+			? primaryOfficer
+			: selectedOfficers[0];
+		int primaryIndex = _officerPawns.IndexOf(resolvedPrimary);
+		if (primaryIndex >= 0)
+		{
+			_selectedOfficerIndex = primaryIndex;
+		}
+
+		UpdateOfficerSelectionVisuals();
+		UpdateSelectedOfficerDisplay();
+		RefreshCombatHud();
+	}
+
+	private void UpdateOfficerSelectionVisuals()
+	{
+		for (int i = 0; i < _officerPawns.Count; i++)
+		{
+			OfficerPawn officer = _officerPawns[i];
+			if (officer != null)
+			{
+				bool isSelected = !officer.IsDead
+					&& (!string.IsNullOrWhiteSpace(officer.OfficerID) && _selectedOfficerIds.Contains(officer.OfficerID));
+				officer.SetSelected(isSelected);
+			}
+		}
 	}
 
 	private void CycleOfficerSelection()
@@ -892,11 +1204,35 @@ public partial class MissionMap : Node2D
 		return pawn != null && !pawn.IsDead ? pawn : null;
 	}
 
+	private List<OfficerPawn> GetSelectedOfficers()
+	{
+		List<OfficerPawn> selected = _officerPawns
+			.Where(pawn => pawn != null && !pawn.IsDead && !string.IsNullOrWhiteSpace(pawn.OfficerID) && _selectedOfficerIds.Contains(pawn.OfficerID))
+			.ToList();
+		if (selected.Count > 0)
+		{
+			return selected;
+		}
+
+		OfficerPawn activeOfficer = GetSelectedOfficer();
+		return activeOfficer != null ? new List<OfficerPawn> { activeOfficer } : new List<OfficerPawn>();
+	}
+
 	private void UpdateSelectedOfficerDisplay()
 	{
 		OfficerPawn activeOfficer = GetSelectedOfficer();
 		if (activeOfficer == null || _missionUi == null)
 		{
+			return;
+		}
+
+		List<OfficerPawn> selectedOfficers = GetSelectedOfficers();
+		if (selectedOfficers.Count > 1)
+		{
+			_missionUi.SetSelectedOfficer(
+				$"{activeOfficer.OfficerName} (+{selectedOfficers.Count - 1})",
+				$"{selectedOfficers.Count} OFFICERS SELECTED",
+				activeOfficer.Specialty);
 			return;
 		}
 
@@ -1038,7 +1374,7 @@ public partial class MissionMap : Node2D
 	private string GetBaseMissionPromptText()
 	{
 		return string.IsNullOrWhiteSpace(_missionTemplate?.PromptText)
-			? "Controls: left click an officer to select, left click a floor tile to move, TAB or 1-2 to switch officers, middle mouse drag or WASD to pan, mouse wheel or +/- to zoom."
+			? "Controls: left click an officer to select, left click a floor tile to move, WASD to step the selected officer, TAB or 1-2 to switch officers, middle mouse drag or screen-edge hover to pan, mouse wheel or +/- to zoom."
 			: _missionTemplate.PromptText;
 	}
 
@@ -1134,27 +1470,34 @@ public partial class MissionMap : Node2D
 
 	private void UpdateCameraPan(float delta)
 	{
-		if (_camera == null || _isPanning)
+		if (_camera == null || _isPanning || _isSelectionDragging)
 		{
 			return;
 		}
 
 		Vector2 input = Vector2.Zero;
-		if (Input.IsKeyPressed(Key.W) || Input.IsKeyPressed(Key.Up))
+		Vector2 mousePosition = GetViewport().GetMousePosition();
+		Vector2 screenSize = GetViewportRect().Size;
+
+		if (mousePosition.X >= 0f && mousePosition.X <= screenSize.X && mousePosition.Y >= 0f && mousePosition.Y <= screenSize.Y)
 		{
-			input.Y -= 1f;
-		}
-		if (Input.IsKeyPressed(Key.S) || Input.IsKeyPressed(Key.Down))
-		{
-			input.Y += 1f;
-		}
-		if (Input.IsKeyPressed(Key.A) || Input.IsKeyPressed(Key.Left))
-		{
-			input.X -= 1f;
-		}
-		if (Input.IsKeyPressed(Key.D) || Input.IsKeyPressed(Key.Right))
-		{
-			input.X += 1f;
+			if (mousePosition.X < CameraEdgePanMargin)
+			{
+				input.X -= 1f;
+			}
+			else if (mousePosition.X > screenSize.X - CameraEdgePanMargin)
+			{
+				input.X += 1f;
+			}
+
+			if (mousePosition.Y < CameraEdgePanMargin)
+			{
+				input.Y -= 1f;
+			}
+			else if (mousePosition.Y > screenSize.Y - CameraEdgePanMargin)
+			{
+				input.Y += 1f;
+			}
 		}
 
 		if (input == Vector2.Zero)
@@ -1162,7 +1505,176 @@ public partial class MissionMap : Node2D
 			return;
 		}
 
-		_camera.Position += input.Normalized() * CameraPanSpeed * delta * _camera.Zoom.X;
+		_camera.Position += input.Normalized() * CameraPanSpeed * delta * (1.0f / _camera.Zoom.X);
+	}
+
+	private void UpdateSelectionDrag()
+	{
+		if (!_isSelectionDragging || _selectionBox == null)
+		{
+			return;
+		}
+
+		_selectionBox.EndPos = GetGlobalMousePosition();
+		_selectionBox.QueueRedraw();
+	}
+
+	private void FinalizeLeftMouseAction()
+	{
+		Rect2 selectionRect = new Rect2(_selectionDragStartWorldPosition, GetGlobalMousePosition() - _selectionDragStartWorldPosition).Abs();
+		_isSelectionDragging = false;
+		if (_selectionBox != null)
+		{
+			_selectionBox.IsDragging = false;
+			_selectionBox.QueueRedraw();
+		}
+
+		if (!_combatActive && selectionRect.Area >= 100f)
+		{
+			SelectOfficersInRect(selectionRect);
+			return;
+		}
+
+		ProcessLeftClickAction();
+	}
+
+	private void ProcessLeftClickAction()
+	{
+		if (_combatActive && !IsPlayerTurnActive())
+		{
+			return;
+		}
+
+		if (TrySelectOfficerAtMouse())
+		{
+			return;
+		}
+
+		OfficerPawn activeOfficer = GetSelectedOfficer();
+		if (activeOfficer == null)
+		{
+			return;
+		}
+
+		if (TryHandleInteractionClick(activeOfficer))
+		{
+			return;
+		}
+
+		if (_combatActive && TryHandleCombatAttackClick(activeOfficer))
+		{
+			return;
+		}
+
+		if (!_combatActive)
+		{
+			List<OfficerPawn> selectedOfficers = GetSelectedOfficers();
+			if (selectedOfficers.Count > 1 && TryMoveSelectedOfficerGroup())
+			{
+				return;
+			}
+		}
+
+		TryMoveSelectedOfficer();
+	}
+
+	private void SelectOfficersInRect(Rect2 selectionRect)
+	{
+		if (_combatActive)
+		{
+			return;
+		}
+
+		List<OfficerPawn> officersInRect = _officerPawns
+			.Where(officer => officer != null && !officer.IsDead && selectionRect.HasPoint(officer.GlobalPosition))
+			.ToList();
+		if (officersInRect.Count == 0)
+		{
+			return;
+		}
+
+		SetSelectedOfficers(officersInRect, officersInRect[0]);
+	}
+
+	private bool TryHandleOfficerMoveKey(Key keycode)
+	{
+		Vector2I direction = keycode switch
+		{
+			Key.W => new Vector2I(0, -1),
+			Key.S => new Vector2I(0, 1),
+			Key.A => new Vector2I(-1, 0),
+			Key.D => new Vector2I(1, 0),
+			_ => Vector2I.Zero
+		};
+
+		if (direction == Vector2I.Zero)
+		{
+			return false;
+		}
+
+		if (!_combatActive && AreAllLivingOfficersSelected())
+		{
+			return TryMoveSelectedOfficerGroupByDirection(direction);
+		}
+
+		return TryMoveSelectedOfficerByDirection(direction);
+	}
+
+	private void UpdateHeldOfficerMovement()
+	{
+		if (_missionGameOver
+			|| _isPanning
+			|| _isSelectionDragging
+			|| (_dialogueUi?.IsConversationOpen ?? false)
+			|| (_missionUi?.IsStoryEventVisible ?? false))
+		{
+			return;
+		}
+
+		OfficerPawn activeOfficer = GetSelectedOfficer();
+		if (activeOfficer == null || activeOfficer.IsMoving)
+		{
+			return;
+		}
+
+		Vector2I direction = GetHeldOfficerMoveDirection();
+		if (direction == Vector2I.Zero)
+		{
+			return;
+		}
+
+		if (!_combatActive && AreAllLivingOfficersSelected())
+		{
+			TryMoveSelectedOfficerGroupByDirection(direction);
+			return;
+		}
+
+		TryMoveSelectedOfficerByDirection(direction);
+	}
+
+	private Vector2I GetHeldOfficerMoveDirection()
+	{
+		if (Input.IsKeyPressed(Key.W))
+		{
+			return new Vector2I(0, -1);
+		}
+
+		if (Input.IsKeyPressed(Key.S))
+		{
+			return new Vector2I(0, 1);
+		}
+
+		if (Input.IsKeyPressed(Key.A))
+		{
+			return new Vector2I(-1, 0);
+		}
+
+		if (Input.IsKeyPressed(Key.D))
+		{
+			return new Vector2I(1, 0);
+		}
+
+		return Vector2I.Zero;
 	}
 
 	private void TryMoveSelectedOfficer()
@@ -1174,23 +1686,260 @@ public partial class MissionMap : Node2D
 		}
 
 		Vector2 localMousePosition = _isoWorld.ToLocal(GetGlobalMousePosition());
-		Vector2I targetCell = _roomBuilder.GetNearestCell(localMousePosition);
+		Vector2I targetCell = ResolveMovementTargetCell(_roomBuilder.GetNearestMovementCell(localMousePosition));
 		TryMoveOfficerToCell(activeOfficer, targetCell);
 	}
 
+	private bool TryMoveSelectedOfficerGroup()
+	{
+		if (_roomBuilder == null || _isoWorld == null)
+		{
+			return false;
+		}
+
+		List<OfficerPawn> selectedOfficers = GetSelectedOfficers()
+			.Where(officer => officer != null && !officer.IsMoving)
+			.ToList();
+		if (selectedOfficers.Count <= 1)
+		{
+			return false;
+		}
+
+		Vector2I targetCell = ResolveMovementTargetCell(_roomBuilder.GetNearestMovementCell(_isoWorld.ToLocal(GetGlobalMousePosition())));
+		List<Vector2I> candidateCells = GetGroupDestinationCandidates(targetCell, selectedOfficers.Count * 6);
+		if (candidateCells.Count == 0)
+		{
+			return false;
+		}
+
+		HashSet<string> selectedOfficerIds = selectedOfficers
+			.Where(officer => !string.IsNullOrWhiteSpace(officer.OfficerID))
+			.Select(officer => officer.OfficerID)
+			.ToHashSet();
+		HashSet<Vector2I> reservedDestinations = new HashSet<Vector2I>();
+		bool movedAnyOfficer = false;
+
+		foreach (OfficerPawn officer in OrderOfficersForGroupMove(selectedOfficers, targetCell))
+		{
+			Vector2I? destination = candidateCells
+				.Where(candidate => !reservedDestinations.Contains(candidate))
+				.Where(candidate => !IsCellOccupiedByLivingActor(candidate, officer, null, selectedOfficerIds))
+				.Where(candidate => _roomBuilder.TryGetMovementPath(officer.CurrentCell, candidate, out List<Vector2I> _))
+				.OrderBy(candidate => GetMovementStepDistance(candidate, targetCell))
+				.ThenBy(candidate => GetMovementStepDistance(officer.CurrentCell, candidate))
+				.Cast<Vector2I?>()
+				.FirstOrDefault();
+			if (!destination.HasValue)
+			{
+				continue;
+			}
+
+			if (TryMoveOfficerToCell(officer, destination.Value, selectedOfficerIds))
+			{
+				reservedDestinations.Add(destination.Value);
+				movedAnyOfficer = true;
+			}
+		}
+
+		return movedAnyOfficer;
+	}
+
+	private bool TryMoveSelectedOfficerGroupByDirection(Vector2I direction)
+	{
+		if (_combatActive || _roomBuilder == null)
+		{
+			return false;
+		}
+
+		List<OfficerPawn> selectedOfficers = GetSelectedOfficers()
+			.Where(officer => officer != null && !officer.IsMoving)
+			.ToList();
+		if (selectedOfficers.Count <= 1)
+		{
+			return false;
+		}
+
+		HashSet<string> selectedOfficerIds = selectedOfficers
+			.Where(officer => !string.IsNullOrWhiteSpace(officer.OfficerID))
+			.Select(officer => officer.OfficerID)
+			.ToHashSet();
+		HashSet<Vector2I> movingOrigins = selectedOfficers
+			.Select(officer => officer.CurrentCell)
+			.ToHashSet();
+		HashSet<Vector2I> reservedDestinations = new HashSet<Vector2I>();
+		List<(OfficerPawn Officer, Vector2I Destination)> movePlans = new List<(OfficerPawn, Vector2I)>();
+
+		foreach (OfficerPawn officer in OrderOfficersForDirectionalGroupMove(selectedOfficers, direction))
+		{
+			Vector2I destination = officer.CurrentCell + direction;
+			if (!_roomBuilder.IsWalkableMovementCell(destination))
+			{
+				continue;
+			}
+
+			if (reservedDestinations.Contains(destination))
+			{
+				continue;
+			}
+
+			if (IsCellOccupiedByLivingActor(destination, officer, null, selectedOfficerIds)
+				|| (IsCellOccupiedBySelectedOfficerNotMoving(destination, movingOrigins, movePlans)))
+			{
+				continue;
+			}
+
+			if (!_roomBuilder.TryGetMovementPath(officer.CurrentCell, destination, out List<Vector2I> pathCells) || pathCells.Count <= 1)
+			{
+				continue;
+			}
+
+			movePlans.Add((officer, destination));
+			reservedDestinations.Add(destination);
+		}
+
+		bool movedAnyOfficer = false;
+		foreach ((OfficerPawn officer, Vector2I destination) in movePlans)
+		{
+			if (TryMoveOfficerToCell(officer, destination, selectedOfficerIds))
+			{
+				movedAnyOfficer = true;
+			}
+		}
+
+		return movedAnyOfficer;
+	}
+
+	private List<OfficerPawn> OrderOfficersForGroupMove(List<OfficerPawn> officers, Vector2I targetCell)
+	{
+		OfficerPawn primaryOfficer = GetSelectedOfficer();
+		return officers
+			.OrderByDescending(officer => officer == primaryOfficer)
+			.ThenBy(officer => GetMovementStepDistance(officer.CurrentCell, targetCell))
+			.ToList();
+	}
+
+	private List<OfficerPawn> OrderOfficersForDirectionalGroupMove(List<OfficerPawn> officers, Vector2I direction)
+	{
+		return direction switch
+		{
+			var d when d == new Vector2I(1, 0) => officers.OrderByDescending(officer => officer.CurrentCell.X).ThenBy(officer => officer.CurrentCell.Y).ToList(),
+			var d when d == new Vector2I(-1, 0) => officers.OrderBy(officer => officer.CurrentCell.X).ThenBy(officer => officer.CurrentCell.Y).ToList(),
+			var d when d == new Vector2I(0, 1) => officers.OrderByDescending(officer => officer.CurrentCell.Y).ThenBy(officer => officer.CurrentCell.X).ToList(),
+			var d when d == new Vector2I(0, -1) => officers.OrderBy(officer => officer.CurrentCell.Y).ThenBy(officer => officer.CurrentCell.X).ToList(),
+			_ => officers
+		};
+	}
+
+	private bool AreAllLivingOfficersSelected()
+	{
+		List<OfficerPawn> livingOfficers = GetAliveOfficers().ToList();
+		if (livingOfficers.Count <= 1)
+		{
+			return false;
+		}
+
+		HashSet<string> livingOfficerIds = livingOfficers
+			.Where(officer => !string.IsNullOrWhiteSpace(officer.OfficerID))
+			.Select(officer => officer.OfficerID)
+			.ToHashSet();
+		return livingOfficerIds.Count > 1 && livingOfficerIds.SetEquals(_selectedOfficerIds);
+	}
+
+	private static bool IsCellOccupiedBySelectedOfficerNotMoving(
+		Vector2I cell,
+		HashSet<Vector2I> movingOrigins,
+		List<(OfficerPawn Officer, Vector2I Destination)> movePlans)
+	{
+		if (!movingOrigins.Contains(cell))
+		{
+			return false;
+		}
+
+		return movePlans.All(plan => plan.Officer.CurrentCell != cell);
+	}
+
+	private List<Vector2I> GetGroupDestinationCandidates(Vector2I targetCell, int maxCandidates)
+	{
+		List<Vector2I> candidates = new List<Vector2I>();
+		if (_roomBuilder == null || maxCandidates <= 0)
+		{
+			return candidates;
+		}
+
+		Queue<Vector2I> frontier = new Queue<Vector2I>();
+		HashSet<Vector2I> visited = new HashSet<Vector2I>();
+		Vector2I[] directions =
+		{
+			new Vector2I(1, 0),
+			new Vector2I(-1, 0),
+			new Vector2I(0, 1),
+			new Vector2I(0, -1)
+		};
+
+		frontier.Enqueue(targetCell);
+		visited.Add(targetCell);
+
+		while (frontier.Count > 0 && candidates.Count < maxCandidates)
+		{
+			Vector2I current = frontier.Dequeue();
+			if (_roomBuilder.IsWalkableMovementCell(current))
+			{
+				candidates.Add(current);
+			}
+
+			foreach (Vector2I direction in directions)
+			{
+				Vector2I next = current + direction;
+				if (visited.Add(next))
+				{
+					frontier.Enqueue(next);
+				}
+			}
+		}
+
+		return candidates;
+	}
+
+	private bool TryMoveSelectedOfficerByDirection(Vector2I tileDirection)
+	{
+		OfficerPawn activeOfficer = GetSelectedOfficer();
+		if (activeOfficer == null || _roomBuilder == null)
+		{
+			return false;
+		}
+
+		if (activeOfficer.IsMoving)
+		{
+			return false;
+		}
+
+		if (_combatActive && activeOfficer != GetActiveCombatOfficer())
+		{
+			return false;
+		}
+
+		Vector2I targetCell = activeOfficer.CurrentCell + tileDirection;
+		return TryMoveOfficerToCell(activeOfficer, targetCell);
+	}
+
 	private bool TryMoveOfficerToCell(OfficerPawn officer, Vector2I targetCell)
+	{
+		return TryMoveOfficerToCell(officer, targetCell, null);
+	}
+
+	private bool TryMoveOfficerToCell(OfficerPawn officer, Vector2I targetCell, IReadOnlyCollection<string> ignoredOfficerIds)
 	{
 		if (officer == null || _roomBuilder == null || _isoWorld == null)
 		{
 			return false;
 		}
 
-		if (IsCellOccupiedByLivingActor(targetCell, officer))
+		if (IsCellOccupiedByLivingActor(targetCell, officer, null, ignoredOfficerIds))
 		{
 			return false;
 		}
 
-		if (!_roomBuilder.TryGetPath(officer.CurrentCell, targetCell, out List<Vector2I> pathCells))
+		if (!_roomBuilder.TryGetMovementPath(officer.CurrentCell, targetCell, out List<Vector2I> pathCells))
 		{
 			return false;
 		}
@@ -1202,7 +1951,7 @@ public partial class MissionMap : Node2D
 
 		List<Vector2I> steppedCells = pathCells
 			.Skip(1)
-			.TakeWhile(cell => !IsCellOccupiedByLivingActor(cell, officer))
+			.TakeWhile(cell => !IsCellOccupiedByLivingActor(cell, officer, null, ignoredOfficerIds))
 			.ToList();
 		if (steppedCells.Count == 0)
 		{
@@ -1211,22 +1960,24 @@ public partial class MissionMap : Node2D
 
 		if (_combatActive)
 		{
-			int moveCost = Mathf.Min(steppedCells.Count, officer.CurrentActions);
+			int maxMovementSteps = GetMaxMovementStepsForActions(officer.CurrentActions);
+			steppedCells = steppedCells.Take(maxMovementSteps).ToList();
+			int moveCost = GetMovementCostForPathSteps(steppedCells.Count);
 			if (!officer.CanSpendActions(moveCost))
 			{
 				return false;
 			}
 
-			steppedCells = steppedCells.Take(moveCost).ToList();
 			targetCell = steppedCells[^1];
 			officer.SpendActions(moveCost);
 			_pendingCombatMoveOfficerId = officer.OfficerID;
 			_pendingCombatMoveCost = moveCost;
-			AppendCombatLog($"{officer.OfficerName} repositions {moveCost} tile{(moveCost == 1 ? string.Empty : "s")} toward {targetCell.X},{targetCell.Y}, conserving {officer.WeaponName.ToLowerInvariant()} fire for the next opening.");
+			Vector2I targetBuildCell = GetBuildCell(targetCell);
+			AppendCombatLog($"{officer.OfficerName} repositions {moveCost} tile{(moveCost == 1 ? string.Empty : "s")} toward {targetBuildCell.X},{targetBuildCell.Y}, conserving {officer.WeaponName.ToLowerInvariant()} fire for the next opening.");
 		}
 
 		List<Vector2> pathPoints = steppedCells
-			.Select(GetCellGlobalPosition)
+			.Select(GetMovementCellGlobalPosition)
 			.ToList();
 		officer.MoveAlongPath(pathPoints, steppedCells, targetCell);
 		return true;
@@ -1239,8 +1990,9 @@ public partial class MissionMap : Node2D
 			return false;
 		}
 
-		Vector2I clickedCell = _roomBuilder.GetNearestCell(_isoWorld.ToLocal(GetGlobalMousePosition()));
-		if (_roomBuilder.IsDoorCell(clickedCell))
+		Vector2I clickedCell = _roomBuilder.GetNearestMovementCell(_isoWorld.ToLocal(GetGlobalMousePosition()));
+		Vector2I clickedBuildCell = GetBuildCell(clickedCell);
+		if (_roomBuilder.IsDoorCell(clickedBuildCell))
 		{
 			// Door bulkheads are keyboard-only for now. Left-click should always remain a move order.
 			return false;
@@ -1261,7 +2013,7 @@ public partial class MissionMap : Node2D
 			return true;
 		}
 
-		List<MissionRoomBuilder.MarkerPlacement> interactions = _roomBuilder.GetInteractPlacementsAtCell(clickedCell)
+		List<MissionRoomBuilder.MarkerPlacement> interactions = _roomBuilder.GetInteractPlacementsAtCell(clickedBuildCell)
 			.Where(placement =>
 				(placement.LogicRole != "door" && string.Equals(placement.TriggerMode, "interact", System.StringComparison.OrdinalIgnoreCase))
 				|| placement.LogicRole == "terminal")
@@ -1300,10 +2052,11 @@ public partial class MissionMap : Node2D
 			return false;
 		}
 
-		Vector2I hoveredCell = _roomBuilder.GetNearestCell(_isoWorld.ToLocal(GetGlobalMousePosition()));
-		if (_roomBuilder.TryGetDoorIdAtCell(hoveredCell, out string hoveredDoorId) && !string.IsNullOrWhiteSpace(hoveredDoorId))
+		Vector2I hoveredCell = _roomBuilder.GetNearestMovementCell(_isoWorld.ToLocal(GetGlobalMousePosition()));
+		Vector2I hoveredBuildCell = GetBuildCell(hoveredCell);
+		if (_roomBuilder.TryGetDoorIdAtCell(hoveredBuildCell, out string hoveredDoorId) && !string.IsNullOrWhiteSpace(hoveredDoorId))
 		{
-			return TryHandleDirectDoorInteraction(officer, hoveredCell, hoveredDoorId);
+			return TryHandleDirectDoorInteraction(officer, hoveredBuildCell, hoveredDoorId);
 		}
 
 		Vector2I[] directions =
@@ -1313,9 +2066,10 @@ public partial class MissionMap : Node2D
 			new Vector2I(0, 1),
 			new Vector2I(0, -1)
 		};
+		Vector2I officerBuildCell = GetBuildCell(officer.CurrentCell);
 		foreach (Vector2I direction in directions)
 		{
-			Vector2I candidate = officer.CurrentCell + direction;
+			Vector2I candidate = officerBuildCell + direction;
 			if (_roomBuilder.TryGetDoorIdAtCell(candidate, out string adjacentDoorId) && !string.IsNullOrWhiteSpace(adjacentDoorId))
 			{
 				return TryHandleDirectDoorInteraction(officer, candidate, adjacentDoorId);
@@ -1332,12 +2086,13 @@ public partial class MissionMap : Node2D
 			return false;
 		}
 
-		if (!_roomBuilder.TryGetDoorIdAtCell(clickedCell, out string doorId) || string.IsNullOrWhiteSpace(doorId))
+		Vector2I clickedBuildCell = GetBuildCell(clickedCell);
+		if (!_roomBuilder.TryGetDoorIdAtCell(clickedBuildCell, out string doorId) || string.IsNullOrWhiteSpace(doorId))
 		{
 			return false;
 		}
 
-		return TryHandleDirectDoorInteraction(officer, clickedCell, doorId);
+		return TryHandleDirectDoorInteraction(officer, clickedBuildCell, doorId);
 	}
 
 	private bool TryHandleDirectDoorInteraction(OfficerPawn officer, Vector2I clickedCell, string doorId)
@@ -1372,12 +2127,13 @@ public partial class MissionMap : Node2D
 
 	private bool TryHandlePropInteractionClick(OfficerPawn officer, Vector2I clickedCell)
 	{
-		if (!_missionPropsByCell.TryGetValue(clickedCell, out MissionProp prop) || prop == null)
+		Vector2I clickedBuildCell = GetBuildCell(clickedCell);
+		if (!_missionPropsByCell.TryGetValue(clickedBuildCell, out MissionProp prop) || prop == null)
 		{
 			return false;
 		}
 
-		if (!_visibleCells.Contains(clickedCell))
+		if (!_visibleBuildCells.Contains(clickedBuildCell))
 		{
 			return false;
 		}
@@ -1388,7 +2144,7 @@ public partial class MissionMap : Node2D
 			return true;
 		}
 
-		if (TryMoveOfficerToCell(officer, clickedCell))
+		if (TryMoveOfficerToCell(officer, GetMovementCell(clickedBuildCell)))
 		{
 			_pendingPropInstanceId = prop.PropInstanceId;
 			_pendingInteractionOfficerId = officer.OfficerID;
@@ -1399,7 +2155,8 @@ public partial class MissionMap : Node2D
 
 	private bool TryHandleNpcInteractionClick(OfficerPawn officer, Vector2I clickedCell)
 	{
-		if (!_missionNpcsByCell.TryGetValue(clickedCell, out MissionNpcPawn npc) || npc == null)
+		MissionNpcPawn npc = GetNpcAtMovementCell(clickedCell);
+		if (npc == null)
 		{
 			return false;
 		}
@@ -1443,6 +2200,17 @@ public partial class MissionMap : Node2D
 		return true;
 	}
 
+	private MissionNpcPawn GetNpcAtMovementCell(Vector2I movementCell)
+	{
+		if (_missionNpcsByCell.TryGetValue(movementCell, out MissionNpcPawn exactNpc) && exactNpc != null)
+		{
+			return exactNpc;
+		}
+
+		Vector2I buildCell = GetBuildCell(movementCell);
+		return _missionNpcs.FirstOrDefault(npc => npc != null && !npc.IsDead && GetBuildCell(npc.CurrentCell) == buildCell);
+	}
+
 	private bool CanOfficerExecuteInteraction(OfficerPawn officer, MissionRoomBuilder.MarkerPlacement interaction)
 	{
 		if (_combatActive && (officer == null || officer.CurrentActions < CombatInteractionActionCost))
@@ -1457,15 +2225,15 @@ public partial class MissionMap : Node2D
 	{
 		if (interaction.LogicRole == "terminal")
 		{
-			return Mathf.Abs(officerCell.X - interaction.Cell.X) + Mathf.Abs(officerCell.Y - interaction.Cell.Y);
+			return GetTileDistance(officerCell, GetMovementCell(interaction.Cell));
 		}
 
 		if (interaction.LogicRole == "door")
 		{
-			return Mathf.Abs(officerCell.X - interaction.Cell.X) + Mathf.Abs(officerCell.Y - interaction.Cell.Y);
+			return GetTileDistance(officerCell, GetMovementCell(interaction.Cell));
 		}
 
-		return officerCell == interaction.Cell ? 0 : int.MaxValue;
+		return GetBuildCell(officerCell) == interaction.Cell ? 0 : int.MaxValue;
 	}
 
 	private Vector2I? FindBestInteractionApproachCell(OfficerPawn officer, MissionRoomBuilder.MarkerPlacement interaction)
@@ -1475,34 +2243,14 @@ public partial class MissionMap : Node2D
 			return null;
 		}
 
-		List<Vector2I> candidates = new List<Vector2I>();
-		if (interaction.LogicRole == "terminal")
-		{
-			if (_roomBuilder.IsWalkableCell(interaction.Cell))
-			{
-				candidates.Add(interaction.Cell);
-			}
-		}
-
-		Vector2I[] directions =
-		{
-			new Vector2I(1, 0),
-			new Vector2I(-1, 0),
-			new Vector2I(0, 1),
-			new Vector2I(0, -1)
-		};
-		foreach (Vector2I direction in directions)
-		{
-			Vector2I candidate = interaction.Cell + direction;
-			if (_roomBuilder.IsWalkableCell(candidate))
-			{
-				candidates.Add(candidate);
-			}
-		}
+		Vector2I interactionCell = GetMovementCell(interaction.Cell);
+		List<Vector2I> candidates = _roomBuilder.GetReachableMovementCells(interactionCell, 1)
+			.Where(candidate => _roomBuilder.IsWalkableMovementCell(candidate))
+			.ToList();
 
 		foreach (Vector2I candidate in candidates.Distinct())
 		{
-			if (_roomBuilder.TryGetPath(officer.CurrentCell, candidate, out List<Vector2I> _))
+			if (_roomBuilder.TryGetMovementPath(officer.CurrentCell, candidate, out List<Vector2I> _))
 			{
 				return candidate;
 			}
@@ -1611,9 +2359,9 @@ public partial class MissionMap : Node2D
 			return false;
 		}
 
-		Vector2I propCell = GetPropCell(prop);
+		Vector2I propCell = GetMovementCell(GetPropCell(prop));
 		int interactionRange = Mathf.Max(1, prop.Definition?.InteractionRange ?? 1);
-		int distance = Mathf.Abs(officer.CurrentCell.X - propCell.X) + Mathf.Abs(officer.CurrentCell.Y - propCell.Y);
+		int distance = GetTileDistance(officer.CurrentCell, propCell);
 		return distance <= interactionRange;
 	}
 
@@ -1630,7 +2378,7 @@ public partial class MissionMap : Node2D
 		}
 
 		int interactionRange = Mathf.Max(1, npc.InteractionRange);
-		int distance = Mathf.Abs(officer.CurrentCell.X - npc.CurrentCell.X) + Mathf.Abs(officer.CurrentCell.Y - npc.CurrentCell.Y);
+		int distance = GetTileDistance(officer.CurrentCell, npc.CurrentCell);
 		return distance <= interactionRange;
 	}
 
@@ -1641,26 +2389,13 @@ public partial class MissionMap : Node2D
 			return null;
 		}
 
-		List<Vector2I> candidates = new List<Vector2I>();
-		Vector2I[] directions =
-		{
-			new Vector2I(1, 0),
-			new Vector2I(-1, 0),
-			new Vector2I(0, 1),
-			new Vector2I(0, -1)
-		};
-		foreach (Vector2I direction in directions)
-		{
-			Vector2I candidate = npc.CurrentCell + direction;
-			if (_roomBuilder.IsWalkableCell(candidate))
-			{
-				candidates.Add(candidate);
-			}
-		}
+		List<Vector2I> candidates = _roomBuilder.GetReachableMovementCells(npc.CurrentCell, npc.InteractionRange)
+			.Where(candidate => candidate != npc.CurrentCell && _roomBuilder.IsWalkableMovementCell(candidate))
+			.ToList();
 
 		foreach (Vector2I candidate in candidates.Distinct())
 		{
-			if (_roomBuilder.TryGetPath(officer.CurrentCell, candidate, out List<Vector2I> _))
+			if (_roomBuilder.TryGetMovementPath(officer.CurrentCell, candidate, out List<Vector2I> _))
 			{
 				return candidate;
 			}
@@ -1729,7 +2464,7 @@ public partial class MissionMap : Node2D
 		}
 
 		bool nextOpenState = !_roomBuilder.IsDoorOpen(interaction.TargetId);
-		if (!nextOpenState && _officerPawns.Any(pawn => pawn.CurrentCell == interaction.Cell))
+		if (!nextOpenState && _officerPawns.Any(pawn => GetBuildCell(pawn.CurrentCell) == interaction.Cell))
 		{
 			return;
 		}
@@ -1741,6 +2476,79 @@ public partial class MissionMap : Node2D
 	{
 		Vector2 localPosition = _roomBuilder.GetCellWorldPosition(cell.X, cell.Y);
 		return _isoWorld.ToGlobal(localPosition);
+	}
+
+	private Vector2 GetMovementCellGlobalPosition(Vector2I cell)
+	{
+		Vector2 localPosition = _roomBuilder.GetMovementCellWorldPosition(cell.X, cell.Y);
+		return _isoWorld.ToGlobal(localPosition);
+	}
+
+	private Vector2I GetBuildCell(Vector2I movementCell)
+	{
+		return _roomBuilder?.GetBuildCellForMovementCell(movementCell) ?? movementCell;
+	}
+
+	private Vector2I GetMovementCell(Vector2I buildCell)
+	{
+		return _roomBuilder?.GetMovementCellForBuildCell(buildCell) ?? buildCell;
+	}
+
+	private Vector2I ResolveMovementTargetCell(Vector2I requestedCell)
+	{
+		if (_roomBuilder == null)
+		{
+			return requestedCell;
+		}
+
+		if (_roomBuilder.IsWalkableMovementCell(requestedCell))
+		{
+			return requestedCell;
+		}
+
+		Vector2I buildCell = GetBuildCell(requestedCell);
+		if (!_roomBuilder.IsWalkableCell(buildCell))
+		{
+			return requestedCell;
+		}
+
+		Vector2I? normalizedCell = _roomBuilder.GetMovementCellsForBuildCell(buildCell)
+			.Where(cell => _roomBuilder.IsWalkableMovementCell(cell))
+			.OrderBy(cell => GetMovementStepDistance(cell, requestedCell))
+			.ThenBy(cell => GetMovementStepDistance(cell, GetMovementCell(buildCell)))
+			.Cast<Vector2I?>()
+			.FirstOrDefault();
+		return normalizedCell ?? requestedCell;
+	}
+
+	private int GetMovementSubdivision()
+	{
+		return _roomBuilder?.MovementSubdivision ?? 1;
+	}
+
+	private int GetMovementStepDistance(Vector2I a, Vector2I b)
+	{
+		return Mathf.Abs(a.X - b.X) + Mathf.Abs(a.Y - b.Y);
+	}
+
+	private int GetTileDistance(Vector2I a, Vector2I b)
+	{
+		return Mathf.CeilToInt(GetMovementStepDistance(a, b) / (float)GetMovementSubdivision());
+	}
+
+	private int GetMovementCostForPathSteps(int stepCount)
+	{
+		if (stepCount <= 0)
+		{
+			return 0;
+		}
+
+		return Mathf.Max(1, Mathf.CeilToInt(stepCount / (float)GetMovementSubdivision()));
+	}
+
+	private int GetMaxMovementStepsForActions(int actions)
+	{
+		return Mathf.Max(0, actions * GetMovementSubdivision());
 	}
 
 	private bool TrySelectOfficerAtMouse()
@@ -1786,7 +2594,7 @@ public partial class MissionMap : Node2D
 				continue;
 			}
 
-			if (marker.Cell != officer.CurrentCell)
+			if (marker.Cell != GetBuildCell(officer.CurrentCell))
 			{
 				continue;
 			}
@@ -1857,11 +2665,20 @@ public partial class MissionMap : Node2D
 			|| _missionNpcs.Any(npc => npc != null && npc.IsMoving);
 	}
 
-	private bool IsCellOccupiedByLivingActor(Vector2I cell, OfficerPawn ignoreOfficer = null, MissionNpcPawn ignoreEnemy = null)
+	private bool IsCellOccupiedByLivingActor(
+		Vector2I cell,
+		OfficerPawn ignoreOfficer = null,
+		MissionNpcPawn ignoreEnemy = null,
+		IReadOnlyCollection<string> ignoredOfficerIds = null)
 	{
 		foreach (OfficerPawn pawn in _officerPawns)
 		{
 			if (pawn == null || pawn == ignoreOfficer || pawn.IsDead)
+			{
+				continue;
+			}
+
+			if (ignoredOfficerIds != null && !string.IsNullOrWhiteSpace(pawn.OfficerID) && ignoredOfficerIds.Contains(pawn.OfficerID))
 			{
 				continue;
 			}
@@ -1981,6 +2798,7 @@ public partial class MissionMap : Node2D
 		_missionUi?.ClearCombatLog();
 		AppendCombatLog("Combat erupts in the mission zone as hostile contacts emerge from cover.");
 		RebuildCombatQueue();
+		UpdateMovementGridVisibility();
 		RefreshCombatHud();
 		BeginNextCombatTurn();
 	}
@@ -1998,6 +2816,7 @@ public partial class MissionMap : Node2D
 		_hoveredCombatActor = null;
 		_missionUi?.HideHoverSummary();
 		AppendCombatLog("The last engaged hostile goes quiet. Combat control returns to exploration.");
+		UpdateMovementGridVisibility();
 		RefreshCombatHud();
 	}
 
@@ -2041,9 +2860,16 @@ public partial class MissionMap : Node2D
 			return false;
 		}
 
-		List<Vector2I> candidateCells = HexMath.Directions
+		Vector2I[] directions =
+		{
+			new Vector2I(1, 0),
+			new Vector2I(-1, 0),
+			new Vector2I(0, 1),
+			new Vector2I(0, -1)
+		};
+		List<Vector2I> candidateCells = directions
 			.Select(direction => hostile.CurrentCell + direction)
-			.Where(cell => _roomBuilder.IsWalkableCell(cell) && !IsCellOccupiedByLivingActor(cell, null, hostile))
+			.Where(cell => _roomBuilder.IsWalkableMovementCell(cell) && !IsCellOccupiedByLivingActor(cell, null, hostile))
 			.OrderBy(_ => _combatRng.Randi())
 			.ToList();
 		if (candidateCells.Count == 0)
@@ -2052,14 +2878,14 @@ public partial class MissionMap : Node2D
 		}
 
 		Vector2I destinationCell = candidateCells[0];
-		if (!_roomBuilder.TryGetPath(hostile.CurrentCell, destinationCell, out List<Vector2I> pathCells) || pathCells.Count <= 1)
+		if (!_roomBuilder.TryGetMovementPath(hostile.CurrentCell, destinationCell, out List<Vector2I> pathCells) || pathCells.Count <= 1)
 		{
 			return false;
 		}
 
 		List<Vector2I> steppedCells = pathCells.Skip(1).ToList();
 		List<Vector2> pathPoints = steppedCells
-			.Select(GetCellGlobalPosition)
+			.Select(GetMovementCellGlobalPosition)
 			.ToList();
 		hostile.MoveAlongPath(pathPoints, steppedCells, destinationCell);
 		return true;
@@ -2262,19 +3088,20 @@ public partial class MissionMap : Node2D
 			return false;
 		}
 
-		Vector2I clickedCell = _roomBuilder.GetNearestCell(_isoWorld.ToLocal(GetGlobalMousePosition()));
+		Vector2I clickedCell = _roomBuilder.GetNearestMovementCell(_isoWorld.ToLocal(GetGlobalMousePosition()));
 		if (!_visibleCells.Contains(clickedCell))
 		{
 			return false;
 		}
 
-		if (!_missionNpcsByCell.TryGetValue(clickedCell, out MissionNpcPawn enemy) || enemy == null || enemy.IsDead || !enemy.IsHostile)
+		MissionNpcPawn enemy = GetNpcAtMovementCell(clickedCell);
+		if (enemy == null || enemy.IsDead || !enemy.IsHostile)
 		{
 			return false;
 		}
 
 		_focusedEnemy = enemy;
-		if (GetManhattanDistance(officer.CurrentCell, enemy.CurrentCell) <= officer.AttackRange)
+		if (GetTileDistance(officer.CurrentCell, enemy.CurrentCell) <= officer.AttackRange)
 		{
 			PerformOfficerAttack(officer, enemy);
 			return true;
@@ -2309,7 +3136,7 @@ public partial class MissionMap : Node2D
 				return;
 			}
 
-			if (GetManhattanDistance(enemy.CurrentCell, targetOfficer.CurrentCell) <= enemy.AttackRange)
+			if (GetTileDistance(enemy.CurrentCell, targetOfficer.CurrentCell) <= enemy.AttackRange)
 			{
 				PerformEnemyAttack(enemy, targetOfficer);
 				RefreshCombatHud();
@@ -2330,7 +3157,7 @@ public partial class MissionMap : Node2D
 			}
 
 			await ToSignal(GetTree().CreateTimer(0.22f), SceneTreeTimer.SignalName.Timeout);
-			if (GetManhattanDistance(enemy.CurrentCell, targetOfficer.CurrentCell) <= enemy.AttackRange && enemy.CurrentActions > 0)
+			if (GetTileDistance(enemy.CurrentCell, targetOfficer.CurrentCell) <= enemy.AttackRange && enemy.CurrentActions > 0)
 			{
 				PerformEnemyAttack(enemy, targetOfficer);
 				RefreshCombatHud();
@@ -2356,7 +3183,7 @@ public partial class MissionMap : Node2D
 		}
 
 		Vector2I? approachCell = FindBestCombatApproachCell(enemy.CurrentCell, targetOfficer.CurrentCell, enemy.AttackRange, enemy.CurrentActions, null, enemy);
-		if (!approachCell.HasValue || !_roomBuilder.TryGetPath(enemy.CurrentCell, approachCell.Value, out List<Vector2I> pathCells) || pathCells.Count <= 1)
+		if (!approachCell.HasValue || !_roomBuilder.TryGetMovementPath(enemy.CurrentCell, approachCell.Value, out List<Vector2I> pathCells) || pathCells.Count <= 1)
 		{
 			return false;
 		}
@@ -2370,18 +3197,19 @@ public partial class MissionMap : Node2D
 			return false;
 		}
 
-		int moveCost = Mathf.Min(steppedCells.Count, enemy.CurrentActions);
+		int maxMovementSteps = GetMaxMovementStepsForActions(enemy.CurrentActions);
+		steppedCells = steppedCells.Take(maxMovementSteps).ToList();
+		int moveCost = GetMovementCostForPathSteps(steppedCells.Count);
 		if (!enemy.CanSpendActions(moveCost))
 		{
 			return false;
 		}
 
-		steppedCells = steppedCells.Take(moveCost).ToList();
 		Vector2I destinationCell = steppedCells[^1];
 		enemy.SpendActions(moveCost);
 		AppendCombatLog($"{enemy.DisplayName} pushes {moveCost} tile{(moveCost == 1 ? string.Empty : "s")} toward the away team, closing with {enemy.WeaponName.ToLowerInvariant()} ready.");
 		List<Vector2> pathPoints = steppedCells
-			.Select(GetCellGlobalPosition)
+			.Select(GetMovementCellGlobalPosition)
 			.ToList();
 		enemy.MoveAlongPath(pathPoints, steppedCells, destinationCell);
 		await ToSignal(enemy, MissionNpcPawn.SignalName.ReachedCell);
@@ -2401,26 +3229,27 @@ public partial class MissionMap : Node2D
 			return null;
 		}
 
-		List<(Vector2I Cell, int PathLength, int TargetDistance)> candidates = new List<(Vector2I, int, int)>();
-		foreach (Vector2I candidate in _roomBuilder.GetReachableCells(targetCell, attackRange))
+		List<(Vector2I Cell, int PathCost, int TargetDistance)> candidates = new List<(Vector2I, int, int)>();
+		foreach (Vector2I candidate in _roomBuilder.GetReachableMovementCells(targetCell, attackRange))
 		{
-			if (candidate == targetCell || !_roomBuilder.IsWalkableCell(candidate) || IsCellOccupiedByLivingActor(candidate, movingOfficer, movingEnemy))
+			if (candidate == targetCell || !_roomBuilder.IsWalkableMovementCell(candidate) || IsCellOccupiedByLivingActor(candidate, movingOfficer, movingEnemy))
 			{
 				continue;
 			}
 
-			if (!_roomBuilder.TryGetPath(startCell, candidate, out List<Vector2I> pathCells))
+			if (!_roomBuilder.TryGetMovementPath(startCell, candidate, out List<Vector2I> pathCells))
 			{
 				continue;
 			}
 
 			int pathLength = Math.Max(0, pathCells.Count - 1);
-			if (pathLength <= 0 || pathLength > maxSteps)
+			int pathCost = GetMovementCostForPathSteps(pathLength);
+			if (pathLength <= 0 || pathCost > maxSteps)
 			{
 				continue;
 			}
 
-			candidates.Add((candidate, pathLength, GetManhattanDistance(candidate, targetCell)));
+			candidates.Add((candidate, pathCost, GetTileDistance(candidate, targetCell)));
 		}
 
 		if (candidates.Count == 0)
@@ -2429,7 +3258,7 @@ public partial class MissionMap : Node2D
 		}
 
 		return candidates
-			.OrderBy(candidate => candidate.PathLength)
+			.OrderBy(candidate => candidate.PathCost)
 			.ThenBy(candidate => candidate.TargetDistance)
 			.Select(candidate => (Vector2I?)candidate.Cell)
 			.FirstOrDefault();
@@ -2443,7 +3272,7 @@ public partial class MissionMap : Node2D
 		}
 
 		MissionAttackProfile attackProfile = officer.GetAttackProfile();
-		if (GetManhattanDistance(officer.CurrentCell, enemy.CurrentCell) > attackProfile.Range)
+		if (GetTileDistance(officer.CurrentCell, enemy.CurrentCell) > attackProfile.Range)
 		{
 			return;
 		}
@@ -2485,7 +3314,7 @@ public partial class MissionMap : Node2D
 		}
 
 		MissionAttackProfile attackProfile = enemy.GetAttackProfile();
-		if (GetManhattanDistance(enemy.CurrentCell, officer.CurrentCell) > attackProfile.Range)
+		if (GetTileDistance(enemy.CurrentCell, officer.CurrentCell) > attackProfile.Range)
 		{
 			return;
 		}
@@ -2761,20 +3590,15 @@ public partial class MissionMap : Node2D
 	private MissionNpcPawn GetClosestVisibleEnemy(Vector2I fromCell)
 	{
 		return GetVisibleAliveHostileEnemies()
-			.OrderBy(enemy => GetManhattanDistance(fromCell, enemy.CurrentCell))
+			.OrderBy(enemy => GetTileDistance(fromCell, enemy.CurrentCell))
 			.FirstOrDefault();
 	}
 
 	private OfficerPawn GetClosestLivingOfficer(Vector2I fromCell)
 	{
 		return GetAliveOfficers()
-			.OrderBy(officer => GetManhattanDistance(fromCell, officer.CurrentCell))
+			.OrderBy(officer => GetTileDistance(fromCell, officer.CurrentCell))
 			.FirstOrDefault();
-	}
-
-	private static int GetManhattanDistance(Vector2I a, Vector2I b)
-	{
-		return Mathf.Abs(a.X - b.X) + Mathf.Abs(a.Y - b.Y);
 	}
 
 	private void AppendCombatLog(string message)
@@ -3493,7 +4317,7 @@ public partial class MissionMap : Node2D
 			return rallyCells;
 		}
 
-		Vector2I[] directions =
+		Vector2I[] buildCellDirections =
 		{
 			Vector2I.Zero,
 			new Vector2I(1, 0),
@@ -3506,12 +4330,15 @@ public partial class MissionMap : Node2D
 			.Where(marker => marker.MarkerId == "evac_zone")
 			.Select(marker => marker.Cell))
 		{
-			foreach (Vector2I direction in directions)
+			foreach (Vector2I direction in buildCellDirections)
 			{
-				Vector2I candidate = evacCell + direction;
-				if (_roomBuilder.IsWalkableCell(candidate))
+				Vector2I buildCell = evacCell + direction;
+				foreach (Vector2I candidate in _roomBuilder.GetMovementCellsForBuildCell(buildCell))
 				{
-					rallyCells.Add(candidate);
+					if (_roomBuilder.IsWalkableMovementCell(candidate))
+					{
+						rallyCells.Add(candidate);
+					}
 				}
 			}
 		}
