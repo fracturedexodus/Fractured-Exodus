@@ -13,6 +13,7 @@ public partial class MissionMap : Node2D
 	private const float ZoomStep = 0.08f;
 	private const float CameraPanSpeed = 720f;
 	private const float CameraEdgePanMargin = 30f;
+	private const float CameraKeyboardFollowEdgeMargin = 8f;
 	private const int FogRevealRadius = 4;
 	private const int CombatAttackActionCost = 1;
 	private const int CombatInteractionActionCost = 1;
@@ -50,6 +51,7 @@ public partial class MissionMap : Node2D
 	private readonly List<MissionNpcPawn> _missionNpcs = new List<MissionNpcPawn>();
 	private readonly Dictionary<Vector2I, MissionNpcPawn> _missionNpcsByCell = new Dictionary<Vector2I, MissionNpcPawn>();
 	private readonly Dictionary<Vector2I, MissionProp> _missionPropsByCell = new Dictionary<Vector2I, MissionProp>();
+	private readonly HashSet<Vector2I> _blockedStaticPropCells = new HashSet<Vector2I>();
 	private readonly Dictionary<string, MissionRoomBuilder.MarkerPlacement> _propPlacementsByInstanceId = new Dictionary<string, MissionRoomBuilder.MarkerPlacement>();
 	private readonly MissionSpawner _missionSpawner = new MissionSpawner();
 	private readonly HashSet<string> _consumedTriggerKeys = new HashSet<string>();
@@ -135,6 +137,7 @@ public partial class MissionMap : Node2D
 	{
 		UpdateHeldOfficerMovement();
 		UpdateCameraPan((float)delta);
+		UpdateKeyboardMovementCameraFollow();
 		UpdateSelectionDrag();
 		UpdateMovementCursorHighlight();
 		UpdateEvacZoneHighlightVisuals((float)delta);
@@ -1508,6 +1511,44 @@ public partial class MissionMap : Node2D
 		_camera.Position += input.Normalized() * CameraPanSpeed * delta * (1.0f / _camera.Zoom.X);
 	}
 
+	private void UpdateKeyboardMovementCameraFollow()
+	{
+		if (_camera == null || _isPanning || _isSelectionDragging || GetHeldOfficerMoveDirection() == Vector2I.Zero)
+		{
+			return;
+		}
+
+		List<OfficerPawn> movingSelectedOfficers = GetSelectedOfficers()
+			.Where(officer => officer != null && officer.IsMoving)
+			.ToList();
+		if (movingSelectedOfficers.Count == 0)
+		{
+			return;
+		}
+
+		Vector2 screenSize = GetViewportRect().Size;
+		bool reachedScreenEdge = movingSelectedOfficers.Any(officer =>
+		{
+			Vector2 screenPosition = GetViewport().GetCanvasTransform() * officer.GlobalPosition;
+			return screenPosition.X <= CameraKeyboardFollowEdgeMargin
+				|| screenPosition.X >= screenSize.X - CameraKeyboardFollowEdgeMargin
+				|| screenPosition.Y <= CameraKeyboardFollowEdgeMargin
+				|| screenPosition.Y >= screenSize.Y - CameraKeyboardFollowEdgeMargin;
+		});
+		if (!reachedScreenEdge)
+		{
+			return;
+		}
+
+		Vector2 focusPosition = Vector2.Zero;
+		foreach (OfficerPawn officer in movingSelectedOfficers)
+		{
+			focusPosition += officer.GlobalPosition;
+		}
+
+		_camera.Position = focusPosition / movingSelectedOfficers.Count;
+	}
+
 	private void UpdateSelectionDrag()
 	{
 		if (!_isSelectionDragging || _selectionBox == null)
@@ -1724,7 +1765,7 @@ public partial class MissionMap : Node2D
 			Vector2I? destination = candidateCells
 				.Where(candidate => !reservedDestinations.Contains(candidate))
 				.Where(candidate => !IsCellOccupiedByLivingActor(candidate, officer, null, selectedOfficerIds))
-				.Where(candidate => _roomBuilder.TryGetMovementPath(officer.CurrentCell, candidate, out List<Vector2I> _))
+				.Where(candidate => TryGetTraversableMovementPath(officer.CurrentCell, candidate, officer, null, selectedOfficerIds, out List<Vector2I> _))
 				.OrderBy(candidate => GetMovementStepDistance(candidate, targetCell))
 				.ThenBy(candidate => GetMovementStepDistance(officer.CurrentCell, candidate))
 				.Cast<Vector2I?>()
@@ -1771,7 +1812,7 @@ public partial class MissionMap : Node2D
 
 		foreach (OfficerPawn officer in OrderOfficersForDirectionalGroupMove(selectedOfficers, direction))
 		{
-			Vector2I destination = officer.CurrentCell + direction;
+			Vector2I destination = ResolveMovementTargetCell(officer.CurrentCell + direction);
 			if (!_roomBuilder.IsWalkableMovementCell(destination))
 			{
 				continue;
@@ -1788,7 +1829,7 @@ public partial class MissionMap : Node2D
 				continue;
 			}
 
-			if (!_roomBuilder.TryGetMovementPath(officer.CurrentCell, destination, out List<Vector2I> pathCells) || pathCells.Count <= 1)
+			if (!TryGetTraversableMovementPath(officer.CurrentCell, destination, officer, null, selectedOfficerIds, out List<Vector2I> pathCells) || pathCells.Count <= 1)
 			{
 				continue;
 			}
@@ -1918,19 +1959,38 @@ public partial class MissionMap : Node2D
 			return false;
 		}
 
-		Vector2I targetCell = activeOfficer.CurrentCell + tileDirection;
+		Vector2I targetCell = ResolveMovementTargetCell(activeOfficer.CurrentCell + tileDirection);
 		return TryMoveOfficerToCell(activeOfficer, targetCell);
 	}
 
 	private bool TryMoveOfficerToCell(OfficerPawn officer, Vector2I targetCell)
 	{
-		return TryMoveOfficerToCell(officer, targetCell, null);
+		return TryMoveOfficerToCell(officer, targetCell, null, true);
 	}
 
 	private bool TryMoveOfficerToCell(OfficerPawn officer, Vector2I targetCell, IReadOnlyCollection<string> ignoredOfficerIds)
 	{
+		return TryMoveOfficerToCell(officer, targetCell, ignoredOfficerIds, true);
+	}
+
+	private bool TryMoveOfficerToCell(OfficerPawn officer, Vector2I targetCell, IReadOnlyCollection<string> ignoredOfficerIds, bool allowPropRedirect)
+	{
 		if (officer == null || _roomBuilder == null || _isoWorld == null)
 		{
+			return false;
+		}
+
+		targetCell = ResolveMovementTargetCell(targetCell);
+
+		if (IsMovementCellBlockedByProp(targetCell))
+		{
+			if (allowPropRedirect
+				&& (TryHandleBlockedPropMovement(officer, targetCell, ignoredOfficerIds)
+					|| TryHandleBlockedInteractionMovement(officer, targetCell, ignoredOfficerIds)))
+			{
+				return true;
+			}
+
 			return false;
 		}
 
@@ -1939,7 +1999,7 @@ public partial class MissionMap : Node2D
 			return false;
 		}
 
-		if (!_roomBuilder.TryGetMovementPath(officer.CurrentCell, targetCell, out List<Vector2I> pathCells))
+		if (!TryGetTraversableMovementPath(officer.CurrentCell, targetCell, officer, null, ignoredOfficerIds, out List<Vector2I> pathCells))
 		{
 			return false;
 		}
@@ -1951,7 +2011,7 @@ public partial class MissionMap : Node2D
 
 		List<Vector2I> steppedCells = pathCells
 			.Skip(1)
-			.TakeWhile(cell => !IsCellOccupiedByLivingActor(cell, officer, null, ignoredOfficerIds))
+			.TakeWhile(cell => !IsCellOccupiedByLivingActor(cell, officer, null, ignoredOfficerIds) && !IsMovementCellBlockedByProp(cell))
 			.ToList();
 		if (steppedCells.Count == 0)
 		{
@@ -2045,6 +2105,64 @@ public partial class MissionMap : Node2D
 		return true;
 	}
 
+	private bool TryHandleBlockedPropMovement(OfficerPawn officer, Vector2I blockedTargetCell, IReadOnlyCollection<string> ignoredOfficerIds)
+	{
+		if (!TryGetMissionPropAtMovementCell(blockedTargetCell, out MissionProp prop))
+		{
+			return false;
+		}
+
+		if (CanOfficerExecutePropInteraction(officer, prop))
+		{
+			ExecutePropInteraction(officer, prop);
+			return true;
+		}
+
+		Vector2I? approachCell = FindBestPropApproachCell(officer, prop, ignoredOfficerIds);
+		if (!approachCell.HasValue)
+		{
+			return false;
+		}
+
+		if (TryMoveOfficerToCell(officer, approachCell.Value, ignoredOfficerIds, false))
+		{
+			_pendingPropInstanceId = prop.PropInstanceId;
+			_pendingInteractionOfficerId = officer.OfficerID;
+			return true;
+		}
+
+		return false;
+	}
+
+	private bool TryHandleBlockedInteractionMovement(OfficerPawn officer, Vector2I blockedTargetCell, IReadOnlyCollection<string> ignoredOfficerIds)
+	{
+		if (!TryGetStaticInteractionAtMovementCell(blockedTargetCell, out MissionRoomBuilder.MarkerPlacement interaction))
+		{
+			return false;
+		}
+
+		if (CanOfficerExecuteInteraction(officer, interaction))
+		{
+			ExecuteInteraction(officer, interaction);
+			return true;
+		}
+
+		Vector2I? approachCell = FindBestInteractionApproachCell(officer, interaction, ignoredOfficerIds);
+		if (!approachCell.HasValue)
+		{
+			return false;
+		}
+
+		if (TryMoveOfficerToCell(officer, approachCell.Value, ignoredOfficerIds, false))
+		{
+			_pendingInteractionKey = BuildInteractionKey(interaction);
+			_pendingInteractionOfficerId = officer.OfficerID;
+			return true;
+		}
+
+		return false;
+	}
+
 	private bool TryHandleDoorKeyAction(OfficerPawn officer)
 	{
 		if (officer == null || _roomBuilder == null || _isoWorld == null || (_dialogueUi?.IsConversationOpen ?? false))
@@ -2054,25 +2172,27 @@ public partial class MissionMap : Node2D
 
 		Vector2I hoveredCell = _roomBuilder.GetNearestMovementCell(_isoWorld.ToLocal(GetGlobalMousePosition()));
 		Vector2I hoveredBuildCell = GetBuildCell(hoveredCell);
-		if (_roomBuilder.TryGetDoorIdAtCell(hoveredBuildCell, out string hoveredDoorId) && !string.IsNullOrWhiteSpace(hoveredDoorId))
+		Vector2I officerBuildCell = GetBuildCell(officer.CurrentCell);
+		List<Vector2I> candidateBuildCells = new List<Vector2I> { hoveredBuildCell };
+		for (int offsetY = -1; offsetY <= 1; offsetY++)
 		{
-			return TryHandleDirectDoorInteraction(officer, hoveredBuildCell, hoveredDoorId);
+			for (int offsetX = -1; offsetX <= 1; offsetX++)
+			{
+				candidateBuildCells.Add(officerBuildCell + new Vector2I(offsetX, offsetY));
+			}
 		}
 
-		Vector2I[] directions =
+		foreach (Vector2I candidate in candidateBuildCells
+			.Distinct()
+			.Where(cell => _roomBuilder.TryGetDoorIdAtCell(cell, out string _) && IsStructureCellVisible(cell))
+			.OrderByDescending(cell => cell == hoveredBuildCell)
+			.ThenBy(cell => GetInteractionDistanceToBuildCell(officer.CurrentCell, cell)))
 		{
-			new Vector2I(1, 0),
-			new Vector2I(-1, 0),
-			new Vector2I(0, 1),
-			new Vector2I(0, -1)
-		};
-		Vector2I officerBuildCell = GetBuildCell(officer.CurrentCell);
-		foreach (Vector2I direction in directions)
-		{
-			Vector2I candidate = officerBuildCell + direction;
-			if (_roomBuilder.TryGetDoorIdAtCell(candidate, out string adjacentDoorId) && !string.IsNullOrWhiteSpace(adjacentDoorId))
+			if (_roomBuilder.TryGetDoorIdAtCell(candidate, out string doorId)
+				&& !string.IsNullOrWhiteSpace(doorId)
+				&& TryHandleDirectDoorInteraction(officer, candidate, doorId))
 			{
-				return TryHandleDirectDoorInteraction(officer, candidate, adjacentDoorId);
+				return true;
 			}
 		}
 
@@ -2225,20 +2345,20 @@ public partial class MissionMap : Node2D
 	{
 		if (interaction.LogicRole == "terminal")
 		{
-			return GetTileDistance(officerCell, GetMovementCell(interaction.Cell));
+			return GetInteractionDistanceToBuildCell(officerCell, interaction.Cell);
 		}
 
 		if (interaction.LogicRole == "door")
 		{
-			return GetTileDistance(officerCell, GetMovementCell(interaction.Cell));
+			return GetInteractionDistanceToBuildCell(officerCell, interaction.Cell);
 		}
 
 		return GetBuildCell(officerCell) == interaction.Cell ? 0 : int.MaxValue;
 	}
 
-	private Vector2I? FindBestInteractionApproachCell(OfficerPawn officer, MissionRoomBuilder.MarkerPlacement interaction)
+	private Vector2I? FindBestInteractionApproachCell(OfficerPawn officer, MissionRoomBuilder.MarkerPlacement interaction, IReadOnlyCollection<string> ignoredOfficerIds = null)
 	{
-		if (_roomBuilder == null)
+		if (_roomBuilder == null || officer == null || interaction == null)
 		{
 			return null;
 		}
@@ -2246,11 +2366,13 @@ public partial class MissionMap : Node2D
 		Vector2I interactionCell = GetMovementCell(interaction.Cell);
 		List<Vector2I> candidates = _roomBuilder.GetReachableMovementCells(interactionCell, 1)
 			.Where(candidate => _roomBuilder.IsWalkableMovementCell(candidate))
+			.Where(candidate => !IsMovementCellBlockedByProp(candidate))
+			.Where(candidate => !IsCellOccupiedByLivingActor(candidate, officer, null, ignoredOfficerIds))
 			.ToList();
 
 		foreach (Vector2I candidate in candidates.Distinct())
 		{
-			if (_roomBuilder.TryGetMovementPath(officer.CurrentCell, candidate, out List<Vector2I> _))
+			if (TryGetTraversableMovementPath(officer.CurrentCell, candidate, officer, null, ignoredOfficerIds, out List<Vector2I> _))
 			{
 				return candidate;
 			}
@@ -2382,6 +2504,35 @@ public partial class MissionMap : Node2D
 		return distance <= interactionRange;
 	}
 
+	private Vector2I? FindBestPropApproachCell(OfficerPawn officer, MissionProp prop, IReadOnlyCollection<string> ignoredOfficerIds = null)
+	{
+		if (officer == null || prop == null || _roomBuilder == null)
+		{
+			return null;
+		}
+
+		Vector2I propBuildCell = GetPropCell(prop);
+		Vector2I propMovementCell = GetMovementCell(propBuildCell);
+		int interactionRange = Mathf.Max(1, prop.Definition?.InteractionRange ?? 1);
+
+		List<Vector2I> candidates = _roomBuilder.GetReachableMovementCells(propMovementCell, interactionRange)
+			.Where(candidate => GetBuildCell(candidate) != propBuildCell)
+			.Where(candidate => _roomBuilder.IsWalkableMovementCell(candidate))
+			.Where(candidate => !IsMovementCellBlockedByProp(candidate))
+			.Where(candidate => !IsCellOccupiedByLivingActor(candidate, officer, null, ignoredOfficerIds))
+			.ToList();
+
+		foreach (Vector2I candidate in candidates.Distinct().OrderBy(candidate => GetTileDistance(candidate, propMovementCell)))
+		{
+			if (TryGetTraversableMovementPath(officer.CurrentCell, candidate, officer, null, ignoredOfficerIds, out List<Vector2I> _))
+			{
+				return candidate;
+			}
+		}
+
+		return null;
+	}
+
 	private Vector2I? FindBestNpcApproachCell(OfficerPawn officer, MissionNpcPawn npc)
 	{
 		if (officer == null || npc == null || _roomBuilder == null)
@@ -2395,7 +2546,7 @@ public partial class MissionMap : Node2D
 
 		foreach (Vector2I candidate in candidates.Distinct())
 		{
-			if (_roomBuilder.TryGetMovementPath(officer.CurrentCell, candidate, out List<Vector2I> _))
+			if (TryGetTraversableMovementPath(officer.CurrentCell, candidate, officer, null, null, out List<Vector2I> _))
 			{
 				return candidate;
 			}
@@ -2521,6 +2672,41 @@ public partial class MissionMap : Node2D
 		return normalizedCell ?? requestedCell;
 	}
 
+	private bool IsMovementCellBlockedByProp(Vector2I movementCell, string ignoredPropInstanceId = null)
+	{
+		Vector2I buildCell = GetBuildCell(movementCell);
+		if (_blockedStaticPropCells.Contains(buildCell))
+		{
+			return true;
+		}
+
+		if (_missionPropsByCell.TryGetValue(buildCell, out MissionProp prop)
+			&& prop != null
+			&& (string.IsNullOrWhiteSpace(ignoredPropInstanceId) || prop.PropInstanceId != ignoredPropInstanceId))
+		{
+			return true;
+		}
+
+		return false;
+	}
+
+	private bool TryGetMissionPropAtMovementCell(Vector2I movementCell, out MissionProp prop)
+	{
+		return _missionPropsByCell.TryGetValue(GetBuildCell(movementCell), out prop) && prop != null && !prop.IsConsumed;
+	}
+
+	private bool TryGetStaticInteractionAtMovementCell(Vector2I movementCell, out MissionRoomBuilder.MarkerPlacement interaction)
+	{
+		interaction = _roomBuilder?.GetInteractPlacementsAtCell(GetBuildCell(movementCell))
+			.Where(placement =>
+				(placement.LogicRole != "door" && string.Equals(placement.TriggerMode, "interact", System.StringComparison.OrdinalIgnoreCase))
+				|| placement.LogicRole == "terminal")
+			.Where(placement => !HasRuntimePropForPlacement(placement))
+			.OrderByDescending(placement => placement.LogicRole == "terminal")
+			.FirstOrDefault();
+		return interaction != null;
+	}
+
 	private int GetMovementSubdivision()
 	{
 		return _roomBuilder?.MovementSubdivision ?? 1;
@@ -2534,6 +2720,29 @@ public partial class MissionMap : Node2D
 	private int GetTileDistance(Vector2I a, Vector2I b)
 	{
 		return Mathf.CeilToInt(GetMovementStepDistance(a, b) / (float)GetMovementSubdivision());
+	}
+
+	private int GetInteractionDistanceToBuildCell(Vector2I officerCell, Vector2I buildCell)
+	{
+		if (_roomBuilder == null)
+		{
+			return GetTileDistance(officerCell, GetMovementCell(buildCell));
+		}
+
+		int minimumDistance = int.MaxValue;
+		foreach (Vector2I movementCell in _roomBuilder.GetMovementCellsForBuildCell(buildCell))
+		{
+			if (!_roomBuilder.IsWalkableMovementCell(movementCell))
+			{
+				continue;
+			}
+
+			minimumDistance = Mathf.Min(minimumDistance, GetTileDistance(officerCell, movementCell));
+		}
+
+		return minimumDistance == int.MaxValue
+			? GetTileDistance(officerCell, GetMovementCell(buildCell))
+			: minimumDistance;
 	}
 
 	private int GetMovementCostForPathSteps(int stepCount)
@@ -2869,7 +3078,7 @@ public partial class MissionMap : Node2D
 		};
 		List<Vector2I> candidateCells = directions
 			.Select(direction => hostile.CurrentCell + direction)
-			.Where(cell => _roomBuilder.IsWalkableMovementCell(cell) && !IsCellOccupiedByLivingActor(cell, null, hostile))
+			.Where(cell => _roomBuilder.IsWalkableMovementCell(cell) && !IsMovementCellBlockedByProp(cell) && !IsCellOccupiedByLivingActor(cell, null, hostile))
 			.OrderBy(_ => _combatRng.Randi())
 			.ToList();
 		if (candidateCells.Count == 0)
@@ -2878,7 +3087,7 @@ public partial class MissionMap : Node2D
 		}
 
 		Vector2I destinationCell = candidateCells[0];
-		if (!_roomBuilder.TryGetMovementPath(hostile.CurrentCell, destinationCell, out List<Vector2I> pathCells) || pathCells.Count <= 1)
+		if (!TryGetTraversableMovementPath(hostile.CurrentCell, destinationCell, null, hostile, null, out List<Vector2I> pathCells) || pathCells.Count <= 1)
 		{
 			return false;
 		}
@@ -3183,7 +3392,7 @@ public partial class MissionMap : Node2D
 		}
 
 		Vector2I? approachCell = FindBestCombatApproachCell(enemy.CurrentCell, targetOfficer.CurrentCell, enemy.AttackRange, enemy.CurrentActions, null, enemy);
-		if (!approachCell.HasValue || !_roomBuilder.TryGetMovementPath(enemy.CurrentCell, approachCell.Value, out List<Vector2I> pathCells) || pathCells.Count <= 1)
+		if (!approachCell.HasValue || !TryGetTraversableMovementPath(enemy.CurrentCell, approachCell.Value, null, enemy, null, out List<Vector2I> pathCells) || pathCells.Count <= 1)
 		{
 			return false;
 		}
@@ -3232,12 +3441,12 @@ public partial class MissionMap : Node2D
 		List<(Vector2I Cell, int PathCost, int TargetDistance)> candidates = new List<(Vector2I, int, int)>();
 		foreach (Vector2I candidate in _roomBuilder.GetReachableMovementCells(targetCell, attackRange))
 		{
-			if (candidate == targetCell || !_roomBuilder.IsWalkableMovementCell(candidate) || IsCellOccupiedByLivingActor(candidate, movingOfficer, movingEnemy))
+			if (candidate == targetCell || !_roomBuilder.IsWalkableMovementCell(candidate) || IsMovementCellBlockedByProp(candidate) || IsCellOccupiedByLivingActor(candidate, movingOfficer, movingEnemy))
 			{
 				continue;
 			}
 
-			if (!_roomBuilder.TryGetMovementPath(startCell, candidate, out List<Vector2I> pathCells))
+			if (!TryGetTraversableMovementPath(startCell, candidate, movingOfficer, movingEnemy, null, out List<Vector2I> pathCells))
 			{
 				continue;
 			}
@@ -3599,6 +3808,101 @@ public partial class MissionMap : Node2D
 		return GetAliveOfficers()
 			.OrderBy(officer => GetTileDistance(fromCell, officer.CurrentCell))
 			.FirstOrDefault();
+	}
+
+	private bool TryGetTraversableMovementPath(
+		Vector2I startCell,
+		Vector2I targetCell,
+		OfficerPawn ignoreOfficer,
+		MissionNpcPawn ignoreEnemy,
+		IReadOnlyCollection<string> ignoredOfficerIds,
+		out List<Vector2I> path)
+	{
+		path = new List<Vector2I>();
+		if (_roomBuilder == null)
+		{
+			return false;
+		}
+
+		bool startIsWalkable = _roomBuilder.IsWalkableMovementCell(startCell) && !IsMovementCellBlockedByProp(startCell);
+		bool targetIsWalkable = _roomBuilder.IsWalkableMovementCell(targetCell) && !IsMovementCellBlockedByProp(targetCell);
+		if (!startIsWalkable || !targetIsWalkable)
+		{
+			return false;
+		}
+
+		if (startCell == targetCell)
+		{
+			path.Add(startCell);
+			return true;
+		}
+
+		Queue<Vector2I> frontier = new Queue<Vector2I>();
+		Dictionary<Vector2I, Vector2I> cameFrom = new Dictionary<Vector2I, Vector2I>();
+		Vector2I[] directions =
+		{
+			new Vector2I(1, 0),
+			new Vector2I(-1, 0),
+			new Vector2I(0, 1),
+			new Vector2I(0, -1)
+		};
+
+		frontier.Enqueue(startCell);
+		cameFrom[startCell] = startCell;
+
+		while (frontier.Count > 0)
+		{
+			Vector2I current = frontier.Dequeue();
+			foreach (Vector2I direction in directions)
+			{
+				Vector2I next = current + direction;
+				if (cameFrom.ContainsKey(next))
+				{
+					continue;
+				}
+
+				if (!_roomBuilder.IsWalkableMovementCell(next) || IsMovementCellBlockedByProp(next))
+				{
+					continue;
+				}
+
+				if (next != targetCell && IsCellOccupiedByLivingActor(next, ignoreOfficer, ignoreEnemy, ignoredOfficerIds))
+				{
+					continue;
+				}
+
+				if (!_roomBuilder.TryGetMovementPath(current, next, out List<Vector2I> localStepPath) || localStepPath.Count <= 1)
+				{
+					continue;
+				}
+
+				cameFrom[next] = current;
+				if (next == targetCell)
+				{
+					path = ReconstructMovementPath(cameFrom, startCell, targetCell);
+					return true;
+				}
+
+				frontier.Enqueue(next);
+			}
+		}
+
+		return false;
+	}
+
+	private static List<Vector2I> ReconstructMovementPath(Dictionary<Vector2I, Vector2I> cameFrom, Vector2I startCell, Vector2I targetCell)
+	{
+		List<Vector2I> path = new List<Vector2I>();
+		Vector2I current = targetCell;
+		path.Add(current);
+		while (current != startCell)
+		{
+			current = cameFrom[current];
+			path.Add(current);
+		}
+
+		path.Reverse();
+		return path;
 	}
 
 	private void AppendCombatLog(string message)
@@ -4031,6 +4335,7 @@ public partial class MissionMap : Node2D
 	{
 		_missionPropsByCell.Clear();
 		_propPlacementsByInstanceId.Clear();
+		_blockedStaticPropCells.Clear();
 		if (_roomBuilder == null || _isoWorld == null)
 		{
 			return;
@@ -4080,6 +4385,41 @@ public partial class MissionMap : Node2D
 			runtimePropLayer.AddChild(prop);
 			_missionPropsByCell[placement.Cell] = prop;
 			_propPlacementsByInstanceId[prop.PropInstanceId] = placement;
+		}
+
+		RefreshBlockedPropCells();
+	}
+
+	private void RefreshBlockedPropCells()
+	{
+		_blockedStaticPropCells.Clear();
+		Node2D propLayer = _isoWorld?.GetNodeOrNull<Node2D>("PropLayer");
+		if (propLayer == null)
+		{
+			return;
+		}
+
+		foreach (Node child in propLayer.GetChildren())
+		{
+			if (child is not Sprite2D sprite)
+			{
+				continue;
+			}
+
+			string tileId = sprite.GetMeta("tile_id", string.Empty).AsString();
+			if (string.IsNullOrWhiteSpace(tileId) || tileId.StartsWith("door_", System.StringComparison.OrdinalIgnoreCase))
+			{
+				continue;
+			}
+
+			int column = sprite.GetMeta("column", int.MinValue).AsInt32();
+			int row = sprite.GetMeta("row", int.MinValue).AsInt32();
+			if (column == int.MinValue || row == int.MinValue)
+			{
+				continue;
+			}
+
+			_blockedStaticPropCells.Add(new Vector2I(column, row));
 		}
 	}
 

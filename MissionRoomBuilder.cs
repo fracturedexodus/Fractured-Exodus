@@ -194,7 +194,7 @@ public partial class MissionRoomBuilder : Node
 
 	public bool IsWalkableMovementCell(Vector2I cell)
 	{
-		return _movementCells.Contains(cell) && !_closedDoorMovementCells.Contains(cell);
+		return _movementCells.Contains(cell);
 	}
 
 	public bool IsDoorCell(Vector2I cell)
@@ -356,9 +356,7 @@ public partial class MissionRoomBuilder : Node
 	public bool TryGetMovementPath(Vector2I startCell, Vector2I targetCell, out List<Vector2I> path)
 	{
 		path = new List<Vector2I>();
-		bool startIsClosedDoor = _closedDoorMovementCells.Contains(startCell);
-		bool targetIsClosedDoor = _closedDoorMovementCells.Contains(targetCell);
-		if ((!IsWalkableMovementCell(startCell) && !startIsClosedDoor) || (!IsWalkableMovementCell(targetCell) && !targetIsClosedDoor))
+		if (!IsWalkableMovementCell(startCell) || !IsWalkableMovementCell(targetCell))
 		{
 			return false;
 		}
@@ -393,9 +391,7 @@ public partial class MissionRoomBuilder : Node
 					continue;
 				}
 
-				bool nextIsWalkable = IsWalkableMovementCell(next);
-				bool nextIsClosedDoorTarget = next == targetCell && _closedDoorMovementCells.Contains(next);
-				if (!nextIsWalkable && !nextIsClosedDoorTarget)
+				if (!IsWalkableMovementCell(next))
 				{
 					continue;
 				}
@@ -461,7 +457,7 @@ public partial class MissionRoomBuilder : Node
 	public HashSet<Vector2I> GetReachableMovementCells(Vector2I startCell, int maxTiles)
 	{
 		HashSet<Vector2I> reachable = new HashSet<Vector2I>();
-		if ((!IsWalkableMovementCell(startCell) && !_closedDoorMovementCells.Contains(startCell)) || maxTiles < 0)
+		if (!IsWalkableMovementCell(startCell) || maxTiles < 0)
 		{
 			return reachable;
 		}
@@ -869,14 +865,7 @@ public partial class MissionRoomBuilder : Node
 	{
 		foreach (Vector2I movementCell in GetMovementCellsForBuildCell(buildCell))
 		{
-			if (closed)
-			{
-				_closedDoorMovementCells.Add(movementCell);
-			}
-			else
-			{
-				_closedDoorMovementCells.Remove(movementCell);
-			}
+			_closedDoorMovementCells.Remove(movementCell);
 		}
 	}
 
