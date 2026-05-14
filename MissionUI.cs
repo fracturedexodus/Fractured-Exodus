@@ -38,12 +38,19 @@ public partial class MissionUI : CanvasLayer
 	[Signal]
 	public delegate void StoryEventConfirmedEventHandler();
 
+	[Signal]
+	public delegate void ConfirmationAcceptedEventHandler();
+
+	[Signal]
+	public delegate void ConfirmationCancelledEventHandler();
+
 	public Label TitleLabel { get; private set; }
 	public Label ObjectiveLabel { get; private set; }
 	public Label SelectedOfficerLabel { get; private set; }
 	public Label PromptLabel { get; private set; }
 	public bool IsExtractionPromptVisible => _extractionPromptPanel?.Visible ?? false;
 	public bool IsStoryEventVisible => _storyEventPanel?.Visible ?? false;
+	public bool IsConfirmationVisible => _confirmationPromptPanel?.Visible ?? false;
 
 	private Control _uiRoot;
 	private PanelContainer _legacyActionPanel;
@@ -70,6 +77,11 @@ public partial class MissionUI : CanvasLayer
 	private TextureRect _storyEventImage;
 	private RichTextLabel _storyEventDescription;
 	private Button _storyEventConfirmButton;
+	private PanelContainer _confirmationPromptPanel;
+	private Label _confirmationPromptTitleLabel;
+	private Label _confirmationPromptBodyLabel;
+	private Button _confirmationPromptConfirmButton;
+	private Button _confirmationPromptCancelButton;
 	private ColorRect _gameOverPanel;
 	private Label _gameOverLabel;
 	private Button _gameOverReturnButton;
@@ -94,6 +106,7 @@ public partial class MissionUI : CanvasLayer
 		BuildCombatLog();
 		BuildHoverSummary();
 		BuildStoryEventPanel();
+		BuildConfirmationPrompt();
 		BuildGameOverPanel();
 	}
 
@@ -357,6 +370,36 @@ public partial class MissionUI : CanvasLayer
 		}
 	}
 
+	public void ShowConfirmationPrompt(string title, string body, string confirmText, string cancelText)
+	{
+		if (_confirmationPromptPanel == null || _confirmationPromptTitleLabel == null || _confirmationPromptBodyLabel == null)
+		{
+			return;
+		}
+
+		_confirmationPromptTitleLabel.Text = string.IsNullOrWhiteSpace(title) ? "CONFIRM ACTION" : title.ToUpperInvariant();
+		_confirmationPromptBodyLabel.Text = body ?? string.Empty;
+		if (_confirmationPromptConfirmButton != null)
+		{
+			_confirmationPromptConfirmButton.Text = string.IsNullOrWhiteSpace(confirmText) ? "CONFIRM" : confirmText.ToUpperInvariant();
+		}
+
+		if (_confirmationPromptCancelButton != null)
+		{
+			_confirmationPromptCancelButton.Text = string.IsNullOrWhiteSpace(cancelText) ? "CANCEL" : cancelText.ToUpperInvariant();
+		}
+
+		_confirmationPromptPanel.Visible = true;
+	}
+
+	public void HideConfirmationPrompt()
+	{
+		if (_confirmationPromptPanel != null)
+		{
+			_confirmationPromptPanel.Visible = false;
+		}
+	}
+
 	private void BuildExtractionPrompt()
 	{
 		if (_uiRoot == null)
@@ -615,6 +658,88 @@ public partial class MissionUI : CanvasLayer
 		};
 		_storyEventConfirmButton.Pressed += () => EmitSignal(SignalName.StoryEventConfirmed);
 		content.AddChild(_storyEventConfirmButton);
+	}
+
+	private void BuildConfirmationPrompt()
+	{
+		if (_uiRoot == null)
+		{
+			return;
+		}
+
+		_confirmationPromptPanel = new PanelContainer
+		{
+			Visible = false
+		};
+		_confirmationPromptPanel.SetAnchorsPreset(Control.LayoutPreset.Center);
+		_confirmationPromptPanel.OffsetLeft = -280f;
+		_confirmationPromptPanel.OffsetTop = -140f;
+		_confirmationPromptPanel.OffsetRight = 280f;
+		_confirmationPromptPanel.OffsetBottom = 140f;
+		_uiRoot.AddChild(_confirmationPromptPanel);
+
+		StyleBoxFlat panelStyle = new StyleBoxFlat
+		{
+			BgColor = new Color(0.01f, 0.02f, 0.04f, 0.98f),
+			BorderColor = new Color(0.32f, 0.9f, 1f, 0.85f),
+			BorderWidthLeft = 2,
+			BorderWidthTop = 2,
+			BorderWidthRight = 2,
+			BorderWidthBottom = 2,
+			CornerRadiusTopLeft = 10,
+			CornerRadiusTopRight = 10,
+			CornerRadiusBottomLeft = 10,
+			CornerRadiusBottomRight = 10
+		};
+		_confirmationPromptPanel.AddThemeStyleboxOverride("panel", panelStyle);
+
+		MarginContainer margin = new MarginContainer();
+		margin.AddThemeConstantOverride("margin_left", 18);
+		margin.AddThemeConstantOverride("margin_top", 18);
+		margin.AddThemeConstantOverride("margin_right", 18);
+		margin.AddThemeConstantOverride("margin_bottom", 18);
+		_confirmationPromptPanel.AddChild(margin);
+
+		VBoxContainer content = new VBoxContainer();
+		content.AddThemeConstantOverride("separation", 12);
+		margin.AddChild(content);
+
+		_confirmationPromptTitleLabel = new Label
+		{
+			Text = "CONFIRM ACTION",
+			HorizontalAlignment = HorizontalAlignment.Center
+		};
+		_confirmationPromptTitleLabel.AddThemeFontSizeOverride("font_size", 24);
+		_confirmationPromptTitleLabel.AddThemeColorOverride("font_color", new Color(0.82f, 0.96f, 1f));
+		content.AddChild(_confirmationPromptTitleLabel);
+
+		_confirmationPromptBodyLabel = new Label
+		{
+			AutowrapMode = TextServer.AutowrapMode.WordSmart
+		};
+		content.AddChild(_confirmationPromptBodyLabel);
+
+		HBoxContainer buttons = new HBoxContainer();
+		buttons.AddThemeConstantOverride("separation", 12);
+		content.AddChild(buttons);
+
+		_confirmationPromptCancelButton = new Button
+		{
+			Text = "CANCEL",
+			CustomMinimumSize = new Vector2(0f, 46f),
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+		};
+		_confirmationPromptCancelButton.Pressed += () => EmitSignal(SignalName.ConfirmationCancelled);
+		buttons.AddChild(_confirmationPromptCancelButton);
+
+		_confirmationPromptConfirmButton = new Button
+		{
+			Text = "CONFIRM",
+			CustomMinimumSize = new Vector2(0f, 46f),
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+		};
+		_confirmationPromptConfirmButton.Pressed += () => EmitSignal(SignalName.ConfirmationAccepted);
+		buttons.AddChild(_confirmationPromptConfirmButton);
 	}
 
 	private void BuildGameOverPanel()

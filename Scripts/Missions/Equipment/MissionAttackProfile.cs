@@ -1,5 +1,6 @@
 public sealed class MissionAttackProfile
 {
+	public string WeaponId { get; init; } = string.Empty;
 	public string WeaponName { get; init; } = "Unarmed";
 	public bool IsMelee { get; init; }
 	public int Range { get; init; } = 1;

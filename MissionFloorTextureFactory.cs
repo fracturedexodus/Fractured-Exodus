@@ -6,7 +6,6 @@ public static class MissionFloorTextureFactory
 	public static readonly Vector2 TileSize = new Vector2(226f, 133f);
 	private const int Width = 226;
 	private const int Height = 133;
-	private static readonly Dictionary<string, Texture2D> Cache = new Dictionary<string, Texture2D>();
 	private static readonly Dictionary<string, string> TexturePaths = new Dictionary<string, string>
 	{
 		{ "floor_standard", "res://Assets/Missions/BlackSiteRelay/GeminiSheetSet/floors/floor_standard_226.png" },
@@ -20,21 +19,8 @@ public static class MissionFloorTextureFactory
 
 	public static Texture2D GetTexture(string tileId)
 	{
-		if (Cache.TryGetValue(tileId, out Texture2D texture))
-		{
-			return texture;
-		}
-
-		texture = LoadRenderedTexture(tileId);
-		if (texture != null)
-		{
-			Cache[tileId] = texture;
-			return texture;
-		}
-
-		texture = CreateFallbackTexture(tileId);
-		Cache[tileId] = texture;
-		return texture;
+		Texture2D texture = LoadRenderedTexture(tileId);
+		return texture ?? CreateFallbackTexture(tileId);
 	}
 
 	private static Texture2D LoadRenderedTexture(string tileId)
@@ -56,7 +42,7 @@ public static class MissionFloorTextureFactory
 			return null;
 		}
 
-		Image image = new Image();
+		using Image image = new Image();
 		if (image.Load(absolutePath) != Error.Ok)
 		{
 			return null;
@@ -68,7 +54,7 @@ public static class MissionFloorTextureFactory
 	private static Texture2D CreateFallbackTexture(string tileId)
 	{
 		(Color baseColor, Color lineColor, Color accentColor) = GetPalette(tileId);
-		Image image = Image.CreateEmpty(Width, Height, false, Image.Format.Rgba8);
+		using Image image = Image.CreateEmpty(Width, Height, false, Image.Format.Rgba8);
 		Vector2 center = new Vector2(Width * 0.5f, Height * 0.5f);
 		float halfWidth = Width * 0.5f;
 		float halfHeight = Height * 0.5f;

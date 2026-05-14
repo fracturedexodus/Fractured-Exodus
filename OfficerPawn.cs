@@ -41,6 +41,7 @@ public partial class OfficerPawn : Node2D
 	public int BonusShieldDamage { get; private set; }
 	public int ShieldPiercingDamage { get; private set; }
 	public int InitiativeBonus { get; private set; } = 1;
+	public string WeaponId { get; private set; } = string.Empty;
 	public string WeaponName { get; private set; } = "Sidearm";
 	public string ShieldName { get; private set; } = "Field Aegis";
 	public int ShieldRechargePerTurn { get; private set; } = 1;
@@ -220,10 +221,29 @@ public partial class OfficerPawn : Node2D
 		};
 	}
 
+	public int RestoreHealthToFull()
+	{
+		if (IsDead)
+		{
+			return 0;
+		}
+
+		int restoredAmount = Mathf.Max(0, MaxHP - CurrentHP);
+		if (restoredAmount <= 0)
+		{
+			return 0;
+		}
+
+		CurrentHP = MaxHP;
+		EmitSignal(SignalName.CombatStateChanged, this);
+		return restoredAmount;
+	}
+
 	public MissionAttackProfile GetAttackProfile()
 	{
 		return new MissionAttackProfile
 		{
+			WeaponId = WeaponId,
 			WeaponName = WeaponName,
 			IsMelee = UsesMeleeWeapon,
 			Range = AttackRange,
@@ -435,6 +455,7 @@ public partial class OfficerPawn : Node2D
 		MissionWeaponDefinition weapon = OfficerMissionLoadoutService.GetEquippedWeapon(officer);
 		if (weapon != null)
 		{
+			WeaponId = weapon.WeaponId ?? string.Empty;
 			WeaponName = string.IsNullOrWhiteSpace(weapon.DisplayName) ? WeaponName : weapon.DisplayName;
 			UsesMeleeWeapon = weapon.IsMelee;
 			AttackRange = Mathf.Max(1, weapon.AttackRange);

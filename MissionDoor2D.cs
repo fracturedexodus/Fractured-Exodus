@@ -5,6 +5,8 @@ public partial class MissionDoor2D : Node2D
 	private Sprite2D _frameSprite;
 	private Sprite2D _leftPanel;
 	private Sprite2D _rightPanel;
+	private AtlasTexture _legacyLeftAtlas;
+	private AtlasTexture _legacyRightAtlas;
 	private Vector2 _closedLeftPosition;
 	private Vector2 _closedRightPosition;
 	private Vector2 _openLeftPosition;
@@ -87,6 +89,9 @@ public partial class MissionDoor2D : Node2D
 
 	private bool TryBuildLayeredDoor(Texture2D sourceTexture, Vector2 scale)
 	{
+		_legacyLeftAtlas = null;
+		_legacyRightAtlas = null;
+
 		string sourcePath = sourceTexture?.ResourcePath ?? string.Empty;
 		if (string.IsNullOrEmpty(sourcePath) || !sourcePath.EndsWith("_closed.png"))
 		{
@@ -151,12 +156,12 @@ public partial class MissionDoor2D : Node2D
 		int fullHeight = (int)sourceTexture.GetHeight();
 		int halfWidth = fullWidth / 2;
 
-		AtlasTexture leftAtlas = new AtlasTexture
+		_legacyLeftAtlas = new AtlasTexture
 		{
 			Atlas = sourceTexture,
 			Region = new Rect2(0, 0, halfWidth, fullHeight)
 		};
-		AtlasTexture rightAtlas = new AtlasTexture
+		_legacyRightAtlas = new AtlasTexture
 		{
 			Atlas = sourceTexture,
 			Region = new Rect2(halfWidth, 0, fullWidth - halfWidth, fullHeight)
@@ -164,13 +169,13 @@ public partial class MissionDoor2D : Node2D
 
 		_leftPanel = new Sprite2D
 		{
-			Texture = leftAtlas,
+			Texture = _legacyLeftAtlas,
 			Centered = true,
 			Scale = scale
 		};
 		_rightPanel = new Sprite2D
 		{
-			Texture = rightAtlas,
+			Texture = _legacyRightAtlas,
 			Centered = true,
 			Scale = scale
 		};

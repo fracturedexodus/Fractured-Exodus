@@ -122,6 +122,7 @@ public partial class MissionSceneBuilder : Node2D
 	private readonly Dictionary<string, PropDefinitionPreview> _propDefinitionPreviewCache = new Dictionary<string, PropDefinitionPreview>();
 	private readonly Dictionary<string, NpcDefinitionPreview> _npcDefinitionPreviewCache = new Dictionary<string, NpcDefinitionPreview>();
 	private readonly List<ValidationIssueEntry> _validationEntries = new List<ValidationIssueEntry>();
+	private readonly Dictionary<string, Texture2D> _tileIconCache = new Dictionary<string, Texture2D>();
 	private readonly Dictionary<string, Texture2D> _markerIconCache = new Dictionary<string, Texture2D>();
 	private readonly Dictionary<string, bool> _paletteSectionExpanded = new Dictionary<string, bool>();
 	private Polygon2D _hoverDiamond;
@@ -341,6 +342,20 @@ public partial class MissionSceneBuilder : Node2D
 
 			if (TryGetSelectedPlacedSprite(out _))
 			{
+				if (keyEvent.Keycode == Key.F)
+				{
+					ToggleSelectedPropFlip(horizontal: true);
+					GetViewport().SetInputAsHandled();
+					return;
+				}
+
+				if (keyEvent.Keycode == Key.X)
+				{
+					ToggleSelectedPropFlip(horizontal: false);
+					GetViewport().SetInputAsHandled();
+					return;
+				}
+
 				if (keyEvent.Keycode == Key.Left)
 				{
 					AdjustSelectedTile(new Vector2(-TileNudgeStep, 0f), 0f);
@@ -3805,6 +3820,8 @@ public partial class MissionSceneBuilder : Node2D
 		sprite.SetMeta("offset_x", 0f);
 		sprite.SetMeta("offset_y", 0f);
 		sprite.SetMeta("rotation_degrees", 0f);
+		sprite.SetMeta("flip_h", false);
+		sprite.SetMeta("flip_v", false);
 		sprite.SetMeta("base_modulate", Colors.White);
 		ApplyDefaultTileLogic(sprite, definition, column, row);
 		sprite.AddChild(CreateSelectionOutline(GetSpriteBoundsSize(sprite)));
@@ -3829,6 +3846,8 @@ public partial class MissionSceneBuilder : Node2D
 		sprite.SetMeta("offset_x", 0f);
 		sprite.SetMeta("offset_y", 0f);
 		sprite.SetMeta("rotation_degrees", 0f);
+		sprite.SetMeta("flip_h", false);
+		sprite.SetMeta("flip_v", false);
 		sprite.SetMeta("base_modulate", preview.Exists ? Colors.White : new Color(1f, 0.76f, 0.76f, 1f));
 		ApplyDefaultPlacedPropLogic(sprite, preview, propDefinitionPath);
 		sprite.AddChild(CreateSelectionOutline(GetSpriteBoundsSize(sprite)));
@@ -3844,6 +3863,11 @@ public partial class MissionSceneBuilder : Node2D
 		{
 			defaultRole = "door";
 			defaultTargetId = $"{definition.Id}_{column}_{row}";
+			defaultTriggerMode = "interact";
+		}
+		else if (definition.Id == "medical_station")
+		{
+			defaultRole = "prop";
 			defaultTriggerMode = "interact";
 		}
 		else if (IsTerminalTileId(definition.Id))
@@ -3882,6 +3906,8 @@ public partial class MissionSceneBuilder : Node2D
 		sprite.SetMeta("offset_x", 0f);
 		sprite.SetMeta("offset_y", 0f);
 		sprite.SetMeta("rotation_degrees", 0f);
+		sprite.SetMeta("flip_h", false);
+		sprite.SetMeta("flip_v", false);
 		sprite.SetMeta("base_modulate", definition.Color);
 		ApplyDefaultMarkerLogic(sprite, definition);
 		sprite.AddChild(CreateSelectionOutline(GetSpriteBoundsSize(sprite)));
@@ -4124,6 +4150,22 @@ public partial class MissionSceneBuilder : Node2D
 		SetStatus($"Adjusted tile: offset ({offsetX:0},{offsetY:0}) rotation {rotationDegrees:0}");
 	}
 
+	private void ToggleSelectedPropFlip(bool horizontal)
+	{
+		if (!TryGetSelectedPlacedSprite(out Sprite2D selectedSprite) || !IsFlippablePropSprite(selectedSprite))
+		{
+			return;
+		}
+
+		string key = horizontal ? "flip_h" : "flip_v";
+		bool nextValue = !selectedSprite.GetMeta(key, false).AsBool();
+		selectedSprite.SetMeta(key, nextValue);
+		ApplySpriteFlipState(selectedSprite);
+
+		string axisLabel = horizontal ? "Y-axis" : "X-axis";
+		SetStatus($"Flipped selected prop across the {axisLabel}.");
+	}
+
 	private void ResetSelectedTileAdjustment()
 	{
 		if (!TryGetSelectedPlacedSprite(out Sprite2D selectedSprite))
@@ -4179,7 +4221,9 @@ public partial class MissionSceneBuilder : Node2D
 					{ "row", sprite.GetMeta("row", 0).AsInt32() },
 					{ "offset_x", sprite.GetMeta("offset_x", 0f).AsSingle() },
 					{ "offset_y", sprite.GetMeta("offset_y", 0f).AsSingle() },
-					{ "rotation_degrees", sprite.GetMeta("rotation_degrees", 0f).AsSingle() }
+					{ "rotation_degrees", sprite.GetMeta("rotation_degrees", 0f).AsSingle() },
+					{ "flip_h", sprite.GetMeta("flip_h", false).AsBool() },
+					{ "flip_v", sprite.GetMeta("flip_v", false).AsBool() }
 				};
 
 				string markerId = sprite.GetMeta("marker_id", "").AsString();
@@ -4259,6 +4303,8 @@ public partial class MissionSceneBuilder : Node2D
 			float offsetX = tile.TryGetValue("offset_x", out Variant offsetXVariant) ? offsetXVariant.AsSingle() : 0f;
 			float offsetY = tile.TryGetValue("offset_y", out Variant offsetYVariant) ? offsetYVariant.AsSingle() : 0f;
 			float rotationDegrees = tile.TryGetValue("rotation_degrees", out Variant rotationVariant) ? rotationVariant.AsSingle() : 0f;
+			bool flipH = tile.TryGetValue("flip_h", out Variant flipHVariant) && flipHVariant.AsBool();
+			bool flipV = tile.TryGetValue("flip_v", out Variant flipVVariant) && flipVVariant.AsBool();
 			if (itemType == "background")
 			{
 				loadedBackgroundId = tile.TryGetValue("background_id", out Variant backgroundVariant)
@@ -4278,6 +4324,8 @@ public partial class MissionSceneBuilder : Node2D
 				marker.SetMeta("offset_x", offsetX);
 				marker.SetMeta("offset_y", offsetY);
 				marker.SetMeta("rotation_degrees", rotationDegrees);
+				marker.SetMeta("flip_h", flipH);
+				marker.SetMeta("flip_v", flipV);
 				marker.SetMeta("logic_label", tile.TryGetValue("logic_label", out Variant logicLabelVariant) ? logicLabelVariant.AsString() : marker.GetMeta("logic_label", markerDefinition.DisplayName).AsString());
 				marker.SetMeta("logic_target_id", tile.TryGetValue("logic_target_id", out Variant logicTargetVariant) ? logicTargetVariant.AsString() : marker.GetMeta("logic_target_id", markerDefinition.Id).AsString());
 				marker.SetMeta("npc_definition_path", tile.TryGetValue("npc_definition_path", out Variant npcDefinitionVariant) ? npcDefinitionVariant.AsString() : marker.GetMeta("npc_definition_path", string.Empty).AsString());
@@ -4289,6 +4337,7 @@ public partial class MissionSceneBuilder : Node2D
 				marker.SetMeta("logic_notes", tile.TryGetValue("logic_notes", out Variant logicNotesVariant) ? logicNotesVariant.AsString() : string.Empty);
 				marker.SetMeta("prop_definition_path", tile.TryGetValue("prop_definition_path", out Variant propDefinitionVariant) ? propDefinitionVariant.AsString() : string.Empty);
 				marker.RotationDegrees = rotationDegrees;
+				ApplySpriteFlipState(marker);
 				MoveSpriteToCell(marker, column, row);
 				UpdateMarkerCaption(marker);
 				GetPlacementLayer(BuilderLayer.Marker).AddChild(marker);
@@ -4304,6 +4353,8 @@ public partial class MissionSceneBuilder : Node2D
 				placedPropSprite.SetMeta("offset_x", offsetX);
 				placedPropSprite.SetMeta("offset_y", offsetY);
 				placedPropSprite.SetMeta("rotation_degrees", rotationDegrees);
+				placedPropSprite.SetMeta("flip_h", flipH);
+				placedPropSprite.SetMeta("flip_v", flipV);
 				placedPropSprite.SetMeta("logic_role", tile.TryGetValue("logic_role", out Variant placedPropLogicRoleVariant) ? placedPropLogicRoleVariant.AsString() : "prop");
 				placedPropSprite.SetMeta("logic_label", tile.TryGetValue("logic_label", out Variant placedPropLogicLabelVariant) ? placedPropLogicLabelVariant.AsString() : placedPropSprite.GetMeta("logic_label", GetPropDefinitionPreview(placedPropDefinitionPath).DisplayName).AsString());
 				placedPropSprite.SetMeta("logic_target_id", tile.TryGetValue("logic_target_id", out Variant placedPropLogicTargetVariant) ? placedPropLogicTargetVariant.AsString() : string.Empty);
@@ -4316,6 +4367,7 @@ public partial class MissionSceneBuilder : Node2D
 				placedPropSprite.SetMeta("logic_notes", tile.TryGetValue("logic_notes", out Variant placedPropLogicNotesVariant) ? placedPropLogicNotesVariant.AsString() : string.Empty);
 				placedPropSprite.SetMeta("prop_definition_path", placedPropDefinitionPath);
 				placedPropSprite.RotationDegrees = rotationDegrees;
+				ApplySpriteFlipState(placedPropSprite);
 				MoveSpriteToCell(placedPropSprite, column, row);
 				GetPlacementLayer(BuilderLayer.Prop).AddChild(placedPropSprite);
 				continue;
@@ -4330,6 +4382,8 @@ public partial class MissionSceneBuilder : Node2D
 			sprite.SetMeta("offset_x", offsetX);
 			sprite.SetMeta("offset_y", offsetY);
 			sprite.SetMeta("rotation_degrees", rotationDegrees);
+			sprite.SetMeta("flip_h", flipH);
+			sprite.SetMeta("flip_v", flipV);
 			sprite.SetMeta("logic_role", tile.TryGetValue("logic_role", out Variant logicRoleVariant) ? logicRoleVariant.AsString() : sprite.GetMeta("logic_role", string.Empty).AsString());
 			sprite.SetMeta("logic_label", tile.TryGetValue("logic_label", out Variant tileLogicLabelVariant) ? tileLogicLabelVariant.AsString() : sprite.GetMeta("logic_label", definition.DisplayName).AsString());
 			sprite.SetMeta("logic_target_id", tile.TryGetValue("logic_target_id", out Variant tileLogicTargetVariant) ? tileLogicTargetVariant.AsString() : sprite.GetMeta("logic_target_id", string.Empty).AsString());
@@ -4343,6 +4397,7 @@ public partial class MissionSceneBuilder : Node2D
 			sprite.SetMeta("prop_definition_path", tile.TryGetValue("prop_definition_path", out Variant tilePropDefinitionVariant) ? tilePropDefinitionVariant.AsString() : string.Empty);
 			EnsureTileRuntimeDefaults(sprite);
 			sprite.RotationDegrees = rotationDegrees;
+			ApplySpriteFlipState(sprite);
 			MoveSpriteToCell(sprite, column, row);
 			GetPlacementLayer(GetLayerForTile(definition)).AddChild(sprite);
 		}
@@ -5234,6 +5289,7 @@ public partial class MissionSceneBuilder : Node2D
 		{
 			"trigger_dialogue" => "res://Data/Missions/Props/Definitions/dialogue_terminal.tres",
 			"objective_archive" => "res://Data/Missions/Props/Definitions/smuggler_cache_crate.tres",
+			"medical_station" => "res://Data/Missions/Props/Definitions/medical_bed_heal.tres",
 			_ when IsTerminalTileId(itemId) => "res://Data/Missions/Props/Definitions/door_control_terminal.tres",
 			_ => string.Empty
 		};
@@ -5456,6 +5512,27 @@ public partial class MissionSceneBuilder : Node2D
 		return sprite?.GetMeta("item_type", string.Empty).AsString() == "placed_prop";
 	}
 
+	private static bool IsFlippablePropSprite(Sprite2D sprite)
+	{
+		if (sprite == null || !string.IsNullOrEmpty(sprite.GetMeta("marker_id", string.Empty).AsString()))
+		{
+			return false;
+		}
+
+		if (IsPlacedPropSprite(sprite))
+		{
+			return true;
+		}
+
+		if (sprite.GetMeta("layer", string.Empty).AsString() != "prop")
+		{
+			return false;
+		}
+
+		string tileId = sprite.GetMeta("tile_id", string.Empty).AsString();
+		return !string.IsNullOrWhiteSpace(tileId) && !IsDoorTileId(tileId);
+	}
+
 	private static bool DoesSpriteAffectValidation(Sprite2D sprite)
 	{
 		if (!IsLiveSprite(sprite))
@@ -5496,6 +5573,17 @@ public partial class MissionSceneBuilder : Node2D
 	private static bool IsLiveSprite(Sprite2D sprite)
 	{
 		return IsLiveNode(sprite);
+	}
+
+	private static void ApplySpriteFlipState(Sprite2D sprite)
+	{
+		if (sprite == null)
+		{
+			return;
+		}
+
+		sprite.FlipH = sprite.GetMeta("flip_h", false).AsBool();
+		sprite.FlipV = sprite.GetMeta("flip_v", false).AsBool();
 	}
 
 	private void SanitizeTransientSpriteReferences()
@@ -5680,16 +5768,26 @@ public partial class MissionSceneBuilder : Node2D
 
 	private Texture2D GetTileIconTexture(MissionTileDefinition definition)
 	{
-		if (!string.IsNullOrEmpty(definition.TexturePath))
+		if (_tileIconCache.TryGetValue(definition.Id, out Texture2D cachedTexture))
 		{
-			return GD.Load<Texture2D>(definition.TexturePath);
+			return cachedTexture;
 		}
 
-		return new AtlasTexture
+		Texture2D texture;
+		if (!string.IsNullOrEmpty(definition.TexturePath))
+		{
+			texture = GD.Load<Texture2D>(definition.TexturePath);
+			_tileIconCache[definition.Id] = texture;
+			return texture;
+		}
+
+		texture = new AtlasTexture
 		{
 			Atlas = GD.Load<Texture2D>("res://Assets/Missions/BlackSiteRelay/black_site_relay_tileset.png"),
 			Region = definition.Region
 		};
+		_tileIconCache[definition.Id] = texture;
+		return texture;
 	}
 
 	private Texture2D GetMarkerIconTexture(MissionMarkerDefinition definition)

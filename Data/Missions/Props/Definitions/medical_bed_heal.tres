@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="PropDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://Scripts/Missions/Props/PropDefinition.cs" id="1_prop_definition"]
+
+[resource]
+script = ExtResource("1_prop_definition")
+PropId = "medical_bed_heal"
+DisplayName = "Medical Bed"
+Description = "An intact field med bed that can restore an officer's health when they step onto it."
+InteractionType = 5
+ScenePath = "res://Scenes/Missions/Props/BaseProp.tscn"
+SpriteTexturePath = "res://Assets/Missions/BlackSiteRelay/GeminiSheetSet/props/medical_bed.png"
+InteractionRange = 0
+OneShot = false
+HideWhenConsumed = false
+SuccessMessage = "Medical bed ready."

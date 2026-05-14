@@ -34,6 +34,7 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 	public int BonusShieldDamage { get; private set; }
 	public int ShieldPiercingDamage { get; private set; }
 	public int InitiativeBonus { get; private set; }
+	public string WeaponId { get; private set; } = string.Empty;
 	public string WeaponName { get; private set; } = "Claws";
 	public string ShieldName { get; private set; } = "Reactive Screen";
 	public int ShieldRechargePerTurn { get; private set; } = 1;
@@ -278,6 +279,7 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 	{
 		return new MissionAttackProfile
 		{
+			WeaponId = WeaponId,
 			WeaponName = WeaponName,
 			IsMelee = UsesMeleeWeapon,
 			Range = AttackRange,
@@ -403,6 +405,7 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 		MissionWeaponDefinition weapon = MissionEquipmentRegistry.GetWeapon(definition.WeaponDefinitionId);
 		if (weapon != null)
 		{
+			WeaponId = weapon.WeaponId ?? string.Empty;
 			WeaponName = string.IsNullOrWhiteSpace(weapon.DisplayName) ? WeaponName : weapon.DisplayName;
 			UsesMeleeWeapon = weapon.IsMelee;
 			AttackRange = Mathf.Max(1, weapon.AttackRange);

@@ -17,6 +17,12 @@ public partial class MissionMap : Node2D
 	private const int FogRevealRadius = 4;
 	private const int CombatAttackActionCost = 1;
 	private const int CombatInteractionActionCost = 1;
+	private const string MedicalBedHealPropId = "medical_bed_heal";
+	private const string MissionMusicPath = "res://Sounds/Strike_the_Shield.mp3";
+	private const string MissionHitSoundPath = "res://Sounds/795468__aulix24__grunt-3.ogg";
+	private const string MissionPlayerShieldHitSoundPath = "res://Sounds/465541__steaq__sci-fi-shield-hit-ogg.ogg";
+	private const string MissionOfficerLaserFireSoundPath = "res://Sounds/459781__metzik__laser-gun.wav";
+	private const string MissionEnemyLaserFireSoundPath = "res://Sounds/169775__andromadax24__pulse-rifle.wav";
 	private const float HostileRoamIntervalSeconds = 1.35f;
 
 	private sealed class MissionCombatTurnEntry
@@ -34,6 +40,16 @@ public partial class MissionMap : Node2D
 	private MissionTemplate _missionTemplate;
 	private MissionUI _missionUi;
 	private DialogueUI _dialogueUi;
+	private AudioPlaybackService _audioPlaybackService;
+	private AudioStreamPlayer _bgmPlayer;
+	private AudioStreamPlayer _hitSfxPlayer;
+	private AudioStreamPlayer _playerShieldHitSfxPlayer;
+	private AudioStreamPlayer _officerLaserFireSfxPlayer;
+	private AudioStreamPlayer _enemyLaserFireSfxPlayer;
+	private AudioStream _missionHitSound;
+	private AudioStream _missionPlayerShieldHitSound;
+	private AudioStream _missionOfficerLaserFireSound;
+	private AudioStream _missionEnemyLaserFireSound;
 	private Node2D _isoWorld;
 	private Node2D _characterLayer;
 	private Camera2D _camera;
@@ -92,12 +108,15 @@ public partial class MissionMap : Node2D
 	private MissionProp _pendingStoryProp;
 	private PropInteractionResult _pendingStoryResult;
 	private PropInteractionContext _pendingStoryContext;
+	private MissionProp _pendingMedicalBedProp;
+	private string _pendingMedicalBedOfficerId = string.Empty;
 
 	public override void _Ready()
 	{
 		_combatRng.Randomize();
 		_globalData = GetNodeOrNull<GlobalData>("/root/GlobalData");
 		_missionService = new MissionService(_globalData);
+		_audioPlaybackService = new AudioPlaybackService();
 		_missionState = _missionService.GetCurrentMissionState();
 		_isoWorld = GetNode<Node2D>("IsoWorld");
 		_characterLayer = GetNode<Node2D>("IsoWorld/CharacterLayer");
@@ -124,6 +143,7 @@ public partial class MissionMap : Node2D
 		BuildEvacZoneHighlights();
 		EnsureCombatEffectLayer();
 		ConfigureMissionView();
+		SetupMissionAudio();
 		SpawnMissionNpcs();
 		SpawnMissionOfficers();
 		UpdateFogOfWar();
@@ -131,6 +151,11 @@ public partial class MissionMap : Node2D
 		WireDialogue();
 		UpdateSelectedOfficerDisplay();
 		RefreshCombatHud();
+	}
+
+	public override void _ExitTree()
+	{
+		_bgmPlayer?.Stop();
 	}
 
 	public override void _Process(double delta)
@@ -145,6 +170,127 @@ public partial class MissionMap : Node2D
 		UpdateCombatHoverSummary();
 	}
 
+	private void SetupMissionAudio()
+	{
+		_bgmPlayer = GetNodeOrNull<AudioStreamPlayer>("MissionMusic");
+		if (_bgmPlayer == null)
+		{
+			_bgmPlayer = new AudioStreamPlayer
+			{
+				Name = "MissionMusic",
+				VolumeDb = -14.0f
+			};
+			AddChild(_bgmPlayer);
+		}
+		else
+		{
+			_bgmPlayer.VolumeDb = -14.0f;
+		}
+
+		AudioStream missionMusic = _audioPlaybackService?.GetStream(MissionMusicPath)
+			?? _audioPlaybackService?.GetMp3StreamFromFile(MissionMusicPath, true);
+		if (missionMusic == null)
+		{
+			GD.PrintErr($"Mission music not found at {MissionMusicPath}.");
+			return;
+		}
+
+		if (missionMusic is AudioStreamMP3 mp3Stream)
+		{
+			mp3Stream.Loop = true;
+		}
+
+		_audioPlaybackService?.TryPlayLoaded(_bgmPlayer, missionMusic);
+
+		_hitSfxPlayer = GetNodeOrNull<AudioStreamPlayer>("MissionHitSfx");
+		if (_hitSfxPlayer == null)
+		{
+			_hitSfxPlayer = new AudioStreamPlayer
+			{
+				Name = "MissionHitSfx",
+				VolumeDb = -9.0f
+			};
+			AddChild(_hitSfxPlayer);
+		}
+		else
+		{
+			_hitSfxPlayer.VolumeDb = -9.0f;
+		}
+
+		_missionHitSound = _audioPlaybackService?.GetStream(MissionHitSoundPath)
+			?? _audioPlaybackService?.GetOggStreamFromFile(MissionHitSoundPath, false);
+		if (_missionHitSound == null)
+		{
+			GD.PrintErr($"Mission hit sound not found at {MissionHitSoundPath}.");
+		}
+
+		_playerShieldHitSfxPlayer = GetNodeOrNull<AudioStreamPlayer>("MissionPlayerShieldHitSfx");
+		if (_playerShieldHitSfxPlayer == null)
+		{
+			_playerShieldHitSfxPlayer = new AudioStreamPlayer
+			{
+				Name = "MissionPlayerShieldHitSfx",
+				VolumeDb = -8.0f
+			};
+			AddChild(_playerShieldHitSfxPlayer);
+		}
+		else
+		{
+			_playerShieldHitSfxPlayer.VolumeDb = -8.0f;
+		}
+
+		_missionPlayerShieldHitSound = _audioPlaybackService?.GetStream(MissionPlayerShieldHitSoundPath)
+			?? _audioPlaybackService?.GetOggStreamFromFile(MissionPlayerShieldHitSoundPath, false);
+		if (_missionPlayerShieldHitSound == null)
+		{
+			GD.PrintErr($"Mission player shield hit sound not found at {MissionPlayerShieldHitSoundPath}.");
+		}
+
+		_officerLaserFireSfxPlayer = GetNodeOrNull<AudioStreamPlayer>("MissionOfficerLaserFireSfx");
+		if (_officerLaserFireSfxPlayer == null)
+		{
+			_officerLaserFireSfxPlayer = new AudioStreamPlayer
+			{
+				Name = "MissionOfficerLaserFireSfx",
+				VolumeDb = -7.0f
+			};
+			AddChild(_officerLaserFireSfxPlayer);
+		}
+		else
+		{
+			_officerLaserFireSfxPlayer.VolumeDb = -7.0f;
+		}
+
+		_missionOfficerLaserFireSound = _audioPlaybackService?.GetStream(MissionOfficerLaserFireSoundPath)
+			?? _audioPlaybackService?.GetWavStreamFromFile(MissionOfficerLaserFireSoundPath, false);
+		if (_missionOfficerLaserFireSound == null)
+		{
+			GD.PrintErr($"Mission officer laser fire sound not found at {MissionOfficerLaserFireSoundPath}.");
+		}
+
+		_enemyLaserFireSfxPlayer = GetNodeOrNull<AudioStreamPlayer>("MissionEnemyLaserFireSfx");
+		if (_enemyLaserFireSfxPlayer == null)
+		{
+			_enemyLaserFireSfxPlayer = new AudioStreamPlayer
+			{
+				Name = "MissionEnemyLaserFireSfx",
+				VolumeDb = -7.5f
+			};
+			AddChild(_enemyLaserFireSfxPlayer);
+		}
+		else
+		{
+			_enemyLaserFireSfxPlayer.VolumeDb = -7.5f;
+		}
+
+		_missionEnemyLaserFireSound = _audioPlaybackService?.GetStream(MissionEnemyLaserFireSoundPath)
+			?? _audioPlaybackService?.GetWavStreamFromFile(MissionEnemyLaserFireSoundPath, false);
+		if (_missionEnemyLaserFireSound == null)
+		{
+			GD.PrintErr($"Mission enemy laser fire sound not found at {MissionEnemyLaserFireSoundPath}.");
+		}
+	}
+
 	public override void _UnhandledInput(InputEvent @event)
 	{
 		if (_missionGameOver)
@@ -152,7 +298,9 @@ public partial class MissionMap : Node2D
 			return;
 		}
 
-		if ((_dialogueUi != null && _dialogueUi.IsConversationOpen) || (_missionUi?.IsStoryEventVisible ?? false))
+		if ((_dialogueUi != null && _dialogueUi.IsConversationOpen)
+			|| (_missionUi?.IsStoryEventVisible ?? false)
+			|| (_missionUi?.IsConfirmationVisible ?? false))
 		{
 			return;
 		}
@@ -1078,6 +1226,8 @@ public partial class MissionMap : Node2D
 		_missionUi.ExtractionOutcomeChosen += OnExtractionOutcomeChosen;
 		_missionUi.CombatEndTurnPressed += OnCombatEndTurnPressed;
 		_missionUi.StoryEventConfirmed += OnStoryEventConfirmed;
+		_missionUi.ConfirmationAccepted += OnConfirmationAccepted;
+		_missionUi.ConfirmationCancelled += OnConfirmationCancelled;
 		if (_missionUi.GameOverReturnButton != null)
 		{
 			_missionUi.GameOverReturnButton.Pressed += ReturnToMainMenu;
@@ -2562,6 +2712,11 @@ public partial class MissionMap : Node2D
 			return;
 		}
 
+		if (TryPromptMedicalBedUse(officer, prop))
+		{
+			return;
+		}
+
 		PropInteractionContext context = BuildPropInteractionContext(officer, prop);
 		PropInteractionResult result = prop.Interact(context);
 		if (result == null || !result.Success)
@@ -3487,6 +3642,10 @@ public partial class MissionMap : Node2D
 		}
 
 		officer.SpendActions(CombatAttackActionCost);
+		if (ShouldPlayOfficerLaserFireSound(attackProfile))
+		{
+			PlayOfficerLaserFireSound();
+		}
 		int damage = _combatRng.RandiRange(attackProfile.MinDamage, attackProfile.MaxDamage);
 		CombatDamageResult result = ApplyAttackProfileToTarget(enemy, damage, attackProfile);
 		string statusText = TryApplyStatusEffect(enemy, attackProfile)
@@ -3529,11 +3688,19 @@ public partial class MissionMap : Node2D
 		}
 
 		enemy.SpendActions(CombatAttackActionCost);
+		if (ShouldPlayEnemyLaserFireSound(attackProfile))
+		{
+			PlayEnemyLaserFireSound();
+		}
 		int damage = _combatRng.RandiRange(attackProfile.MinDamage, attackProfile.MaxDamage);
 		CombatDamageResult result = ApplyAttackProfileToTarget(officer, damage, attackProfile);
 		string statusText = TryApplyStatusEffect(officer, attackProfile)
 			? $" {officer.OfficerName} is afflicted with {attackProfile.StatusEffectId}."
 			: string.Empty;
+		if (result?.ShieldDamage > 0)
+		{
+			PlayPlayerShieldHitSound();
+		}
 		PlayAttackEffects(enemy, officer, attackProfile, result);
 		AppendCombatLog(BuildDamageLog(
 			$"{enemy.DisplayName} answers with {attackProfile.WeaponName.ToLowerInvariant()}, hitting {officer.OfficerName}",
@@ -3626,6 +3793,79 @@ public partial class MissionMap : Node2D
 
 		SpawnImpactEffect(target.GlobalPosition, shieldsHit, hullHit);
 		SpawnDamageText(target.GlobalPosition, result);
+		if (hullHit)
+		{
+			PlayMissionHitSound();
+		}
+	}
+
+	private void PlayMissionHitSound()
+	{
+		if (_hitSfxPlayer == null || _missionHitSound == null)
+		{
+			return;
+		}
+
+		_audioPlaybackService?.TryPlayLoaded(_hitSfxPlayer, _missionHitSound);
+	}
+
+	private void PlayPlayerShieldHitSound()
+	{
+		if (_playerShieldHitSfxPlayer == null || _missionPlayerShieldHitSound == null)
+		{
+			return;
+		}
+
+		_audioPlaybackService?.TryPlayLoaded(_playerShieldHitSfxPlayer, _missionPlayerShieldHitSound);
+	}
+
+	private void PlayOfficerLaserFireSound()
+	{
+		if (_officerLaserFireSfxPlayer == null || _missionOfficerLaserFireSound == null)
+		{
+			return;
+		}
+
+		_audioPlaybackService?.TryPlayLoaded(_officerLaserFireSfxPlayer, _missionOfficerLaserFireSound);
+	}
+
+	private static bool ShouldPlayOfficerLaserFireSound(MissionAttackProfile attackProfile)
+	{
+		if (attackProfile == null || attackProfile.IsMelee)
+		{
+			return false;
+		}
+
+		return attackProfile.WeaponId switch
+		{
+			"sidearm" => true,
+			"heavy_sidearm" => true,
+			"defense_pistol" => true,
+			"pulse_carbine" => true,
+			"pulse_lance" => true,
+			_ => false
+		};
+	}
+
+	private void PlayEnemyLaserFireSound()
+	{
+		if (_enemyLaserFireSfxPlayer == null || _missionEnemyLaserFireSound == null)
+		{
+			return;
+		}
+
+		_audioPlaybackService?.TryPlayLoaded(_enemyLaserFireSfxPlayer, _missionEnemyLaserFireSound);
+	}
+
+	private static bool ShouldPlayEnemyLaserFireSound(MissionAttackProfile attackProfile)
+	{
+		if (attackProfile == null || attackProfile.IsMelee || string.IsNullOrWhiteSpace(attackProfile.WeaponId))
+		{
+			return false;
+		}
+
+		string weaponId = attackProfile.WeaponId.ToLowerInvariant();
+		return weaponId.Contains("laser") || weaponId.Contains("pulse");
 	}
 
 	private void SpawnRangedTracerEffect(Vector2 start, Vector2 end, Color color)
@@ -4269,6 +4509,7 @@ public partial class MissionMap : Node2D
 
 		if (pawn == null || pawn.OfficerID != _pendingInteractionOfficerId)
 		{
+			TryPromptMedicalBedUseAtCurrentCell(pawn);
 			return;
 		}
 
@@ -4328,7 +4569,105 @@ public partial class MissionMap : Node2D
 		if (interaction != null && CanOfficerExecuteInteraction(pawn, interaction))
 		{
 			ExecuteInteraction(pawn, interaction);
+			return;
 		}
+
+		TryPromptMedicalBedUseAtCurrentCell(pawn);
+	}
+
+	private void TryPromptMedicalBedUseAtCurrentCell(OfficerPawn officer)
+	{
+		if (officer == null || _missionUi == null || _pendingMedicalBedProp != null)
+		{
+			return;
+		}
+
+		Vector2I buildCell = GetBuildCell(officer.CurrentCell);
+		if (!_missionPropsByCell.TryGetValue(buildCell, out MissionProp prop))
+		{
+			return;
+		}
+
+		TryPromptMedicalBedUse(officer, prop);
+	}
+
+	private bool TryPromptMedicalBedUse(OfficerPawn officer, MissionProp prop)
+	{
+		if (!ShouldOfferMedicalBedUse(officer, prop))
+		{
+			return false;
+		}
+
+		_pendingMedicalBedProp = prop;
+		_pendingMedicalBedOfficerId = officer.OfficerID;
+		_missionUi?.ShowConfirmationPrompt(
+			"Medical Bed",
+			$"{officer.OfficerName} is injured.\nUse the medical bed to restore their HP to full?",
+			"Heal",
+			"Skip");
+		return true;
+	}
+
+	private bool ShouldOfferMedicalBedUse(OfficerPawn officer, MissionProp prop)
+	{
+		if (officer == null || prop == null || officer.IsDead || officer.CurrentHP >= officer.MaxHP)
+		{
+			return false;
+		}
+
+		if (!IsMedicalBedProp(prop))
+		{
+			return false;
+		}
+
+		if (_combatActive && officer.CurrentActions < CombatInteractionActionCost)
+		{
+			return false;
+		}
+
+		return true;
+	}
+
+	private static bool IsMedicalBedProp(MissionProp prop)
+	{
+		return string.Equals(prop?.Definition?.PropId, MedicalBedHealPropId, StringComparison.Ordinal);
+	}
+
+	private void ConfirmMedicalBedUse()
+	{
+		OfficerPawn officer = _officerPawns.FirstOrDefault(candidate => candidate != null && candidate.OfficerID == _pendingMedicalBedOfficerId);
+		MissionProp prop = _pendingMedicalBedProp;
+		if (officer == null || prop == null || !ShouldOfferMedicalBedUse(officer, prop))
+		{
+			ClearPendingConfirmation();
+			return;
+		}
+
+		if (_combatActive)
+		{
+			officer.SpendActions(CombatInteractionActionCost);
+		}
+
+		int healedAmount = officer.RestoreHealthToFull();
+		if (healedAmount > 0)
+		{
+			if (_missionUi?.PromptLabel != null)
+			{
+				_missionUi.PromptLabel.Text = $"{officer.OfficerName} used the medical bed and recovered {healedAmount} HP.";
+			}
+			AppendCombatLog($"{officer.OfficerName} used a medical bed and recovered {healedAmount} HP.");
+		}
+
+		UpdateSelectedOfficerDisplay();
+		RefreshCombatHud();
+		ClearPendingConfirmation();
+	}
+
+	private void ClearPendingConfirmation()
+	{
+		_pendingMedicalBedProp = null;
+		_pendingMedicalBedOfficerId = string.Empty;
+		_missionUi?.HideConfirmationPrompt();
 	}
 
 	private void SpawnMissionProps()
@@ -4576,6 +4915,22 @@ public partial class MissionMap : Node2D
 		_pendingStoryProp = null;
 		_pendingStoryResult = null;
 		_pendingStoryContext = null;
+	}
+
+	private void OnConfirmationAccepted()
+	{
+		if (_pendingMedicalBedProp != null && !string.IsNullOrWhiteSpace(_pendingMedicalBedOfficerId))
+		{
+			ConfirmMedicalBedUse();
+			return;
+		}
+
+		ClearPendingConfirmation();
+	}
+
+	private void OnConfirmationCancelled()
+	{
+		ClearPendingConfirmation();
 	}
 
 	private void ApplyNpcInteractionResult(MissionNpcPawn npc, PropInteractionResult result, PropInteractionContext context)
