@@ -175,6 +175,23 @@ public partial class MissionRoomBuilder : Node
 			Mathf.FloorToInt((movementCell.Y + MovementCellMinOffset) / (float)MovementSubdivisionsPerTile));
 	}
 
+	public Vector2 GetLineOfSightGridPosition(Vector2I movementCell)
+	{
+		return new Vector2(
+			(movementCell.X + MovementCellMinOffset + 0.5f) / MovementSubdivisionsPerTile,
+			(movementCell.Y + MovementCellMinOffset + 0.5f) / MovementSubdivisionsPerTile);
+	}
+
+	public int GetCanvasSortOrderForBuildCell(Vector2I buildCell, int bias = 0)
+	{
+		return GetCanvasSortOrderForMovementCell(GetMovementCellForBuildCell(buildCell), bias);
+	}
+
+	public int GetCanvasSortOrderForMovementCell(Vector2I movementCell, int bias = 0)
+	{
+		return movementCell.X + movementCell.Y + bias;
+	}
+
 	public IEnumerable<Vector2I> GetMovementCellsForBuildCell(Vector2I buildCell)
 	{
 		Vector2I center = GetMovementCellForBuildCell(buildCell);
@@ -853,6 +870,11 @@ public partial class MissionRoomBuilder : Node
 		return _movementBlockedTransitions.Contains(GetTransitionKey(fromCell, toCell));
 	}
 
+	public bool IsLineOfSightBuildTransitionBlocked(Vector2I fromBuildCell, Vector2I toBuildCell)
+	{
+		return IsTransitionBlocked(fromBuildCell, toBuildCell);
+	}
+
 	private void RegisterWalkableMovementArea(Vector2I buildCell)
 	{
 		foreach (Vector2I movementCell in GetMovementCellsForBuildCell(buildCell))
@@ -953,6 +975,7 @@ public partial class MissionRoomBuilder : Node
 	private Sprite2D CreateSprite(MissionTileDefinition definition, int column, int row, string name, Vector2 extraOffset, float rotationDegrees)
 	{
 		bool usesAtlasRegion = string.IsNullOrEmpty(definition.TexturePath) && definition.Category != MissionTileCategory.Floor;
+		string orientationSuffix = GetOcclusionOrientationSuffix(definition);
 		Sprite2D sprite = new Sprite2D
 		{
 			Name = name,
@@ -963,12 +986,15 @@ public partial class MissionRoomBuilder : Node
 			Scale = definition.Scale,
 			RotationDegrees = rotationDegrees
 		};
+		sprite.ZAsRelative = false;
+		sprite.ZIndex = GetCanvasSortOrderForBuildCell(new Vector2I(column, row), GetSortBiasForDefinition(definition));
 		sprite.SetMeta("tile_id", definition.Id);
 		sprite.SetMeta("column", column);
 		sprite.SetMeta("row", row);
 		sprite.SetMeta("offset_x", extraOffset.X);
 		sprite.SetMeta("offset_y", extraOffset.Y);
 		sprite.SetMeta("rotation_degrees", rotationDegrees);
+		sprite.SetMeta("orientation_suffix", orientationSuffix);
 		return sprite;
 	}
 
@@ -978,7 +1004,9 @@ public partial class MissionRoomBuilder : Node
 		MissionDoor2D doorNode = new MissionDoor2D
 		{
 			Name = $"Door_{cell.X}_{cell.Y}_{definition.Id}",
-			RotationDegrees = 0f
+			RotationDegrees = 0f,
+			ZAsRelative = false,
+			ZIndex = GetCanvasSortOrderForBuildCell(cell, GetSortBiasForDefinition(definition))
 		};
 		doorNode.Configure(
 			GD.Load<Texture2D>(resolvedTexturePath),
@@ -1012,6 +1040,61 @@ public partial class MissionRoomBuilder : Node
 			2 => "se",
 			3 => "sw",
 			_ => "nw"
+		};
+	}
+
+	private static int GetSortBiasForDefinition(MissionTileDefinition definition)
+	{
+		if (definition == null)
+		{
+			return 0;
+		}
+
+		return definition.Category switch
+		{
+			MissionTileCategory.Wall => 6,
+			MissionTileCategory.Prop => 4,
+			_ => 0
+		};
+	}
+
+	private static string GetOcclusionOrientationSuffix(MissionTileDefinition definition)
+	{
+		if (definition == null)
+		{
+			return string.Empty;
+		}
+
+		string tileId = definition.Id ?? string.Empty;
+		string texturePath = definition.TexturePath ?? string.Empty;
+
+		if (tileId.Contains("_nw", System.StringComparison.OrdinalIgnoreCase) || texturePath.Contains("_NW_", System.StringComparison.OrdinalIgnoreCase) || texturePath.Contains("_nw_", System.StringComparison.OrdinalIgnoreCase))
+		{
+			return "nw";
+		}
+
+		if (tileId.Contains("_ne", System.StringComparison.OrdinalIgnoreCase) || texturePath.Contains("_NE_", System.StringComparison.OrdinalIgnoreCase) || texturePath.Contains("_ne_", System.StringComparison.OrdinalIgnoreCase))
+		{
+			return "ne";
+		}
+
+		if (tileId.Contains("_se", System.StringComparison.OrdinalIgnoreCase) || texturePath.Contains("_SE_", System.StringComparison.OrdinalIgnoreCase) || texturePath.Contains("_se_", System.StringComparison.OrdinalIgnoreCase))
+		{
+			return "se";
+		}
+
+		if (tileId.Contains("_sw", System.StringComparison.OrdinalIgnoreCase) || texturePath.Contains("_SW_", System.StringComparison.OrdinalIgnoreCase) || texturePath.Contains("_sw_", System.StringComparison.OrdinalIgnoreCase))
+		{
+			return "sw";
+		}
+
+		return tileId switch
+		{
+			"wall_straight_left" or "wall_window_left" or "wall_panel_mid_a" or "wall_corner_west" => "nw",
+			"wall_straight_center" or "wall_straight_right" or "wall_corner_north" or "wall_corner_ne" => "ne",
+			"wall_corner_center" or "wall_corner_east" => "se",
+			"wall_corner_right" or "wall_corner_south" => "sw",
+			_ => string.Empty
 		};
 	}
 

@@ -3,6 +3,8 @@ using System.Collections.Generic;
 
 public partial class OfficerPawn : Node2D
 {
+	private const int NameLabelZIndex = 220;
+	private const int SelectionRingZIndex = 210;
 	private const string OperativeNorthEastPath = "res://Assets/Missions/Characters/Operative01/operative_ne.png";
 	private const string OperativeNorthWestPath = "res://Assets/Missions/Characters/Operative01/operative_nw.png";
 	private const string OperativeSouthEastPath = "res://Assets/Missions/Characters/Operative01/operative_se.png";
@@ -56,6 +58,8 @@ public partial class OfficerPawn : Node2D
 	private Polygon2D _shadow;
 	private Polygon2D _body;
 	private Sprite2D _sprite;
+	private Sprite2D _coverGhostSprite;
+	private Polygon2D _coverGhostBody;
 	private Label _nameLabel;
 	private Vector2 _targetPosition;
 	private Vector2I _targetCell = Vector2I.Zero;
@@ -68,6 +72,7 @@ public partial class OfficerPawn : Node2D
 	private float _animationClock;
 	private Vector2 _baseSpritePosition = Vector2.Zero;
 	private Vector2 _baseSpriteScale = new Vector2(0.11f, 0.11f);
+	private bool _isSelected;
 
 	public override void _Ready()
 	{
@@ -270,9 +275,53 @@ public partial class OfficerPawn : Node2D
 
 	public void SetSelected(bool isSelected)
 	{
+		_isSelected = isSelected;
 		if (_selectionRing != null)
 		{
 			_selectionRing.Visible = isSelected;
+		}
+	}
+
+	public void SetCoverOccluded(bool occluded, int overlayZIndex)
+	{
+		bool hasSpriteTexture = _sprite != null && _sprite.Texture != null;
+		if (_coverGhostSprite != null)
+		{
+			_coverGhostSprite.Visible = false;
+			_coverGhostSprite.ZAsRelative = false;
+			_coverGhostSprite.ZIndex = overlayZIndex;
+		}
+
+		if (_coverGhostBody != null)
+		{
+			_coverGhostBody.Visible = false;
+			_coverGhostBody.ZAsRelative = false;
+			_coverGhostBody.ZIndex = overlayZIndex;
+		}
+
+		if (_sprite != null)
+		{
+			_sprite.Visible = !occluded && hasSpriteTexture;
+		}
+
+		if (_body != null)
+		{
+			_body.Visible = !occluded && !hasSpriteTexture;
+		}
+
+		if (_shadow != null)
+		{
+			_shadow.Visible = !occluded;
+		}
+
+		if (_selectionRing != null)
+		{
+			_selectionRing.Visible = !occluded && _isSelected;
+		}
+
+		if (_nameLabel != null)
+		{
+			_nameLabel.Visible = !occluded && !IsDead;
 		}
 	}
 
@@ -326,6 +375,8 @@ public partial class OfficerPawn : Node2D
 			Color = new Color(0.15f, 0.95f, 0.95f, 0.35f),
 			Polygon = BuildDiamond(34f, 18f)
 		};
+		_selectionRing.ZAsRelative = false;
+		_selectionRing.ZIndex = SelectionRingZIndex;
 		AddChild(_selectionRing);
 
 		_shadow = new Polygon2D
@@ -344,6 +395,17 @@ public partial class OfficerPawn : Node2D
 		};
 		AddChild(_sprite);
 
+		_coverGhostSprite = new Sprite2D
+		{
+			Centered = true,
+			Position = Vector2.Zero,
+			TextureFilter = CanvasItem.TextureFilterEnum.Linear,
+			Visible = false,
+			Modulate = new Color(0.55f, 0.95f, 1f, 0.32f),
+			Scale = _baseSpriteScale * 1.04f
+		};
+		AddChild(_coverGhostSprite);
+
 		_body = new Polygon2D
 		{
 			Color = GetSpecialtyColor(Specialty),
@@ -352,6 +414,16 @@ public partial class OfficerPawn : Node2D
 		};
 		AddChild(_body);
 
+		_coverGhostBody = new Polygon2D
+		{
+			Color = new Color(0.55f, 0.95f, 1f, 0.28f),
+			Polygon = BuildDiamond(22f, 36f),
+			Position = new Vector2(0f, -18f),
+			Scale = new Vector2(1.08f, 1.08f),
+			Visible = false
+		};
+		AddChild(_coverGhostBody);
+
 		_nameLabel = new Label
 		{
 			Text = OfficerName,
@@ -359,6 +431,8 @@ public partial class OfficerPawn : Node2D
 			Position = new Vector2(-90f, 22f),
 			Size = new Vector2(180f, 30f)
 		};
+		_nameLabel.ZAsRelative = false;
+		_nameLabel.ZIndex = NameLabelZIndex;
 		_nameLabel.AddThemeFontSizeOverride("font_size", 14);
 		_nameLabel.AddThemeColorOverride("font_color", new Color(0.95f, 0.98f, 1f));
 		AddChild(_nameLabel);
@@ -520,6 +594,11 @@ public partial class OfficerPawn : Node2D
 		{
 			_sprite.Texture = null;
 			_sprite.Visible = false;
+			if (_coverGhostSprite != null)
+			{
+				_coverGhostSprite.Texture = null;
+				_coverGhostSprite.Visible = false;
+			}
 			if (_body != null)
 			{
 				_body.Visible = true;
@@ -534,6 +613,12 @@ public partial class OfficerPawn : Node2D
 		_baseSpritePosition = new Vector2(0f, -(texture.GetHeight() * _baseSpriteScale.Y * 0.5f));
 		_sprite.Position = _baseSpritePosition;
 		_sprite.Scale = _baseSpriteScale;
+		if (_coverGhostSprite != null)
+		{
+			_coverGhostSprite.Texture = texture;
+			_coverGhostSprite.Position = _baseSpritePosition;
+			_coverGhostSprite.Scale = _baseSpriteScale * 1.04f;
+		}
 	}
 
 	private void UpdateFacing(Vector2 moveVector)
@@ -569,6 +654,11 @@ public partial class OfficerPawn : Node2D
 
 		_sprite.Position = _baseSpritePosition + new Vector2(swayX, bobY);
 		_sprite.Scale = new Vector2(_baseSpriteScale.X / squash, _baseSpriteScale.Y * squash);
+		if (_coverGhostSprite != null)
+		{
+			_coverGhostSprite.Position = _sprite.Position;
+			_coverGhostSprite.Scale = _sprite.Scale * 1.04f;
+		}
 		_shadow.Scale = _isMoving
 			? new Vector2(1.03f + Mathf.Sin(_animationClock * 2f) * 0.04f, 0.96f)
 			: new Vector2(1f, 1f);

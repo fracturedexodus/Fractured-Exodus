@@ -4,6 +4,7 @@ using System.Linq;
 
 public partial class MissionNpcPawn : Node2D, IInteractable
 {
+	private const int NameLabelZIndex = 220;
 	[Signal] public delegate void EnteredCellEventHandler(MissionNpcPawn pawn, Vector2I cell);
 	[Signal] public delegate void ReachedCellEventHandler(MissionNpcPawn pawn, Vector2I cell);
 	[Signal] public delegate void CombatStateChangedEventHandler(MissionNpcPawn pawn);
@@ -47,6 +48,7 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 
 	private MissionNpcDefinition _definition;
 	private Sprite2D _visualSprite;
+	private Sprite2D _coverGhostSprite;
 	private Label _nameLabel;
 	private Polygon2D _shadow;
 	private Vector2 _targetPosition;
@@ -60,7 +62,21 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 	{
 		_visualSprite = GetNodeOrNull<Sprite2D>(VisualSpritePath);
 		_nameLabel = GetNodeOrNull<Label>(NameLabelPath);
+		if (_nameLabel != null)
+		{
+			_nameLabel.ZAsRelative = false;
+			_nameLabel.ZIndex = NameLabelZIndex;
+		}
 		_shadow = GetNodeOrNull<Polygon2D>(ShadowPath);
+		_coverGhostSprite = new Sprite2D
+		{
+			Name = "CoverGhost",
+			Centered = true,
+			Visible = false,
+			TextureFilter = CanvasItem.TextureFilterEnum.Linear,
+			Modulate = new Color(0.55f, 0.95f, 1f, 0.28f)
+		};
+		AddChild(_coverGhostSprite);
 		_targetPosition = GlobalPosition;
 	}
 
@@ -144,6 +160,13 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 			}
 		}
 
+		if (_coverGhostSprite != null && _visualSprite != null)
+		{
+			_coverGhostSprite.Texture = _visualSprite.Texture;
+			_coverGhostSprite.Position = _visualSprite.Position;
+			_coverGhostSprite.Scale = _visualSprite.Scale * 1.04f;
+		}
+
 		if (_nameLabel != null)
 		{
 			_nameLabel.Text = DisplayName;
@@ -195,6 +218,34 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 		if (_nameLabel != null && _definition != null)
 		{
 			_nameLabel.Visible = !IsDead && isVisible && _definition.ShowNameLabel;
+		}
+	}
+
+	public void SetCoverOccluded(bool occluded, int overlayZIndex)
+	{
+		if (_coverGhostSprite == null)
+		{
+			return;
+		}
+
+		bool hasVisualSprite = _visualSprite != null && _visualSprite.Texture != null;
+		_coverGhostSprite.Visible = false;
+		_coverGhostSprite.ZAsRelative = false;
+		_coverGhostSprite.ZIndex = overlayZIndex;
+
+		if (_visualSprite != null)
+		{
+			_visualSprite.Visible = !occluded && hasVisualSprite;
+		}
+
+		if (_shadow != null)
+		{
+			_shadow.Visible = !occluded;
+		}
+
+		if (_nameLabel != null && _definition != null)
+		{
+			_nameLabel.Visible = !occluded && !IsDead && _definition.ShowNameLabel;
 		}
 	}
 

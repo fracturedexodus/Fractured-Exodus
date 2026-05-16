@@ -3,6 +3,15 @@ using System;
 
 public partial class MainMenu : Control
 {
+	public override void _Ready()
+	{
+		AudioStreamPlayer menuMusic = GetNodeOrNull<AudioStreamPlayer>("MenuMusic");
+		if (menuMusic?.Stream is AudioStreamMP3 mp3Stream)
+		{
+			mp3Stream.Loop = true;
+		}
+	}
+
 	// This is the method connected to your Launch Fleet button
 	public void _on_launch_fleet_pressed()
 	{

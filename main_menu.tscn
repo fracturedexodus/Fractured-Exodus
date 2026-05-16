@@ -2,7 +2,7 @@
 
 [ext_resource type="Script" uid="uid://cgj53k7qo8cp2" path="res://MainMenu.cs" id="1_ls7vo"]
 [ext_resource type="Texture2D" uid="uid://c48n60n5i4tjp" path="res://Assets/Backgrounds/ShatteredExodus_BG.png" id="2_ywgdt"]
-[ext_resource type="AudioStream" uid="uid://crpqmwip0288j" path="res://Sounds/Custodian_of_the_Shattered_Reach.mp3" id="3_gy31r"]
+[ext_resource type="AudioStream" path="res://Sounds/Between_Two_Heartbeats.mp3" id="3_gy31r"]
 [ext_resource type="FontFile" uid="uid://cs2qy7wansjjb" path="res://Assets/UI/Orbitron-VariableFont_wght.ttf" id="4_dq1pj"]
 
 [node name="MainMenu" type="Control" unique_id=121732291]

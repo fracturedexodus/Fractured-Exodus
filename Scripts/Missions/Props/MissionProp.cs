@@ -13,6 +13,8 @@ public partial class MissionProp : Area2D, IInteractable
 	public bool IsConsumed { get; private set; }
 
 	private Sprite2D _visualSprite;
+	private bool _isFogVisible = true;
+	private bool _isCoverOccluded;
 
 	public override void _Ready()
 	{
@@ -74,6 +76,7 @@ public partial class MissionProp : Area2D, IInteractable
 
 	public void SetFogVisibility(bool isVisible)
 	{
+		_isFogVisible = isVisible;
 		if (IsConsumed && Definition?.HideWhenConsumed == true)
 		{
 			Visible = false;
@@ -82,9 +85,27 @@ public partial class MissionProp : Area2D, IInteractable
 			return;
 		}
 
-		Visible = isVisible;
-		Monitoring = isVisible;
-		Monitorable = isVisible;
+		bool shouldBeVisible = isVisible && !_isCoverOccluded;
+		Visible = shouldBeVisible;
+		Monitoring = shouldBeVisible;
+		Monitorable = shouldBeVisible;
+	}
+
+	public void SetCoverOccluded(bool occluded)
+	{
+		_isCoverOccluded = occluded;
+		if (IsConsumed && Definition?.HideWhenConsumed == true)
+		{
+			Visible = false;
+			Monitoring = false;
+			Monitorable = false;
+			return;
+		}
+
+		bool shouldBeVisible = _isFogVisible && !_isCoverOccluded;
+		Visible = shouldBeVisible;
+		Monitoring = shouldBeVisible;
+		Monitorable = shouldBeVisible;
 	}
 
 	protected virtual PropInteractionResult BuildInteractionResult(PropInteractionContext context)

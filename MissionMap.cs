@@ -17,6 +17,11 @@ public partial class MissionMap : Node2D
 	private const int FogRevealRadius = 4;
 	private const int CombatAttackActionCost = 1;
 	private const int CombatInteractionActionCost = 1;
+	private const int ActorSortBias = 2;
+	private const int RuntimePropSortBias = 4;
+	private const int WallBaseSortBias = 1;
+	private const int WallOccluderSortBias = 7;
+	private const int CoverGhostZIndex = 160;
 	private const string MedicalBedHealPropId = "medical_bed_heal";
 	private const string MissionMusicPath = "res://Sounds/Strike_the_Shield.mp3";
 	private const string MissionHitSoundPath = "res://Sounds/795468__aulix24__grunt-3.ogg";
@@ -168,6 +173,7 @@ public partial class MissionMap : Node2D
 		UpdateEvacZoneHighlightVisuals((float)delta);
 		UpdateHostileRoaming((float)delta);
 		UpdateCombatHoverSummary();
+		UpdateMissionDepthSorting();
 	}
 
 	private void SetupMissionAudio()
@@ -1023,6 +1029,7 @@ public partial class MissionMap : Node2D
 		ApplyFogToLayer(GetNodeOrNull<Node2D>("IsoWorld/PropLayer"));
 		ApplyFogToMissionProps();
 		ApplyFogToMissionNpcs();
+		UpdateMissionDepthSorting();
 		if (!IsAnyCombatActorMoving())
 		{
 			EvaluateCombatState();
@@ -1162,7 +1169,241 @@ public partial class MissionMap : Node2D
 				continue;
 			}
 
-			kvp.Value.SetFogVisibility(_visibleBuildCells.Contains(kvp.Key));
+			bool isVisible = _visibleBuildCells.Contains(kvp.Key);
+			kvp.Value.SetFogVisibility(isVisible);
+			kvp.Value.Modulate = isVisible ? Colors.White : new Color(1f, 1f, 1f, 0f);
+		}
+	}
+
+	private void UpdateMissionDepthSorting()
+	{
+		if (_roomBuilder == null)
+		{
+			return;
+		}
+
+		foreach (OfficerPawn officer in _officerPawns.Where(officer => officer != null && !officer.IsDead))
+		{
+			officer.ZAsRelative = false;
+			officer.ZIndex = _roomBuilder.GetCanvasSortOrderForBuildCell(GetBuildCell(officer.CurrentCell), ActorSortBias);
+			officer.SetCoverOccluded(false, CoverGhostZIndex);
+		}
+
+		foreach (MissionNpcPawn npc in _missionNpcs.Where(npc => npc != null && !npc.IsDead))
+		{
+			npc.ZAsRelative = false;
+			npc.ZIndex = _roomBuilder.GetCanvasSortOrderForBuildCell(GetBuildCell(npc.CurrentCell), ActorSortBias);
+			npc.SetCoverOccluded(false, CoverGhostZIndex);
+		}
+
+		foreach ((Vector2I cell, MissionProp prop) in _missionPropsByCell)
+		{
+			if (prop == null)
+			{
+				continue;
+			}
+
+			prop.ZAsRelative = false;
+			prop.ZIndex = _roomBuilder.GetCanvasSortOrderForBuildCell(cell, RuntimePropSortBias);
+			prop.SetCoverOccluded(false);
+		}
+
+		ApplyWallDepthSorting(GetNodeOrNull<Node2D>("IsoWorld/WallLayer"));
+		ApplyDoorAndStaticPropDepthSorting(GetNodeOrNull<Node2D>("IsoWorld/PropLayer"));
+	}
+
+	private void ApplyWallDepthSorting(Node2D wallLayer)
+	{
+		if (wallLayer == null || _roomBuilder == null)
+		{
+			return;
+		}
+
+		foreach (Node child in wallLayer.GetChildren())
+		{
+			if (child is not Sprite2D sprite)
+			{
+				continue;
+			}
+
+			string tileId = sprite.GetMeta("tile_id", string.Empty).AsString();
+			Vector2I wallCell = new Vector2I(
+				sprite.GetMeta("column", int.MinValue).AsInt32(),
+				sprite.GetMeta("row", int.MinValue).AsInt32());
+			if (string.IsNullOrWhiteSpace(tileId) || wallCell.X == int.MinValue || wallCell.Y == int.MinValue)
+			{
+				continue;
+			}
+
+			sprite.ZAsRelative = false;
+			sprite.ZIndex = _roomBuilder.GetCanvasSortOrderForBuildCell(wallCell, WallBaseSortBias);
+
+			string orientationSuffix = sprite.GetMeta("orientation_suffix", string.Empty).AsString();
+			List<Vector2I> occludedCells = GetWallOccludedBuildCells(orientationSuffix, tileId, wallCell)
+				.Where(IsAnyVisibleOccludableEntityInBuildCell)
+				.Distinct()
+				.ToList();
+			if (occludedCells.Count == 0)
+			{
+				continue;
+			}
+
+			sprite.ZIndex = occludedCells
+				.Select(cell => _roomBuilder.GetCanvasSortOrderForBuildCell(cell, WallOccluderSortBias))
+				.Max();
+			foreach (Vector2I occludedCell in occludedCells)
+			{
+				SetPropsInBuildCellOccluded(occludedCell);
+			}
+		}
+	}
+
+	private void ApplyDoorAndStaticPropDepthSorting(Node2D propLayer)
+	{
+		if (propLayer == null || _roomBuilder == null)
+		{
+			return;
+		}
+
+		foreach (Node child in propLayer.GetChildren())
+		{
+			switch (child)
+			{
+				case MissionDoor2D door:
+				{
+					Vector2I doorCell = door.Cell;
+					door.ZAsRelative = false;
+					door.ZIndex = _roomBuilder.GetCanvasSortOrderForBuildCell(doorCell, WallBaseSortBias);
+					List<Vector2I> occludedDoorCells = GetOccludedBuildCellsForOrientation(door.OrientationSuffix, doorCell)
+						.Where(IsAnyVisibleOccludableEntityInBuildCell)
+						.Distinct()
+						.ToList();
+					if (occludedDoorCells.Count > 0)
+					{
+						door.ZIndex = occludedDoorCells
+							.Select(cell => _roomBuilder.GetCanvasSortOrderForBuildCell(cell, WallOccluderSortBias))
+							.Max();
+						foreach (Vector2I occludedDoorCell in occludedDoorCells)
+						{
+							SetPropsInBuildCellOccluded(occludedDoorCell);
+						}
+					}
+					break;
+				}
+				case Sprite2D sprite:
+				{
+					string tileId = sprite.GetMeta("tile_id", string.Empty).AsString();
+					Vector2I propCell = new Vector2I(
+						sprite.GetMeta("column", int.MinValue).AsInt32(),
+						sprite.GetMeta("row", int.MinValue).AsInt32());
+					if (propCell.X == int.MinValue || propCell.Y == int.MinValue)
+					{
+						continue;
+					}
+
+					sprite.ZAsRelative = false;
+					string orientationSuffix = sprite.GetMeta("orientation_suffix", string.Empty).AsString();
+					List<Vector2I> occludedPropCells = GetWallOccludedBuildCells(orientationSuffix, tileId, propCell)
+						.Where(IsAnyVisibleOccludableEntityInBuildCell)
+						.Distinct()
+						.ToList();
+					if (occludedPropCells.Count > 0)
+					{
+						sprite.ZIndex = occludedPropCells
+							.Select(cell => _roomBuilder.GetCanvasSortOrderForBuildCell(cell, WallOccluderSortBias))
+							.Max();
+						foreach (Vector2I occludedPropCell in occludedPropCells)
+						{
+							SetPropsInBuildCellOccluded(occludedPropCell);
+						}
+					}
+					else
+					{
+						sprite.ZIndex = _roomBuilder.GetCanvasSortOrderForBuildCell(propCell, RuntimePropSortBias);
+					}
+					break;
+				}
+			}
+		}
+	}
+
+	private bool IsAnyVisibleOccludableEntityInBuildCell(Vector2I buildCell)
+	{
+		return _officerPawns.Any(officer => officer != null && !officer.IsDead && officer.Visible && GetBuildCell(officer.CurrentCell) == buildCell)
+			|| _missionNpcs.Any(npc => npc != null && !npc.IsDead && npc.Visible && GetBuildCell(npc.CurrentCell) == buildCell)
+			|| _missionPropsByCell.Any(entry => entry.Value != null && !entry.Value.IsConsumed && entry.Value.Visible && entry.Key == buildCell);
+	}
+
+	private void SetPropsInBuildCellOccluded(Vector2I buildCell)
+	{
+		foreach ((Vector2I cell, MissionProp prop) in _missionPropsByCell.Where(entry => entry.Value != null && entry.Key == buildCell))
+		{
+			prop.SetCoverOccluded(true);
+		}
+	}
+
+	private IEnumerable<Vector2I> GetWallOccludedBuildCells(string orientationSuffix, string tileId, Vector2I wallCell)
+	{
+		if (string.IsNullOrWhiteSpace(orientationSuffix) && !TryGetWallOrientationFromTileId(tileId, out orientationSuffix))
+		{
+			yield break;
+		}
+
+		foreach (Vector2I occludedCell in GetOccludedBuildCellsForOrientation(orientationSuffix, wallCell))
+		{
+			yield return occludedCell;
+		}
+	}
+
+	private static bool TryGetWallOrientationFromTileId(string tileId, out string orientationSuffix)
+	{
+		orientationSuffix = string.Empty;
+		if (string.IsNullOrWhiteSpace(tileId))
+		{
+			return false;
+		}
+
+		if (tileId.Contains("_nw_", StringComparison.OrdinalIgnoreCase) || tileId.StartsWith("wall_nw", StringComparison.OrdinalIgnoreCase))
+		{
+			orientationSuffix = "nw";
+			return true;
+		}
+
+		if (tileId.Contains("_ne_", StringComparison.OrdinalIgnoreCase) || tileId.StartsWith("wall_ne", StringComparison.OrdinalIgnoreCase))
+		{
+			orientationSuffix = "ne";
+			return true;
+		}
+
+		if (tileId.Contains("_se_", StringComparison.OrdinalIgnoreCase) || tileId.StartsWith("wall_se", StringComparison.OrdinalIgnoreCase))
+		{
+			orientationSuffix = "se";
+			return true;
+		}
+
+		if (tileId.Contains("_sw_", StringComparison.OrdinalIgnoreCase) || tileId.StartsWith("wall_sw", StringComparison.OrdinalIgnoreCase))
+		{
+			orientationSuffix = "sw";
+			return true;
+		}
+
+		return false;
+	}
+
+	private static IEnumerable<Vector2I> GetOccludedBuildCellsForOrientation(string orientationSuffix, Vector2I wallCell)
+	{
+		switch (orientationSuffix)
+		{
+			case "se":
+				yield return wallCell;
+				yield return wallCell + new Vector2I(1, 0);
+				yield return wallCell + new Vector2I(1, 1);
+				yield break;
+			case "sw":
+				yield return wallCell;
+				yield return wallCell + new Vector2I(0, 1);
+				yield return wallCell + new Vector2I(1, 1);
+				yield break;
 		}
 	}
 
@@ -2915,6 +3156,121 @@ public partial class MissionMap : Node2D
 		return Mathf.Max(0, actions * GetMovementSubdivision());
 	}
 
+	private bool CanAttackTarget(Vector2I attackerCell, Vector2I targetCell, MissionAttackProfile attackProfile)
+	{
+		if (attackProfile == null || GetTileDistance(attackerCell, targetCell) > attackProfile.Range)
+		{
+			return false;
+		}
+
+		return HasClearLineOfSight(attackerCell, targetCell);
+	}
+
+	private bool HasClearLineOfSight(Vector2I fromMovementCell, Vector2I toMovementCell, string ignoredPropInstanceId = null)
+	{
+		if (_roomBuilder == null)
+		{
+			return true;
+		}
+
+		Vector2I fromBuildCell = GetBuildCell(fromMovementCell);
+		Vector2I toBuildCell = GetBuildCell(toMovementCell);
+		if (fromBuildCell == toBuildCell)
+		{
+			return true;
+		}
+
+		Vector2 start = _roomBuilder.GetLineOfSightGridPosition(fromMovementCell);
+		Vector2 end = _roomBuilder.GetLineOfSightGridPosition(toMovementCell);
+		Vector2 direction = end - start;
+		int currentX = Mathf.FloorToInt(start.X);
+		int currentY = Mathf.FloorToInt(start.Y);
+		int targetX = Mathf.FloorToInt(end.X);
+		int targetY = Mathf.FloorToInt(end.Y);
+		int stepX = direction.X > 0f ? 1 : direction.X < 0f ? -1 : 0;
+		int stepY = direction.Y > 0f ? 1 : direction.Y < 0f ? -1 : 0;
+		float tDeltaX = stepX == 0 ? float.PositiveInfinity : Mathf.Abs(1f / direction.X);
+		float tDeltaY = stepY == 0 ? float.PositiveInfinity : Mathf.Abs(1f / direction.Y);
+		float nextBoundaryX = stepX > 0 ? currentX + 1f : currentX;
+		float nextBoundaryY = stepY > 0 ? currentY + 1f : currentY;
+		float tMaxX = stepX == 0 ? float.PositiveInfinity : Mathf.Abs((nextBoundaryX - start.X) / direction.X);
+		float tMaxY = stepY == 0 ? float.PositiveInfinity : Mathf.Abs((nextBoundaryY - start.Y) / direction.Y);
+
+		while (currentX != targetX || currentY != targetY)
+		{
+			Vector2I currentCell = new Vector2I(currentX, currentY);
+			if (Mathf.IsEqualApprox(tMaxX, tMaxY))
+			{
+				Vector2I horizontalCell = new Vector2I(currentX + stepX, currentY);
+				Vector2I verticalCell = new Vector2I(currentX, currentY + stepY);
+				Vector2I diagonalCell = new Vector2I(currentX + stepX, currentY + stepY);
+
+				if (IsLineOfSightTransitionBlocked(currentCell, horizontalCell)
+					|| IsLineOfSightTransitionBlocked(currentCell, verticalCell)
+					|| IsLineOfSightBuildCellBlocked(horizontalCell, fromBuildCell, toBuildCell, ignoredPropInstanceId)
+					|| IsLineOfSightBuildCellBlocked(verticalCell, fromBuildCell, toBuildCell, ignoredPropInstanceId)
+					|| IsLineOfSightTransitionBlocked(horizontalCell, diagonalCell)
+					|| IsLineOfSightTransitionBlocked(verticalCell, diagonalCell)
+					|| IsLineOfSightBuildCellBlocked(diagonalCell, fromBuildCell, toBuildCell, ignoredPropInstanceId))
+				{
+					return false;
+				}
+
+				currentX += stepX;
+				currentY += stepY;
+				tMaxX += tDeltaX;
+				tMaxY += tDeltaY;
+				continue;
+			}
+
+			Vector2I nextCell;
+			if (tMaxX < tMaxY)
+			{
+				nextCell = new Vector2I(currentX + stepX, currentY);
+				tMaxX += tDeltaX;
+			}
+			else
+			{
+				nextCell = new Vector2I(currentX, currentY + stepY);
+				tMaxY += tDeltaY;
+			}
+
+			if (IsLineOfSightTransitionBlocked(currentCell, nextCell)
+				|| IsLineOfSightBuildCellBlocked(nextCell, fromBuildCell, toBuildCell, ignoredPropInstanceId))
+			{
+				return false;
+			}
+
+			currentX = nextCell.X;
+			currentY = nextCell.Y;
+		}
+
+		return true;
+	}
+
+	private bool IsLineOfSightTransitionBlocked(Vector2I fromBuildCell, Vector2I toBuildCell)
+	{
+		return _roomBuilder != null && _roomBuilder.IsLineOfSightBuildTransitionBlocked(fromBuildCell, toBuildCell);
+	}
+
+	private bool IsLineOfSightBuildCellBlocked(Vector2I buildCell, Vector2I startBuildCell, Vector2I targetBuildCell, string ignoredPropInstanceId)
+	{
+		if (buildCell == startBuildCell || buildCell == targetBuildCell)
+		{
+			return false;
+		}
+
+		if (_blockedStaticPropCells.Contains(buildCell))
+		{
+			return true;
+		}
+
+		return _missionPropsByCell.TryGetValue(buildCell, out MissionProp prop)
+			&& prop != null
+			&& !prop.IsConsumed
+			&& (string.IsNullOrWhiteSpace(ignoredPropInstanceId) || prop.PropInstanceId != ignoredPropInstanceId);
+	}
+
 	private bool TrySelectOfficerAtMouse()
 	{
 		if (_combatActive)
@@ -3465,13 +3821,14 @@ public partial class MissionMap : Node2D
 		}
 
 		_focusedEnemy = enemy;
-		if (GetTileDistance(officer.CurrentCell, enemy.CurrentCell) <= officer.AttackRange)
+		MissionAttackProfile attackProfile = officer.GetAttackProfile();
+		if (CanAttackTarget(officer.CurrentCell, enemy.CurrentCell, attackProfile))
 		{
 			PerformOfficerAttack(officer, enemy);
 			return true;
 		}
 
-		Vector2I? approachCell = FindBestCombatApproachCell(officer.CurrentCell, enemy.CurrentCell, officer.AttackRange, officer.CurrentActions, officer, null);
+		Vector2I? approachCell = FindBestCombatApproachCell(officer.CurrentCell, enemy.CurrentCell, attackProfile, officer.CurrentActions, officer, null);
 		if (approachCell.HasValue && TryMoveOfficerToCell(officer, approachCell.Value))
 		{
 			_pendingCombatAttackEnemyId = enemy.NpcId;
@@ -3500,7 +3857,8 @@ public partial class MissionMap : Node2D
 				return;
 			}
 
-			if (GetTileDistance(enemy.CurrentCell, targetOfficer.CurrentCell) <= enemy.AttackRange)
+			MissionAttackProfile attackProfile = enemy.GetAttackProfile();
+			if (CanAttackTarget(enemy.CurrentCell, targetOfficer.CurrentCell, attackProfile))
 			{
 				PerformEnemyAttack(enemy, targetOfficer);
 				RefreshCombatHud();
@@ -3521,7 +3879,8 @@ public partial class MissionMap : Node2D
 			}
 
 			await ToSignal(GetTree().CreateTimer(0.22f), SceneTreeTimer.SignalName.Timeout);
-			if (GetTileDistance(enemy.CurrentCell, targetOfficer.CurrentCell) <= enemy.AttackRange && enemy.CurrentActions > 0)
+			attackProfile = enemy.GetAttackProfile();
+			if (enemy.CurrentActions > 0 && CanAttackTarget(enemy.CurrentCell, targetOfficer.CurrentCell, attackProfile))
 			{
 				PerformEnemyAttack(enemy, targetOfficer);
 				RefreshCombatHud();
@@ -3546,7 +3905,7 @@ public partial class MissionMap : Node2D
 			return false;
 		}
 
-		Vector2I? approachCell = FindBestCombatApproachCell(enemy.CurrentCell, targetOfficer.CurrentCell, enemy.AttackRange, enemy.CurrentActions, null, enemy);
+		Vector2I? approachCell = FindBestCombatApproachCell(enemy.CurrentCell, targetOfficer.CurrentCell, enemy.GetAttackProfile(), enemy.CurrentActions, null, enemy);
 		if (!approachCell.HasValue || !TryGetTraversableMovementPath(enemy.CurrentCell, approachCell.Value, null, enemy, null, out List<Vector2I> pathCells) || pathCells.Count <= 1)
 		{
 			return false;
@@ -3583,18 +3942,18 @@ public partial class MissionMap : Node2D
 	private Vector2I? FindBestCombatApproachCell(
 		Vector2I startCell,
 		Vector2I targetCell,
-		int attackRange,
+		MissionAttackProfile attackProfile,
 		int maxSteps,
 		OfficerPawn movingOfficer,
 		MissionNpcPawn movingEnemy)
 	{
-		if (_roomBuilder == null || maxSteps <= 0)
+		if (_roomBuilder == null || attackProfile == null || maxSteps <= 0)
 		{
 			return null;
 		}
 
 		List<(Vector2I Cell, int PathCost, int TargetDistance)> candidates = new List<(Vector2I, int, int)>();
-		foreach (Vector2I candidate in _roomBuilder.GetReachableMovementCells(targetCell, attackRange))
+		foreach (Vector2I candidate in _roomBuilder.GetReachableMovementCells(targetCell, attackProfile.Range))
 		{
 			if (candidate == targetCell || !_roomBuilder.IsWalkableMovementCell(candidate) || IsMovementCellBlockedByProp(candidate) || IsCellOccupiedByLivingActor(candidate, movingOfficer, movingEnemy))
 			{
@@ -3609,6 +3968,11 @@ public partial class MissionMap : Node2D
 			int pathLength = Math.Max(0, pathCells.Count - 1);
 			int pathCost = GetMovementCostForPathSteps(pathLength);
 			if (pathLength <= 0 || pathCost > maxSteps)
+			{
+				continue;
+			}
+
+			if (!CanAttackTarget(candidate, targetCell, attackProfile))
 			{
 				continue;
 			}
@@ -3636,7 +4000,7 @@ public partial class MissionMap : Node2D
 		}
 
 		MissionAttackProfile attackProfile = officer.GetAttackProfile();
-		if (GetTileDistance(officer.CurrentCell, enemy.CurrentCell) > attackProfile.Range)
+		if (!CanAttackTarget(officer.CurrentCell, enemy.CurrentCell, attackProfile))
 		{
 			return;
 		}
@@ -3682,7 +4046,7 @@ public partial class MissionMap : Node2D
 		}
 
 		MissionAttackProfile attackProfile = enemy.GetAttackProfile();
-		if (GetTileDistance(enemy.CurrentCell, officer.CurrentCell) > attackProfile.Range)
+		if (!CanAttackTarget(enemy.CurrentCell, officer.CurrentCell, attackProfile))
 		{
 			return;
 		}
@@ -4046,7 +4410,8 @@ public partial class MissionMap : Node2D
 	private OfficerPawn GetClosestLivingOfficer(Vector2I fromCell)
 	{
 		return GetAliveOfficers()
-			.OrderBy(officer => GetTileDistance(fromCell, officer.CurrentCell))
+			.OrderBy(officer => HasClearLineOfSight(fromCell, officer.CurrentCell) ? 0 : 1)
+			.ThenBy(officer => GetTileDistance(fromCell, officer.CurrentCell))
 			.FirstOrDefault();
 	}
 
