@@ -191,6 +191,41 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 		_isMoving = false;
 	}
 
+	public void ApplySavedRuntimeState(int currentHp, int currentShields, int currentActions, string activeStatusEffectId, bool isDead, bool isConsumed)
+	{
+		CurrentHP = Mathf.Clamp(currentHp, 0, MaxHP);
+		CurrentShields = Mathf.Clamp(currentShields, 0, MaxShields);
+		CurrentActions = Mathf.Clamp(currentActions, 0, MaxActions);
+		ActiveStatusEffectId = activeStatusEffectId ?? string.Empty;
+		IsConsumed = isConsumed;
+		IsDead = isDead || CurrentHP <= 0;
+		_pathPoints.Clear();
+		_pathCells.Clear();
+		_targetCell = CurrentCell;
+		_pendingDestinationCell = CurrentCell;
+		_targetPosition = GlobalPosition;
+		_isMoving = false;
+
+		if (IsConsumed)
+		{
+			Modulate = new Color(1f, 1f, 1f, 0.45f);
+		}
+		else
+		{
+			Modulate = Colors.White;
+		}
+
+		if (IsDead)
+		{
+			Visible = false;
+			SetProcess(false);
+			return;
+		}
+
+		Visible = true;
+		SetProcess(true);
+	}
+
 	public void MoveAlongPath(IReadOnlyList<Vector2> globalPathPoints, IReadOnlyList<Vector2I> pathCells, Vector2I destinationCell)
 	{
 		if (globalPathPoints == null || pathCells == null || globalPathPoints.Count == 0 || globalPathPoints.Count != pathCells.Count)

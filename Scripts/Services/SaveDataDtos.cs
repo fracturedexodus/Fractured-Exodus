@@ -80,6 +80,188 @@ public class ShipStateSaveData
 	}
 }
 
+public class MissionActorSaveData
+{
+	public string ActorId { get; set; } = string.Empty;
+	public Vector2ISaveData Cell { get; set; } = new Vector2ISaveData();
+	public int CurrentHP { get; set; }
+	public int CurrentShields { get; set; }
+	public int CurrentActions { get; set; }
+	public string ActiveStatusEffectId { get; set; } = string.Empty;
+	public bool IsDead { get; set; }
+	public bool IsConsumed { get; set; }
+
+	public Godot.Collections.Dictionary<string, Variant> ToVariantDictionary()
+	{
+		return new Godot.Collections.Dictionary<string, Variant>
+		{
+			{ "ActorId", ActorId },
+			{ "Cell", Cell.ToVariantDictionary() },
+			{ "CurrentHP", CurrentHP },
+			{ "CurrentShields", CurrentShields },
+			{ "CurrentActions", CurrentActions },
+			{ "ActiveStatusEffectId", ActiveStatusEffectId },
+			{ "IsDead", IsDead },
+			{ "IsConsumed", IsConsumed }
+		};
+	}
+
+	public static MissionActorSaveData FromVariantDictionary(Godot.Collections.Dictionary dict)
+	{
+		return new MissionActorSaveData
+		{
+			ActorId = dict.ContainsKey("ActorId") ? (string)dict["ActorId"] : string.Empty,
+			Cell = dict.ContainsKey("Cell")
+				? Vector2ISaveData.FromVariantDictionary((Godot.Collections.Dictionary)dict["Cell"])
+				: new Vector2ISaveData(),
+			CurrentHP = dict.ContainsKey("CurrentHP") ? (int)dict["CurrentHP"] : 0,
+			CurrentShields = dict.ContainsKey("CurrentShields") ? (int)dict["CurrentShields"] : 0,
+			CurrentActions = dict.ContainsKey("CurrentActions") ? (int)dict["CurrentActions"] : 0,
+			ActiveStatusEffectId = dict.ContainsKey("ActiveStatusEffectId") ? (string)dict["ActiveStatusEffectId"] : string.Empty,
+			IsDead = dict.ContainsKey("IsDead") && (bool)dict["IsDead"],
+			IsConsumed = dict.ContainsKey("IsConsumed") && (bool)dict["IsConsumed"]
+		};
+	}
+}
+
+public class MissionPropSaveData
+{
+	public string PropInstanceId { get; set; } = string.Empty;
+	public bool IsConsumed { get; set; }
+
+	public Godot.Collections.Dictionary<string, Variant> ToVariantDictionary()
+	{
+		return new Godot.Collections.Dictionary<string, Variant>
+		{
+			{ "PropInstanceId", PropInstanceId },
+			{ "IsConsumed", IsConsumed }
+		};
+	}
+
+	public static MissionPropSaveData FromVariantDictionary(Godot.Collections.Dictionary dict)
+	{
+		return new MissionPropSaveData
+		{
+			PropInstanceId = dict.ContainsKey("PropInstanceId") ? (string)dict["PropInstanceId"] : string.Empty,
+			IsConsumed = dict.ContainsKey("IsConsumed") && (bool)dict["IsConsumed"]
+		};
+	}
+}
+
+public class MissionDoorSaveData
+{
+	public string DoorId { get; set; } = string.Empty;
+	public bool IsOpen { get; set; }
+
+	public Godot.Collections.Dictionary<string, Variant> ToVariantDictionary()
+	{
+		return new Godot.Collections.Dictionary<string, Variant>
+		{
+			{ "DoorId", DoorId },
+			{ "IsOpen", IsOpen }
+		};
+	}
+
+	public static MissionDoorSaveData FromVariantDictionary(Godot.Collections.Dictionary dict)
+	{
+		return new MissionDoorSaveData
+		{
+			DoorId = dict.ContainsKey("DoorId") ? (string)dict["DoorId"] : string.Empty,
+			IsOpen = dict.ContainsKey("IsOpen") && (bool)dict["IsOpen"]
+		};
+	}
+}
+
+public class MissionCombatTurnSaveData
+{
+	public string CombatantId { get; set; } = string.Empty;
+	public bool IsOfficer { get; set; }
+
+	public Godot.Collections.Dictionary<string, Variant> ToVariantDictionary()
+	{
+		return new Godot.Collections.Dictionary<string, Variant>
+		{
+			{ "CombatantId", CombatantId },
+			{ "IsOfficer", IsOfficer }
+		};
+	}
+
+	public static MissionCombatTurnSaveData FromVariantDictionary(Godot.Collections.Dictionary dict)
+	{
+		return new MissionCombatTurnSaveData
+		{
+			CombatantId = dict.ContainsKey("CombatantId") ? (string)dict["CombatantId"] : string.Empty,
+			IsOfficer = dict.ContainsKey("IsOfficer") && (bool)dict["IsOfficer"]
+		};
+	}
+}
+
+public class MissionRuntimeSaveData
+{
+	public string MissionId { get; set; } = string.Empty;
+	public string ScenePath { get; set; } = string.Empty;
+	public int CombatRound { get; set; } = 1;
+	public bool CombatActive { get; set; }
+	public int CombatActiveIndex { get; set; } = -1;
+	public string FocusedEnemyId { get; set; } = string.Empty;
+	public int SelectedOfficerIndex { get; set; }
+	public List<string> SelectedOfficerIds { get; set; } = new List<string>();
+	public List<string> ConsumedTriggerKeys { get; set; } = new List<string>();
+	public List<string> EngagedEnemyIds { get; set; } = new List<string>();
+	public List<Vector2ISaveData> ExploredCells { get; set; } = new List<Vector2ISaveData>();
+	public List<MissionActorSaveData> Officers { get; set; } = new List<MissionActorSaveData>();
+	public List<MissionActorSaveData> Npcs { get; set; } = new List<MissionActorSaveData>();
+	public List<MissionPropSaveData> Props { get; set; } = new List<MissionPropSaveData>();
+	public List<MissionDoorSaveData> Doors { get; set; } = new List<MissionDoorSaveData>();
+	public List<MissionCombatTurnSaveData> CombatQueue { get; set; } = new List<MissionCombatTurnSaveData>();
+
+	public Godot.Collections.Dictionary<string, Variant> ToVariantDictionary()
+	{
+		return new Godot.Collections.Dictionary<string, Variant>
+		{
+			{ "MissionId", MissionId },
+			{ "ScenePath", ScenePath },
+			{ "CombatRound", CombatRound },
+			{ "CombatActive", CombatActive },
+			{ "CombatActiveIndex", CombatActiveIndex },
+			{ "FocusedEnemyId", FocusedEnemyId },
+			{ "SelectedOfficerIndex", SelectedOfficerIndex },
+			{ "SelectedOfficerIds", CampaignSaveData.ToVariantArray(SelectedOfficerIds) },
+			{ "ConsumedTriggerKeys", CampaignSaveData.ToVariantArray(ConsumedTriggerKeys) },
+			{ "EngagedEnemyIds", CampaignSaveData.ToVariantArray(EngagedEnemyIds) },
+			{ "ExploredCells", CampaignSaveData.ToVariantArray(ExploredCells.Select(cell => cell.ToVariantDictionary())) },
+			{ "Officers", CampaignSaveData.ToVariantArray(Officers.Select(actor => actor.ToVariantDictionary())) },
+			{ "Npcs", CampaignSaveData.ToVariantArray(Npcs.Select(actor => actor.ToVariantDictionary())) },
+			{ "Props", CampaignSaveData.ToVariantArray(Props.Select(prop => prop.ToVariantDictionary())) },
+			{ "Doors", CampaignSaveData.ToVariantArray(Doors.Select(door => door.ToVariantDictionary())) },
+			{ "CombatQueue", CampaignSaveData.ToVariantArray(CombatQueue.Select(turn => turn.ToVariantDictionary())) }
+		};
+	}
+
+	public static MissionRuntimeSaveData FromVariantDictionary(Godot.Collections.Dictionary dict)
+	{
+		return new MissionRuntimeSaveData
+		{
+			MissionId = dict.ContainsKey("MissionId") ? (string)dict["MissionId"] : string.Empty,
+			ScenePath = dict.ContainsKey("ScenePath") ? (string)dict["ScenePath"] : string.Empty,
+			CombatRound = dict.ContainsKey("CombatRound") ? (int)dict["CombatRound"] : 1,
+			CombatActive = dict.ContainsKey("CombatActive") && (bool)dict["CombatActive"],
+			CombatActiveIndex = dict.ContainsKey("CombatActiveIndex") ? (int)dict["CombatActiveIndex"] : -1,
+			FocusedEnemyId = dict.ContainsKey("FocusedEnemyId") ? (string)dict["FocusedEnemyId"] : string.Empty,
+			SelectedOfficerIndex = dict.ContainsKey("SelectedOfficerIndex") ? (int)dict["SelectedOfficerIndex"] : 0,
+			SelectedOfficerIds = CampaignSaveData.FromStringArray(dict.ContainsKey("SelectedOfficerIds") ? (Godot.Collections.Array)dict["SelectedOfficerIds"] : new Godot.Collections.Array()),
+			ConsumedTriggerKeys = CampaignSaveData.FromStringArray(dict.ContainsKey("ConsumedTriggerKeys") ? (Godot.Collections.Array)dict["ConsumedTriggerKeys"] : new Godot.Collections.Array()),
+			EngagedEnemyIds = CampaignSaveData.FromStringArray(dict.ContainsKey("EngagedEnemyIds") ? (Godot.Collections.Array)dict["EngagedEnemyIds"] : new Godot.Collections.Array()),
+			ExploredCells = CampaignSaveData.FromVariantObjectList(dict.ContainsKey("ExploredCells") ? (Godot.Collections.Array)dict["ExploredCells"] : new Godot.Collections.Array(), Vector2ISaveData.FromVariantDictionary),
+			Officers = CampaignSaveData.FromVariantObjectList(dict.ContainsKey("Officers") ? (Godot.Collections.Array)dict["Officers"] : new Godot.Collections.Array(), MissionActorSaveData.FromVariantDictionary),
+			Npcs = CampaignSaveData.FromVariantObjectList(dict.ContainsKey("Npcs") ? (Godot.Collections.Array)dict["Npcs"] : new Godot.Collections.Array(), MissionActorSaveData.FromVariantDictionary),
+			Props = CampaignSaveData.FromVariantObjectList(dict.ContainsKey("Props") ? (Godot.Collections.Array)dict["Props"] : new Godot.Collections.Array(), MissionPropSaveData.FromVariantDictionary),
+			Doors = CampaignSaveData.FromVariantObjectList(dict.ContainsKey("Doors") ? (Godot.Collections.Array)dict["Doors"] : new Godot.Collections.Array(), MissionDoorSaveData.FromVariantDictionary),
+			CombatQueue = CampaignSaveData.FromVariantObjectList(dict.ContainsKey("CombatQueue") ? (Godot.Collections.Array)dict["CombatQueue"] : new Godot.Collections.Array(), MissionCombatTurnSaveData.FromVariantDictionary)
+		};
+	}
+}
+
 public class FleetLoadoutSaveData
 {
 	public string WeaponID { get; set; } = string.Empty;
@@ -573,6 +755,9 @@ public class SystemSaveData
 
 public class CampaignSaveData
 {
+	public string SaveDisplayName { get; set; } = string.Empty;
+	public string SavedAtUtc { get; set; } = string.Empty;
+	public string LastSavedScenePath { get; set; } = string.Empty;
 	public string SavedSystem { get; set; } = string.Empty;
 	public string SavedPlanet { get; set; } = string.Empty;
 	public int CurrentTurn { get; set; } = 1;
@@ -603,6 +788,7 @@ public class CampaignSaveData
 	public List<string> CompletedMissionIDs { get; set; } = new List<string>();
 	public Dictionary<string, string> MissionOutcomes { get; set; } = new Dictionary<string, string>();
 	public List<string> StoryFlags { get; set; } = new List<string>();
+	public MissionRuntimeSaveData CurrentMissionSaveState { get; set; }
 	public Dictionary<string, SystemSaveData> ExploredSystems { get; set; } = new Dictionary<string, SystemSaveData>();
 	public List<StarMapSaveData> CurrentSectorStars { get; set; } = new List<StarMapSaveData>();
 
@@ -610,6 +796,9 @@ public class CampaignSaveData
 	{
 		return new CampaignSaveData
 		{
+			SaveDisplayName = globalData.SaveDisplayName,
+			SavedAtUtc = globalData.SavedAtUtc,
+			LastSavedScenePath = globalData.LastSavedScenePath,
 			SavedSystem = globalData.SavedSystem,
 			SavedPlanet = globalData.SavedPlanet,
 			CurrentTurn = globalData.CurrentTurn,
@@ -640,6 +829,7 @@ public class CampaignSaveData
 			CompletedMissionIDs = (globalData.CompletedMissionIDs ?? new List<string>()).ToList(),
 			MissionOutcomes = (globalData.MissionOutcomes ?? new Dictionary<string, string>()).ToDictionary(kvp => kvp.Key, kvp => kvp.Value),
 			StoryFlags = (globalData.StoryFlags ?? new List<string>()).ToList(),
+			CurrentMissionSaveState = globalData.CurrentMissionSaveState,
 			ExploredSystems = (globalData.ExploredSystems ?? new Dictionary<string, SystemData>()).ToDictionary(kvp => kvp.Key, kvp => SystemSaveData.FromRuntime(kvp.Value)),
 			CurrentSectorStars = (globalData.CurrentSectorStars ?? new List<StarMapData>()).Select(StarMapSaveData.FromRuntime).ToList()
 		};
@@ -647,6 +837,9 @@ public class CampaignSaveData
 
 	public void ApplyTo(GlobalData globalData)
 	{
+		globalData.SaveDisplayName = SaveDisplayName;
+		globalData.SavedAtUtc = SavedAtUtc;
+		globalData.LastSavedScenePath = LastSavedScenePath;
 		globalData.SavedSystem = SavedSystem;
 		globalData.SavedPlanet = SavedPlanet;
 		globalData.CurrentTurn = CurrentTurn;
@@ -682,6 +875,7 @@ public class CampaignSaveData
 		globalData.CompletedMissionIDs = CompletedMissionIDs.ToList();
 		globalData.MissionOutcomes = MissionOutcomes.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
 		globalData.StoryFlags = StoryFlags.ToList();
+		globalData.CurrentMissionSaveState = CurrentMissionSaveState;
 		globalData.ExploredSystems = ExploredSystems.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.ToRuntime());
 		globalData.CurrentSectorStars = CurrentSectorStars.Select(s => s.ToRuntime()).ToList();
 	}
@@ -720,6 +914,9 @@ public class CampaignSaveData
 
 		return new Godot.Collections.Dictionary<string, Variant>
 		{
+			{ "SaveDisplayName", SaveDisplayName },
+			{ "SavedAtUtc", SavedAtUtc },
+			{ "LastSavedScenePath", LastSavedScenePath },
 			{ "SavedSystem", SavedSystem },
 			{ "SavedPlanet", SavedPlanet },
 			{ "CurrentTurn", CurrentTurn },
@@ -750,6 +947,7 @@ public class CampaignSaveData
 			{ "CompletedMissionIDs", ToVariantArray(CompletedMissionIDs) },
 			{ "MissionOutcomes", missionOutcomeDict },
 			{ "StoryFlags", ToVariantArray(StoryFlags) },
+			{ "CurrentMissionSaveState", CurrentMissionSaveState?.ToVariantDictionary() ?? new Godot.Collections.Dictionary<string, Variant>() },
 			{ "ExploredSystems", systemDict },
 			{ "CurrentSectorStars", ToVariantArray(CurrentSectorStars.Select(s => s.ToVariantDictionary())) }
 		};
@@ -759,6 +957,9 @@ public class CampaignSaveData
 	{
 		return new CampaignSaveData
 		{
+			SaveDisplayName = dict.ContainsKey("SaveDisplayName") ? (string)dict["SaveDisplayName"] : string.Empty,
+			SavedAtUtc = dict.ContainsKey("SavedAtUtc") ? (string)dict["SavedAtUtc"] : string.Empty,
+			LastSavedScenePath = dict.ContainsKey("LastSavedScenePath") ? (string)dict["LastSavedScenePath"] : string.Empty,
 			SavedSystem = dict.ContainsKey("SavedSystem") ? (string)dict["SavedSystem"] : string.Empty,
 			SavedPlanet = dict.ContainsKey("SavedPlanet") ? (string)dict["SavedPlanet"] : string.Empty,
 			CurrentTurn = dict.ContainsKey("CurrentTurn") ? (int)dict["CurrentTurn"] : 1,
@@ -789,6 +990,9 @@ public class CampaignSaveData
 			CompletedMissionIDs = FromStringArray(dict.ContainsKey("CompletedMissionIDs") ? (Godot.Collections.Array)dict["CompletedMissionIDs"] : new Godot.Collections.Array()),
 			MissionOutcomes = FromSimpleStringDictionary(dict.ContainsKey("MissionOutcomes") ? (Godot.Collections.Dictionary)dict["MissionOutcomes"] : new Godot.Collections.Dictionary()),
 			StoryFlags = FromStringArray(dict.ContainsKey("StoryFlags") ? (Godot.Collections.Array)dict["StoryFlags"] : new Godot.Collections.Array()),
+			CurrentMissionSaveState = dict.ContainsKey("CurrentMissionSaveState") && dict["CurrentMissionSaveState"].VariantType == Variant.Type.Dictionary
+				? MissionRuntimeSaveData.FromVariantDictionary((Godot.Collections.Dictionary)dict["CurrentMissionSaveState"])
+				: null,
 			ExploredSystems = FromSystemDictionary(dict.ContainsKey("ExploredSystems") ? (Godot.Collections.Dictionary)dict["ExploredSystems"] : new Godot.Collections.Dictionary()),
 			CurrentSectorStars = FromVariantObjectList(dict.ContainsKey("CurrentSectorStars") ? (Godot.Collections.Array)dict["CurrentSectorStars"] : new Godot.Collections.Array(), StarMapSaveData.FromVariantDictionary)
 		};

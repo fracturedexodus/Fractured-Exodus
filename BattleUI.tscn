@@ -2,15 +2,13 @@
 
 [ext_resource type="Script" uid="uid://bdo32du5ph0u2" path="res://BattleUI.cs" id="1_2uhrq"]
 
-[node name="BattleUI" type="CanvasLayer" unique_id=654862988 node_paths=PackedStringArray("TurnLabel", "InventoryDisplay", "EndTurnButton", "SaveGameButton", "RepairFleetButton", "InventoryButton", "MainMenuButton", "AttackButton", "MissileButton", "JumpButton", "InitiativeUI", "InfoPanel", "InfoLabel", "CombatLogPanel", "CombatLogText", "GameOverPanel", "GameOverLabel", "GameOverReturnButton", "ShipMenuPanel", "ShipMenuTitle", "ShipImageDisplay", "HpBar", "HpLabel", "ShieldBar", "ShieldLabel", "ShipMenuDetails", "WeaponNameLabel", "HullNameLabel", "ShieldNameLabel", "MissileNameLabel", "BtnRepair", "BtnScan", "BtnSalvage", "BtnLongRange", "CodexButton", "CloseMenuButton")]
+[node name="BattleUI" type="CanvasLayer" unique_id=654862988 node_paths=PackedStringArray("TurnLabel", "InventoryDisplay", "EndTurnButton", "RepairFleetButton", "InventoryButton", "AttackButton", "MissileButton", "JumpButton", "InitiativeUI", "InfoPanel", "InfoLabel", "CombatLogPanel", "CombatLogText", "GameOverPanel", "GameOverLabel", "GameOverReturnButton", "ShipMenuPanel", "ShipMenuTitle", "ShipImageDisplay", "HpBar", "HpLabel", "ShieldBar", "ShieldLabel", "ShipMenuDetails", "WeaponNameLabel", "HullNameLabel", "ShieldNameLabel", "MissileNameLabel", "BtnRepair", "BtnScan", "BtnSalvage", "BtnLongRange", "CodexButton", "CloseMenuButton")]
 script = ExtResource("1_2uhrq")
 TurnLabel = NodePath("UIRoot/TopContainer/TurnLabel")
 InventoryDisplay = NodePath("UIRoot/TopContainer/InventoryDisplay")
 EndTurnButton = NodePath("UIRoot/TopRightButtons/EndTurnButton")
-SaveGameButton = NodePath("UIRoot/TopRightButtons/SaveGameButton")
 RepairFleetButton = NodePath("UIRoot/TopRightButtons/RepairFleetButton")
 InventoryButton = NodePath("UIRoot/TopRightButtons/InventoryButton")
-MainMenuButton = NodePath("UIRoot/TopRightButtons/MainMenuButton")
 AttackButton = NodePath("UIRoot/AttackButton")
 MissileButton = NodePath("UIRoot/MissileButton")
 JumpButton = NodePath("UIRoot/JumpButton")
@@ -108,11 +106,6 @@ offset_bottom = 40.0
 grow_horizontal = 0
 theme_override_constants/separation = 10
 
-[node name="MainMenuButton" type="Button" parent="UIRoot/TopRightButtons" unique_id=1770934302]
-custom_minimum_size = Vector2(160, 50)
-layout_mode = 2
-text = "MAIN MENU"
-
 [node name="InventoryButton" type="Button" parent="UIRoot/TopRightButtons" unique_id=1955871659]
 custom_minimum_size = Vector2(160, 50)
 layout_mode = 2
@@ -122,11 +115,6 @@ text = "INVENTORY"
 custom_minimum_size = Vector2(160, 50)
 layout_mode = 2
 text = "REPAIR FLEET"
-
-[node name="SaveGameButton" type="Button" parent="UIRoot/TopRightButtons" unique_id=2038459830]
-custom_minimum_size = Vector2(160, 50)
-layout_mode = 2
-text = "SAVE GAME"
 
 [node name="EndTurnButton" type="Button" parent="UIRoot/TopRightButtons" unique_id=1191285172]
 custom_minimum_size = Vector2(160, 50)

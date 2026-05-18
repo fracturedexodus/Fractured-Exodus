@@ -29,11 +29,19 @@ public sealed class MissionCombatantSummary
 
 public partial class MissionUI : CanvasLayer
 {
+	private const float ExplorationSelectionSingleWidth = 372f;
+	private const float ExplorationSelectionDoubleWidth = 732f;
+	private const float ExplorationCardWidth = 348f;
+	private const float ExplorationCardHeight = 286f;
+
 	[Signal]
 	public delegate void ExtractionOutcomeChosenEventHandler(string outcomeId);
 
 	[Signal]
 	public delegate void CombatEndTurnPressedEventHandler();
+
+	[Signal]
+	public delegate void MissionSaveConfirmedEventHandler(string saveName);
 
 	[Signal]
 	public delegate void StoryEventConfirmedEventHandler();
@@ -51,8 +59,10 @@ public partial class MissionUI : CanvasLayer
 	public bool IsExtractionPromptVisible => _extractionPromptPanel?.Visible ?? false;
 	public bool IsStoryEventVisible => _storyEventPanel?.Visible ?? false;
 	public bool IsConfirmationVisible => _confirmationPromptPanel?.Visible ?? false;
+	public bool IsMissionSavePromptVisible => _savePromptPanel?.Visible ?? false;
 
 	private Control _uiRoot;
+	private PanelContainer _topLeftPanel;
 	private PanelContainer _legacyActionPanel;
 	private PanelContainer _extractionPromptPanel;
 	private Label _extractionPromptTitleLabel;
@@ -68,9 +78,19 @@ public partial class MissionUI : CanvasLayer
 	private PanelContainer _enemyCombatInfoPanel;
 	private TextureRect _enemyCombatIcon;
 	private Label _enemyCombatInfoLabel;
+	private PanelContainer _explorationSelectionPanel;
+	private PanelContainer _explorationPrimaryInfoPanel;
+	private TextureRect _explorationPrimaryIcon;
+	private Label _explorationPrimaryInfoLabel;
+	private PanelContainer _explorationSecondaryInfoPanel;
+	private TextureRect _explorationSecondaryIcon;
+	private Label _explorationSecondaryInfoLabel;
 	private PanelContainer _combatLogPanel;
 	private RichTextLabel _combatLogText;
 	private readonly List<string> _combatLogEntries = new List<string>();
+	private PanelContainer _actionLogPanel;
+	private RichTextLabel _actionLogText;
+	private readonly List<string> _actionLogEntries = new List<string>();
 	private PanelContainer _hoverSummaryPanel;
 	private Label _hoverSummaryLabel;
 	private PanelContainer _storyEventPanel;
@@ -82,6 +102,9 @@ public partial class MissionUI : CanvasLayer
 	private Label _confirmationPromptBodyLabel;
 	private Button _confirmationPromptConfirmButton;
 	private Button _confirmationPromptCancelButton;
+	private PanelContainer _savePromptPanel;
+	private LineEdit _saveNameLineEdit;
+	private Label _savePromptStatusLabel;
 	private ColorRect _gameOverPanel;
 	private Label _gameOverLabel;
 	private Button _gameOverReturnButton;
@@ -91,10 +114,23 @@ public partial class MissionUI : CanvasLayer
 	public override void _Ready()
 	{
 		_uiRoot = GetNode<Control>("UIRoot");
+		_topLeftPanel = GetNodeOrNull<PanelContainer>("UIRoot/TopLeftPanel");
 		TitleLabel = GetNode<Label>("UIRoot/TopLeftPanel/Margin/Content/TitleLabel");
 		ObjectiveLabel = GetNode<Label>("UIRoot/TopLeftPanel/Margin/Content/ObjectiveLabel");
 		SelectedOfficerLabel = GetNode<Label>("UIRoot/TopLeftPanel/Margin/Content/SelectedOfficerLabel");
 		PromptLabel = GetNode<Label>("UIRoot/TopLeftPanel/Margin/Content/PromptLabel");
+		if (_topLeftPanel != null)
+		{
+			_topLeftPanel.OffsetBottom = 170f;
+		}
+		if (SelectedOfficerLabel != null)
+		{
+			SelectedOfficerLabel.Visible = false;
+		}
+		if (PromptLabel != null)
+		{
+			PromptLabel.Visible = false;
+		}
 		_legacyActionPanel = GetNodeOrNull<PanelContainer>("UIRoot/BottomRightPanel");
 		if (_legacyActionPanel != null)
 		{
@@ -103,10 +139,13 @@ public partial class MissionUI : CanvasLayer
 
 		BuildExtractionPrompt();
 		BuildCombatHud();
+		BuildExplorationSelectionHud();
 		BuildCombatLog();
+		BuildActionLog();
 		BuildHoverSummary();
 		BuildStoryEventPanel();
 		BuildConfirmationPrompt();
+		BuildMissionSavePrompt();
 		BuildGameOverPanel();
 	}
 
@@ -193,6 +232,11 @@ public partial class MissionUI : CanvasLayer
 		{
 			_combatLogPanel.Visible = visible;
 		}
+
+		if (_explorationSelectionPanel != null && visible)
+		{
+			_explorationSelectionPanel.Visible = false;
+		}
 	}
 
 	public void SetCombatTurnLabel(string text)
@@ -266,6 +310,35 @@ public partial class MissionUI : CanvasLayer
 		UpdateCombatInfoPanel(summary, _enemyCombatInfoPanel, _enemyCombatIcon, _enemyCombatInfoLabel, "ENEMY");
 	}
 
+	public void SetExplorationSelectionInfo(IReadOnlyList<MissionCombatantSummary> summaries, bool visible)
+	{
+		if (_explorationSelectionPanel == null)
+		{
+			return;
+		}
+
+		if (!visible || summaries == null || summaries.Count == 0)
+		{
+			_explorationSelectionPanel.Visible = false;
+			return;
+		}
+
+		_explorationSelectionPanel.Visible = true;
+		UpdateExplorationSelectionPanelWidth(Mathf.Clamp(summaries.Count, 1, 2));
+		UpdateCombatInfoPanel(
+			summaries.Count > 0 ? summaries[0] : null,
+			_explorationPrimaryInfoPanel,
+			_explorationPrimaryIcon,
+			_explorationPrimaryInfoLabel,
+			"OFFICER");
+		UpdateCombatInfoPanel(
+			summaries.Count > 1 ? summaries[1] : null,
+			_explorationSecondaryInfoPanel,
+			_explorationSecondaryIcon,
+			_explorationSecondaryInfoLabel,
+			"OFFICER");
+	}
+
 	public void SetCombatEndTurnEnabled(bool enabled, bool visible = true)
 	{
 		if (_combatEndTurnButton == null)
@@ -305,12 +378,39 @@ public partial class MissionUI : CanvasLayer
 		_combatLogText.ScrollToLine(_combatLogEntries.Count);
 	}
 
+	public void AppendActionLog(string message)
+	{
+		if (_actionLogText == null || string.IsNullOrWhiteSpace(message))
+		{
+			return;
+		}
+
+		_actionLogEntries.Add(message.Trim());
+		while (_actionLogEntries.Count > 12)
+		{
+			_actionLogEntries.RemoveAt(0);
+		}
+
+		_actionLogText.Text = string.Join("\n\n", _actionLogEntries);
+		_actionLogText.CallDeferred(nameof(ScrollActionLogToBottom));
+	}
+
 	public void ClearCombatLog()
 	{
 		_combatLogEntries.Clear();
 		if (_combatLogText != null)
 		{
 			_combatLogText.Text = string.Empty;
+		}
+	}
+
+	public void ClearActionLog()
+	{
+		_actionLogEntries.Clear();
+		if (_actionLogText != null)
+		{
+			_actionLogText.Text = string.Empty;
+			_actionLogText.CallDeferred(nameof(ScrollActionLogToBottom));
 		}
 	}
 
@@ -398,6 +498,20 @@ public partial class MissionUI : CanvasLayer
 		{
 			_confirmationPromptPanel.Visible = false;
 		}
+	}
+
+	public void ShowMissionSavePrompt(string suggestedName)
+	{
+		if (_savePromptPanel == null || _saveNameLineEdit == null || _savePromptStatusLabel == null)
+		{
+			return;
+		}
+
+		_savePromptStatusLabel.Text = string.Empty;
+		_saveNameLineEdit.Text = string.IsNullOrWhiteSpace(suggestedName) ? "Mission Save" : suggestedName.Trim();
+		_savePromptPanel.Visible = true;
+		_saveNameLineEdit.GrabFocus();
+		_saveNameLineEdit.SelectAll();
 	}
 
 	private void BuildExtractionPrompt()
@@ -501,6 +615,61 @@ public partial class MissionUI : CanvasLayer
 		_uiRoot.AddChild(_enemyCombatInfoPanel);
 	}
 
+	private void BuildExplorationSelectionHud()
+	{
+		if (_uiRoot == null)
+		{
+			return;
+		}
+
+		_explorationSelectionPanel = new PanelContainer
+		{
+			Visible = false
+		};
+		_explorationSelectionPanel.SetAnchorsPreset(Control.LayoutPreset.BottomLeft);
+		_explorationSelectionPanel.OffsetLeft = 20f;
+		_explorationSelectionPanel.OffsetTop = -360f;
+		_explorationSelectionPanel.OffsetRight = 20f + ExplorationSelectionDoubleWidth;
+		_explorationSelectionPanel.OffsetBottom = -58f;
+		_explorationSelectionPanel.AddThemeStyleboxOverride("panel", CreateTransparentPanelStyle());
+		_uiRoot.AddChild(_explorationSelectionPanel);
+
+		MarginContainer margin = new MarginContainer();
+		margin.AddThemeConstantOverride("margin_left", 12);
+		margin.AddThemeConstantOverride("margin_top", 12);
+		margin.AddThemeConstantOverride("margin_right", 12);
+		margin.AddThemeConstantOverride("margin_bottom", 12);
+		_explorationSelectionPanel.AddChild(margin);
+
+		HBoxContainer row = new HBoxContainer
+		{
+			Alignment = BoxContainer.AlignmentMode.Begin
+		};
+		row.AddThemeConstantOverride("separation", 12);
+		margin.AddChild(row);
+
+		_explorationPrimaryInfoPanel = BuildCombatInfoPanel(
+			Vector2.Zero,
+			out _explorationPrimaryIcon,
+			out _explorationPrimaryInfoLabel,
+			new Vector2(ExplorationCardWidth, ExplorationCardHeight),
+			new Vector2(156f, 132f));
+		_explorationSecondaryInfoPanel = BuildCombatInfoPanel(
+			Vector2.Zero,
+			out _explorationSecondaryIcon,
+			out _explorationSecondaryInfoLabel,
+			new Vector2(ExplorationCardWidth, ExplorationCardHeight),
+			new Vector2(156f, 132f));
+		_explorationPrimaryInfoPanel.Position = Vector2.Zero;
+		_explorationSecondaryInfoPanel.Position = Vector2.Zero;
+		_explorationPrimaryInfoPanel.Visible = false;
+		_explorationSecondaryInfoPanel.Visible = false;
+		_explorationPrimaryInfoPanel.AddThemeStyleboxOverride("panel", CreateTransparentPanelStyle());
+		_explorationSecondaryInfoPanel.AddThemeStyleboxOverride("panel", CreateTransparentPanelStyle());
+		row.AddChild(_explorationPrimaryInfoPanel);
+		row.AddChild(_explorationSecondaryInfoPanel);
+	}
+
 	private void BuildCombatLog()
 	{
 		if (_uiRoot == null)
@@ -549,6 +718,53 @@ public partial class MissionUI : CanvasLayer
 			BbcodeEnabled = false
 		};
 		content.AddChild(_combatLogText);
+	}
+
+	private void BuildActionLog()
+	{
+		if (_uiRoot == null)
+		{
+			return;
+		}
+
+		_actionLogPanel = new PanelContainer();
+		_actionLogPanel.SetAnchorsPreset(Control.LayoutPreset.TopRight);
+		_actionLogPanel.OffsetLeft = -430f;
+		_actionLogPanel.OffsetTop = 18f;
+		_actionLogPanel.OffsetRight = -18f;
+		_actionLogPanel.OffsetBottom = 308f;
+		_actionLogPanel.AddThemeStyleboxOverride("panel", CreateActionLogStyle());
+		_uiRoot.AddChild(_actionLogPanel);
+
+		MarginContainer margin = new MarginContainer();
+		margin.AddThemeConstantOverride("margin_left", 14);
+		margin.AddThemeConstantOverride("margin_top", 12);
+		margin.AddThemeConstantOverride("margin_right", 14);
+		margin.AddThemeConstantOverride("margin_bottom", 12);
+		_actionLogPanel.AddChild(margin);
+
+		VBoxContainer content = new VBoxContainer();
+		content.AddThemeConstantOverride("separation", 8);
+		margin.AddChild(content);
+
+		Label title = new Label
+		{
+			Text = "ACTION LOG",
+			HorizontalAlignment = HorizontalAlignment.Center
+		};
+		title.AddThemeFontSizeOverride("font_size", 18);
+		content.AddChild(title);
+
+		_actionLogText = new RichTextLabel
+		{
+			FitContent = false,
+			ScrollActive = true,
+			ScrollFollowing = true,
+			SelectionEnabled = false,
+			CustomMinimumSize = new Vector2(0f, 220f),
+			BbcodeEnabled = false
+		};
+		content.AddChild(_actionLogText);
 	}
 
 	private void BuildHoverSummary()
@@ -742,6 +958,84 @@ public partial class MissionUI : CanvasLayer
 		buttons.AddChild(_confirmationPromptConfirmButton);
 	}
 
+	private void BuildMissionSavePrompt()
+	{
+		if (_uiRoot == null)
+		{
+			return;
+		}
+
+		_savePromptPanel = new PanelContainer
+		{
+			Visible = false
+		};
+		_savePromptPanel.SetAnchorsPreset(Control.LayoutPreset.Center);
+		_savePromptPanel.OffsetLeft = -280f;
+		_savePromptPanel.OffsetTop = -130f;
+		_savePromptPanel.OffsetRight = 280f;
+		_savePromptPanel.OffsetBottom = 130f;
+		_savePromptPanel.AddThemeStyleboxOverride("panel", CreateActionLogStyle());
+		_uiRoot.AddChild(_savePromptPanel);
+
+		MarginContainer margin = new MarginContainer();
+		margin.AddThemeConstantOverride("margin_left", 18);
+		margin.AddThemeConstantOverride("margin_top", 18);
+		margin.AddThemeConstantOverride("margin_right", 18);
+		margin.AddThemeConstantOverride("margin_bottom", 18);
+		_savePromptPanel.AddChild(margin);
+
+		VBoxContainer content = new VBoxContainer();
+		content.AddThemeConstantOverride("separation", 12);
+		margin.AddChild(content);
+
+		Label title = new Label
+		{
+			Text = "NAME SAVE FILE",
+			HorizontalAlignment = HorizontalAlignment.Center
+		};
+		title.AddThemeFontSizeOverride("font_size", 24);
+		content.AddChild(title);
+
+		_saveNameLineEdit = new LineEdit
+		{
+			PlaceholderText = "Black Site Relay Save",
+			CustomMinimumSize = new Vector2(0f, 42f)
+		};
+		_saveNameLineEdit.TextSubmitted += _ => ConfirmMissionSavePrompt();
+		content.AddChild(_saveNameLineEdit);
+
+		_savePromptStatusLabel = new Label
+		{
+			HorizontalAlignment = HorizontalAlignment.Center,
+			AutowrapMode = TextServer.AutowrapMode.WordSmart
+		};
+		_savePromptStatusLabel.AddThemeColorOverride("font_color", new Color(1f, 0.55f, 0.55f));
+		content.AddChild(_savePromptStatusLabel);
+
+		HBoxContainer buttons = new HBoxContainer
+		{
+			Alignment = BoxContainer.AlignmentMode.Center
+		};
+		buttons.AddThemeConstantOverride("separation", 12);
+		content.AddChild(buttons);
+
+		Button cancelButton = new Button
+		{
+			Text = "CANCEL",
+			CustomMinimumSize = new Vector2(180f, 42f)
+		};
+		cancelButton.Pressed += HideMissionSavePrompt;
+		buttons.AddChild(cancelButton);
+
+		Button saveButton = new Button
+		{
+			Text = "SAVE",
+			CustomMinimumSize = new Vector2(180f, 42f)
+		};
+		saveButton.Pressed += ConfirmMissionSavePrompt;
+		buttons.AddChild(saveButton);
+	}
+
 	private void BuildGameOverPanel()
 	{
 		if (_uiRoot == null)
@@ -785,12 +1079,12 @@ public partial class MissionUI : CanvasLayer
 		content.AddChild(_gameOverReturnButton);
 	}
 
-	private PanelContainer BuildCombatInfoPanel(Vector2 position, out TextureRect iconRect, out Label infoLabel)
+	private PanelContainer BuildCombatInfoPanel(Vector2 position, out TextureRect iconRect, out Label infoLabel, Vector2? sizeOverride = null, Vector2? iconSizeOverride = null)
 	{
 		PanelContainer panel = new PanelContainer
 		{
 			Position = position,
-			Size = new Vector2(392f, 262f)
+			Size = sizeOverride ?? new Vector2(392f, 262f)
 		};
 
 		MarginContainer margin = new MarginContainer();
@@ -802,11 +1096,12 @@ public partial class MissionUI : CanvasLayer
 
 		VBoxContainer content = new VBoxContainer();
 		content.AddThemeConstantOverride("separation", 10);
+		content.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
 		margin.AddChild(content);
 
 		iconRect = new TextureRect
 		{
-			CustomMinimumSize = new Vector2(120f, 88f),
+			CustomMinimumSize = iconSizeOverride ?? new Vector2(120f, 88f),
 			ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
 			StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered
 		};
@@ -814,7 +1109,8 @@ public partial class MissionUI : CanvasLayer
 
 		infoLabel = new Label
 		{
-			AutowrapMode = TextServer.AutowrapMode.WordSmart
+			AutowrapMode = TextServer.AutowrapMode.Off,
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
 		};
 		content.AddChild(infoLabel);
 		return panel;
@@ -835,7 +1131,20 @@ public partial class MissionUI : CanvasLayer
 
 		panel.Visible = true;
 		iconRect.Texture = summary.Icon;
-		infoLabel.Text = $"{emptyTitle}: {summary.DisplayName}\n{summary.Subtitle}\nWEAPON: {summary.WeaponName}\nSHIELD: {summary.ShieldName}\nHP: {summary.CurrentHP}/{summary.MaxHP}\nSHIELDS: {summary.CurrentShields}/{summary.MaxShields}\nAP: {summary.CurrentAP}/{summary.MaxAP}\nRANGE: {summary.AttackRange} | DMG: {summary.AttackMinDamage}-{summary.AttackMaxDamage}";
+		infoLabel.Text = $"{emptyTitle}: {summary.DisplayName}\nWEAPON: {summary.WeaponName}\nSHIELD: {summary.ShieldName}\nHP: {summary.CurrentHP}/{summary.MaxHP}\nSHIELDS: {summary.CurrentShields}/{summary.MaxShields}\nAP: {summary.CurrentAP}/{summary.MaxAP}\nRANGE: {summary.AttackRange} | DMG: {summary.AttackMinDamage}-{summary.AttackMaxDamage}";
+	}
+
+	private void UpdateExplorationSelectionPanelWidth(int visibleCardCount)
+	{
+		if (_explorationSelectionPanel == null)
+		{
+			return;
+		}
+
+		float targetWidth = visibleCardCount > 1
+			? ExplorationSelectionDoubleWidth
+			: ExplorationSelectionSingleWidth;
+		_explorationSelectionPanel.OffsetRight = _explorationSelectionPanel.OffsetLeft + targetWidth;
 	}
 
 	private static StyleBoxFlat CreateCombatSquareStyle(Color backgroundColor, Color borderColor)
@@ -844,6 +1153,64 @@ public partial class MissionUI : CanvasLayer
 		{
 			BgColor = backgroundColor,
 			BorderColor = borderColor,
+			BorderWidthLeft = 2,
+			BorderWidthTop = 2,
+			BorderWidthRight = 2,
+			BorderWidthBottom = 2,
+			CornerRadiusTopLeft = 8,
+			CornerRadiusTopRight = 8,
+			CornerRadiusBottomRight = 8,
+			CornerRadiusBottomLeft = 8
+		};
+	}
+
+	private static StyleBoxEmpty CreateTransparentPanelStyle()
+	{
+		return new StyleBoxEmpty();
+	}
+
+	private void ConfirmMissionSavePrompt()
+	{
+		string saveName = _saveNameLineEdit?.Text?.Trim() ?? string.Empty;
+		if (string.IsNullOrWhiteSpace(saveName))
+		{
+			if (_savePromptStatusLabel != null)
+			{
+				_savePromptStatusLabel.Text = "Enter a name before saving.";
+			}
+			_saveNameLineEdit?.GrabFocus();
+			return;
+		}
+
+		EmitSignal(SignalName.MissionSaveConfirmed, saveName);
+		HideMissionSavePrompt();
+	}
+
+	public void HideMissionSavePrompt()
+	{
+		if (_savePromptPanel != null)
+		{
+			_savePromptPanel.Visible = false;
+		}
+	}
+
+	private void ScrollActionLogToBottom()
+	{
+		if (_actionLogText == null)
+		{
+			return;
+		}
+
+		int lastLine = Mathf.Max(0, _actionLogText.GetLineCount() - 1);
+		_actionLogText.ScrollToLine(lastLine);
+	}
+
+	private static StyleBoxFlat CreateActionLogStyle()
+	{
+		return new StyleBoxFlat
+		{
+			BgColor = new Color(0.03f, 0.04f, 0.06f, 0.84f),
+			BorderColor = new Color(0.24f, 0.64f, 0.78f, 0.9f),
 			BorderWidthLeft = 2,
 			BorderWidthTop = 2,
 			BorderWidthRight = 2,

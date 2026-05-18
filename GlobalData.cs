@@ -189,6 +189,9 @@ public partial class GlobalData : Node
 	public Dictionary<string, ShipLoadout> FleetLoadouts { get; set; } = new Dictionary<string, ShipLoadout>();
 	public Dictionary<string, OfficerState> ShipOfficers { get; set; } = new Dictionary<string, OfficerState>();
 	public List<string> PendingDowntimeEvents { get; set; } = new List<string>();
+	public string SaveDisplayName { get; set; } = string.Empty;
+	public string SavedAtUtc { get; set; } = string.Empty;
+	public string LastSavedScenePath { get; set; } = string.Empty;
 	public string CurrentMissionID { get; set; } = string.Empty;
 	public string CurrentMissionTitle { get; set; } = string.Empty;
 	public string CurrentMissionScenePath { get; set; } = string.Empty;
@@ -200,6 +203,7 @@ public partial class GlobalData : Node
 	public string MissionSourceInteractionKey { get; set; } = string.Empty;
 	public List<string> SelectedMissionOfficerShipNames { get; set; } = new List<string>();
 	public List<string> SelectedMissionOfficerIDs { get; set; } = new List<string>();
+	public MissionRuntimeSaveData CurrentMissionSaveState { get; set; }
 	public List<string> CompletedMissionIDs { get; set; } = new List<string>();
 	public Dictionary<string, string> MissionOutcomes { get; set; } = new Dictionary<string, string>();
 	public List<string> StoryFlags { get; set; } = new List<string>();
@@ -221,14 +225,34 @@ public partial class GlobalData : Node
 		GD.Print("GlobalData Singleton Initialized successfully.");
 	}
 
-	public void SaveGame(bool autoSave = false)
+	public void SaveGame(bool autoSave = false, string currentScenePath = "")
 	{
+		if (!string.IsNullOrWhiteSpace(currentScenePath))
+		{
+			LastSavedScenePath = currentScenePath;
+		}
+
 		_saveGameService.Save(this, autoSave);
 	}
 
-	public bool LoadGame()
+	public void SaveNamedGame(string saveName, string currentScenePath)
 	{
-		return _saveGameService.Load(this);
+		if (!string.IsNullOrWhiteSpace(currentScenePath))
+		{
+			LastSavedScenePath = currentScenePath;
+		}
+
+		_saveGameService.SaveNamed(this, saveName);
+	}
+
+	public bool LoadGame(string slotId = "")
+	{
+		return _saveGameService.Load(this, slotId);
+	}
+
+	public List<SaveGameSlotInfo> GetAvailableSaveGames()
+	{
+		return _saveGameService.GetAvailableSaves();
 	}
 
 	public MissionRuntimeState GetCurrentMissionState()
@@ -263,6 +287,7 @@ public partial class GlobalData : Node
 		MissionSourceInteractionKey = state?.SourceInteractionKey ?? string.Empty;
 		SelectedMissionOfficerShipNames = state?.ParticipatingShipNames != null ? new List<string>(state.ParticipatingShipNames) : new List<string>();
 		SelectedMissionOfficerIDs = state?.ParticipatingOfficerIDs != null ? new List<string>(state.ParticipatingOfficerIDs) : new List<string>();
+		CurrentMissionSaveState = null;
 	}
 
 	public void ClearCurrentMissionState()
@@ -278,6 +303,7 @@ public partial class GlobalData : Node
 		MissionSourceInteractionKey = string.Empty;
 		SelectedMissionOfficerShipNames.Clear();
 		SelectedMissionOfficerIDs.Clear();
+		CurrentMissionSaveState = null;
 	}
 
 	public void ResetForNewGame()
@@ -287,6 +313,7 @@ public partial class GlobalData : Node
 		ExploredSystems.Clear(); CurrentSectorStars.Clear();
 		CurrentTurn = 1; InCombat = false; CurrentQueueIndex = 0; JustJumped = false; 
 		SavedFleetState.Clear(); UnequippedInventory.Clear(); FleetCargoItemIDs.Clear(); UnlockedCodexEntryIDs.Clear(); FleetLoadouts.Clear(); ShipOfficers.Clear(); PendingDowntimeEvents.Clear();
+		SaveDisplayName = string.Empty; SavedAtUtc = string.Empty; LastSavedScenePath = string.Empty;
 		ClearCurrentMissionState(); CompletedMissionIDs.Clear(); MissionOutcomes.Clear(); StoryFlags.Clear();
 		
 		FleetResources = new Godot.Collections.Dictionary<string, Variant> {

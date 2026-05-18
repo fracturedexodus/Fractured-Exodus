@@ -108,6 +108,28 @@ public partial class MissionProp : Area2D, IInteractable
 		Monitorable = shouldBeVisible;
 	}
 
+	public void ApplySavedConsumptionState(bool isConsumed)
+	{
+		IsConsumed = isConsumed;
+		if (!IsConsumed)
+		{
+			Modulate = Colors.White;
+			SetFogVisibility(_isFogVisible);
+			return;
+		}
+
+		if (Definition?.HideWhenConsumed == true)
+		{
+			Visible = false;
+			Monitoring = false;
+			Monitorable = false;
+			return;
+		}
+
+		Modulate = new Color(1f, 1f, 1f, 0.4f);
+		SetFogVisibility(_isFogVisible);
+	}
+
 	protected virtual PropInteractionResult BuildInteractionResult(PropInteractionContext context)
 	{
 		return PropInteractionResult.Completed();

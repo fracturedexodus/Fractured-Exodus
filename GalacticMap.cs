@@ -558,7 +558,7 @@ public partial class GalacticMap : Control
 
 		if (_globalData != null)
 		{
-			_globalData.SaveGame();
+			_globalData.SaveGame(true, "res://galactic_map.tscn");
 			GD.Print($"[UNIVERSE BUILDER] Successfully generated and saved {amount} distinct star systems.");
 		}
 	}

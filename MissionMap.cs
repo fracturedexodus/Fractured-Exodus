@@ -21,7 +21,12 @@ public partial class MissionMap : Node2D
 	private const int RuntimePropSortBias = 4;
 	private const int WallBaseSortBias = 1;
 	private const int WallOccluderSortBias = 7;
+	private const int FloorGridSortBias = 1;
+	private const int MovementCursorSortBias = 5;
+	private const int CombatEffectSortBias = 12;
 	private const int CoverGhostZIndex = 160;
+	private const float AmbientFloorDiamondWidthFactor = 0.42f;
+	private const float AmbientFloorDiamondHeightFactor = 0.24f;
 	private const string MedicalBedHealPropId = "medical_bed_heal";
 	private const string MissionMusicPath = "res://Sounds/Strike_the_Shield.mp3";
 	private const string MissionHitSoundPath = "res://Sounds/795468__aulix24__grunt-3.ogg";
@@ -61,6 +66,7 @@ public partial class MissionMap : Node2D
 	private MissionRoomBuilder _roomBuilder;
 	private TextureRect _backgroundBackdrop;
 	private Sprite2D _backgroundFeatureSprite;
+	private Node2D _ambientFloorLayer;
 	private Node2D _movementGridLayer;
 	private Node2D _movementCursorLayer;
 	private Node2D _evacZoneLayer;
@@ -85,6 +91,7 @@ public partial class MissionMap : Node2D
 	private readonly List<Polygon2D> _evacZoneHighlightPolygons = new List<Polygon2D>();
 	private readonly List<Line2D> _evacZoneHighlightOutlines = new List<Line2D>();
 	private readonly List<Line2D> _movementGridOutlines = new List<Line2D>();
+	private readonly List<Polygon2D> _ambientFloorPolygons = new List<Polygon2D>();
 	private readonly HashSet<string> _selectedOfficerIds = new HashSet<string>();
 	private int _selectedOfficerIndex;
 	private bool _isPanning;
@@ -115,6 +122,13 @@ public partial class MissionMap : Node2D
 	private PropInteractionContext _pendingStoryContext;
 	private MissionProp _pendingMedicalBedProp;
 	private string _pendingMedicalBedOfficerId = string.Empty;
+	private CenterContainer _pauseMenuWrapper;
+	private CenterContainer _loadMenuWrapper;
+	private ItemList _loadSaveList;
+	private Label _loadSaveDetailsLabel;
+	private Label _loadSaveStatusLabel;
+	private Button _loadSelectedSaveButton;
+	private readonly List<SaveGameSlotInfo> _availableSaveGames = new List<SaveGameSlotInfo>();
 
 	public override void _Ready()
 	{
@@ -130,6 +144,8 @@ public partial class MissionMap : Node2D
 		_missionUi = GetNode<MissionUI>("MissionUI");
 		_dialogueUi = GetNode<DialogueUI>("DialogueUI");
 		EnsureBackgroundNodes();
+		BuildPauseMenuUI();
+		BuildLoadGameMenuUI();
 
 		if (_missionState == null || string.IsNullOrEmpty(_missionState.MissionID))
 		{
@@ -142,6 +158,7 @@ public partial class MissionMap : Node2D
 		_roomBuilder?.BuildRoom();
 		SpawnMissionProps();
 		ApplyMissionBackground();
+		BuildAmbientFloorShading();
 		BuildMovementGridOverlay();
 		BuildMovementCursorHighlight();
 		EnsureSelectionBox();
@@ -151,6 +168,7 @@ public partial class MissionMap : Node2D
 		SetupMissionAudio();
 		SpawnMissionNpcs();
 		SpawnMissionOfficers();
+		RestoreSavedMissionStateIfAvailable();
 		UpdateFogOfWar();
 		WireUi();
 		WireDialogue();
@@ -300,6 +318,20 @@ public partial class MissionMap : Node2D
 	public override void _UnhandledInput(InputEvent @event)
 	{
 		if (_missionGameOver)
+		{
+			return;
+		}
+
+		if (@event is InputEventKey escapeEvent && escapeEvent.Pressed && !escapeEvent.Echo && escapeEvent.Keycode == Key.Escape)
+		{
+			TogglePauseMenu();
+			GetViewport().SetInputAsHandled();
+			return;
+		}
+
+		if ((_pauseMenuWrapper?.Visible ?? false)
+			|| (_loadMenuWrapper?.Visible ?? false)
+			|| (_missionUi?.IsMissionSavePromptVisible ?? false))
 		{
 			return;
 		}
@@ -466,7 +498,7 @@ public partial class MissionMap : Node2D
 				ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
 				StretchMode = TextureRect.StretchModeEnum.KeepAspectCovered,
 				Visible = false,
-				Modulate = new Color(0.72f, 0.78f, 0.92f, 0.26f)
+				Modulate = new Color(0.52f, 0.60f, 0.66f, 0.18f)
 			};
 			backdropCanvas.AddChild(_backgroundBackdrop);
 			backdropCanvas.MoveChild(_backgroundBackdrop, 1);
@@ -524,8 +556,75 @@ public partial class MissionMap : Node2D
 		}
 
 		_backgroundFeatureSprite.Scale = new Vector2(definition.FeatureScale, definition.FeatureScale);
-		_backgroundFeatureSprite.Modulate = definition.FeatureModulate;
+		_backgroundFeatureSprite.Modulate = BlendColor(
+			definition.FeatureModulate,
+			new Color(0.74f, 0.84f, 0.88f, definition.FeatureModulate.A),
+			0.34f);
 		_backgroundFeatureSprite.Position = _roomBuilder.GetRoomCenterWorldPosition() + definition.FeatureOffset;
+	}
+
+	private void BuildAmbientFloorShading()
+	{
+		EnsureAmbientFloorLayer();
+		if (_ambientFloorLayer == null || _roomBuilder == null)
+		{
+			return;
+		}
+
+		foreach (Node child in _ambientFloorLayer.GetChildren())
+		{
+			_ambientFloorLayer.RemoveChild(child);
+			child.QueueFree();
+		}
+
+		_ambientFloorPolygons.Clear();
+
+		Vector2 tileStep = _roomBuilder.TileStep;
+		Vector2[] diamondPoints =
+		{
+			new Vector2(0f, -tileStep.Y * AmbientFloorDiamondHeightFactor),
+			new Vector2(tileStep.X * AmbientFloorDiamondWidthFactor, 0f),
+			new Vector2(0f, tileStep.Y * AmbientFloorDiamondHeightFactor),
+			new Vector2(-tileStep.X * AmbientFloorDiamondWidthFactor, 0f)
+		};
+
+		foreach (Vector2I buildCell in _roomBuilder.GetFloorCells())
+		{
+			Polygon2D polygon = new Polygon2D
+			{
+				Name = $"AmbientFloor_{buildCell.X}_{buildCell.Y}",
+				Polygon = diamondPoints,
+				Position = _roomBuilder.GetCellWorldPosition(buildCell.X, buildCell.Y, new Vector2(0f, tileStep.Y * 0.02f)),
+				Color = Colors.Transparent
+			};
+			polygon.SetMeta("column", buildCell.X);
+			polygon.SetMeta("row", buildCell.Y);
+			_ambientFloorLayer.AddChild(polygon);
+			_ambientFloorPolygons.Add(polygon);
+		}
+	}
+
+	private void EnsureAmbientFloorLayer()
+	{
+		if (_isoWorld == null)
+		{
+			return;
+		}
+
+		_ambientFloorLayer = _isoWorld.GetNodeOrNull<Node2D>("AmbientFloorLayer");
+		if (_ambientFloorLayer == null)
+		{
+			_ambientFloorLayer = new Node2D
+			{
+				Name = "AmbientFloorLayer",
+				ZIndex = 0
+			};
+			_isoWorld.AddChild(_ambientFloorLayer);
+		}
+
+		Node floorLayer = _isoWorld.GetNodeOrNull<Node>("FloorLayer");
+		int insertIndex = floorLayer != null ? floorLayer.GetIndex() + 1 : 1;
+		_isoWorld.MoveChild(_ambientFloorLayer, insertIndex);
 	}
 
 	private void BuildEvacZoneHighlights()
@@ -659,11 +758,12 @@ public partial class MissionMap : Node2D
 					Points = diamondPoints,
 					Closed = true,
 					Width = 1.15f,
-					DefaultColor = new Color(0.20f, 0.68f, 1.00f, 0.28f),
+					DefaultColor = new Color(0.24f, 0.72f, 1.00f, 0.24f),
 					Position = _roomBuilder.GetMovementCellWorldPosition(movementCell.X, movementCell.Y),
-					ZIndex = 0,
+					ZIndex = _roomBuilder.GetCanvasSortOrderForMovementCell(movementCell, FloorGridSortBias),
 					Visible = false
 				};
+				outline.ZAsRelative = false;
 				outline.SetMeta("movement_cell_x", movementCell.X);
 				outline.SetMeta("movement_cell_y", movementCell.Y);
 				_movementGridLayer.AddChild(outline);
@@ -693,7 +793,13 @@ public partial class MissionMap : Node2D
 			ZIndex = 0
 		};
 		_isoWorld.AddChild(_movementGridLayer);
-		_isoWorld.MoveChild(_movementGridLayer, 1);
+
+		Node ambientFloorLayer = _isoWorld.GetNodeOrNull<Node>("AmbientFloorLayer");
+		Node floorLayer = _isoWorld.GetNodeOrNull<Node>("FloorLayer");
+		int insertIndex = ambientFloorLayer != null
+			? ambientFloorLayer.GetIndex() + 1
+			: floorLayer != null ? floorLayer.GetIndex() + 1 : 1;
+		_isoWorld.MoveChild(_movementGridLayer, insertIndex);
 	}
 
 	private void BuildMovementCursorHighlight()
@@ -718,7 +824,7 @@ public partial class MissionMap : Node2D
 			_movementCursorFill = new Polygon2D
 			{
 				Name = "MovementCursorFill",
-				Color = new Color(0.24f, 0.76f, 1.00f, 0.10f),
+				Color = new Color(0.26f, 0.78f, 1.00f, 0.12f),
 				Visible = false
 			};
 			_movementCursorLayer.AddChild(_movementCursorFill);
@@ -731,8 +837,8 @@ public partial class MissionMap : Node2D
 			{
 				Name = "MovementCursorOutline",
 				Closed = true,
-				Width = 2.2f,
-				DefaultColor = new Color(0.38f, 0.88f, 1.00f, 0.74f),
+				Width = 3.1f,
+				DefaultColor = new Color(0.56f, 0.92f, 1.00f, 0.88f),
 				Visible = false
 			};
 			_movementCursorLayer.AddChild(_movementCursorOutline);
@@ -756,10 +862,13 @@ public partial class MissionMap : Node2D
 		_movementCursorLayer = new Node2D
 		{
 			Name = "MovementCursorLayer",
-			ZIndex = 0
+			ZIndex = 2
 		};
 		_isoWorld.AddChild(_movementCursorLayer);
-		_isoWorld.MoveChild(_movementCursorLayer, 2);
+
+		Node movementGridLayer = _isoWorld.GetNodeOrNull<Node>("MovementGridLayer");
+		int insertIndex = movementGridLayer != null ? movementGridLayer.GetIndex() + 1 : 2;
+		_isoWorld.MoveChild(_movementCursorLayer, insertIndex);
 	}
 
 	private void UpdateMovementCursorHighlight()
@@ -785,6 +894,13 @@ public partial class MissionMap : Node2D
 			return;
 		}
 
+		if (_combatActive)
+		{
+			_movementCursorFill.Visible = false;
+			_movementCursorOutline.Visible = false;
+			return;
+		}
+
 		Vector2I hoveredCell = ResolveMovementTargetCell(_roomBuilder.GetNearestMovementCell(_isoWorld.ToLocal(GetGlobalMousePosition())));
 		if (!_roomBuilder.IsWalkableMovementCell(hoveredCell))
 		{
@@ -796,6 +912,11 @@ public partial class MissionMap : Node2D
 		Vector2 hoverPosition = _roomBuilder.GetMovementCellWorldPosition(hoveredCell.X, hoveredCell.Y);
 		_movementCursorFill.Position = hoverPosition;
 		_movementCursorOutline.Position = hoverPosition;
+		int cursorZIndex = _roomBuilder.GetCanvasSortOrderForMovementCell(hoveredCell, MovementCursorSortBias);
+		_movementCursorFill.ZAsRelative = false;
+		_movementCursorFill.ZIndex = cursorZIndex;
+		_movementCursorOutline.ZAsRelative = false;
+		_movementCursorOutline.ZIndex = cursorZIndex;
 		_movementCursorFill.Visible = true;
 		_movementCursorOutline.Visible = true;
 	}
@@ -1024,6 +1145,7 @@ public partial class MissionMap : Node2D
 		RevealAdjacentDoorCells();
 
 		ApplyFogToLayer(GetNodeOrNull<Node2D>("IsoWorld/FloorLayer"));
+		ApplyFogToAmbientFloor();
 		ApplyFogToMovementGrid();
 		ApplyFogToLayer(GetNodeOrNull<Node2D>("IsoWorld/WallLayer"));
 		ApplyFogToLayer(GetNodeOrNull<Node2D>("IsoWorld/PropLayer"));
@@ -1048,12 +1170,7 @@ public partial class MissionMap : Node2D
 			if (child is MissionDoor2D door)
 			{
 				Vector2I doorCell = door.Cell;
-				bool isVisible = IsStructureCellVisible(doorCell);
-				bool isExplored = IsStructureCellExplored(doorCell);
-				Color fogColor = isVisible
-					? Colors.White
-					: (isExplored ? MultiplyColor(Colors.White, 0.38f) : MultiplyColor(Colors.White, 0.08f));
-				door.SetVisualModulate(fogColor);
+				door.SetVisualModulate(GetStructureFogColor(doorCell));
 				continue;
 			}
 
@@ -1078,17 +1195,40 @@ public partial class MissionMap : Node2D
 				sprite.SetMeta("fog_base_modulate", baseColor);
 			}
 
+			sprite.Modulate = GetFogAdjustedColor(baseColor, cell);
+		}
+	}
+
+	private void ApplyFogToAmbientFloor()
+	{
+		foreach (Polygon2D polygon in _ambientFloorPolygons)
+		{
+			if (polygon == null)
+			{
+				continue;
+			}
+
+			Vector2I cell = new Vector2I(
+				polygon.GetMeta("column", int.MinValue).AsInt32(),
+				polygon.GetMeta("row", int.MinValue).AsInt32());
+			if (cell.X == int.MinValue || cell.Y == int.MinValue)
+			{
+				continue;
+			}
+
 			if (_visibleBuildCells.Contains(cell))
 			{
-				sprite.Modulate = baseColor;
+				polygon.Visible = true;
+				polygon.Color = new Color(0.04f, 0.10f, 0.11f, 0.18f);
 			}
 			else if (_exploredBuildCells.Contains(cell))
 			{
-				sprite.Modulate = MultiplyColor(baseColor, 0.38f);
+				polygon.Visible = true;
+				polygon.Color = new Color(0.01f, 0.03f, 0.04f, 0.10f);
 			}
 			else
 			{
-				sprite.Modulate = MultiplyColor(baseColor, 0.08f);
+				polygon.Visible = false;
 			}
 		}
 	}
@@ -1138,6 +1278,39 @@ public partial class MissionMap : Node2D
 		return _exploredBuildCells.Contains(cell);
 	}
 
+	private Color GetStructureFogColor(Vector2I cell)
+	{
+		return GetFogAdjustedColor(Colors.White, cell);
+	}
+
+	private Color GetFogAdjustedSpriteColor(Sprite2D sprite, Vector2I cell)
+	{
+		Color baseColor = sprite.HasMeta("fog_base_modulate")
+			? sprite.GetMeta("fog_base_modulate").AsColor()
+			: sprite.Modulate;
+		if (!sprite.HasMeta("fog_base_modulate"))
+		{
+			sprite.SetMeta("fog_base_modulate", baseColor);
+		}
+
+		return GetFogAdjustedColor(baseColor, cell);
+	}
+
+	private Color GetFogAdjustedColor(Color baseColor, Vector2I cell)
+	{
+		if (_visibleBuildCells.Contains(cell))
+		{
+			return baseColor;
+		}
+
+		if (_exploredBuildCells.Contains(cell))
+		{
+			return MultiplyColor(baseColor, 0.38f);
+		}
+
+		return MultiplyColor(baseColor, 0.08f);
+	}
+
 	private static Color MultiplyColor(Color color, float factor)
 	{
 		return new Color(
@@ -1145,6 +1318,25 @@ public partial class MissionMap : Node2D
 			Mathf.Clamp(color.G * factor, 0f, 1f),
 			Mathf.Clamp(color.B * factor, 0f, 1f),
 			color.A);
+	}
+
+	private static Color BlendColor(Color from, Color to, float weight)
+	{
+		return new Color(
+			Mathf.Lerp(from.R, to.R, weight),
+			Mathf.Lerp(from.G, to.G, weight),
+			Mathf.Lerp(from.B, to.B, weight),
+			Mathf.Lerp(from.A, to.A, weight));
+	}
+
+	private static Color GetOccludedStructureColor(Color baseColor)
+	{
+		Color cooledColor = BlendColor(baseColor, new Color(0.70f, 0.84f, 0.88f, baseColor.A), 0.28f);
+		return new Color(
+			cooledColor.R,
+			cooledColor.G,
+			cooledColor.B,
+			Mathf.Clamp(baseColor.A * 0.24f, 0.10f, 0.48f));
 	}
 
 	private void ApplyFogToMissionNpcs()
@@ -1237,6 +1429,7 @@ public partial class MissionMap : Node2D
 
 			sprite.ZAsRelative = false;
 			sprite.ZIndex = _roomBuilder.GetCanvasSortOrderForBuildCell(wallCell, WallBaseSortBias);
+			sprite.Modulate = GetFogAdjustedSpriteColor(sprite, wallCell);
 
 			string orientationSuffix = sprite.GetMeta("orientation_suffix", string.Empty).AsString();
 			List<Vector2I> occludedCells = GetWallOccludedBuildCells(orientationSuffix, tileId, wallCell)
@@ -1248,6 +1441,7 @@ public partial class MissionMap : Node2D
 				continue;
 			}
 
+			sprite.Modulate = GetOccludedStructureColor(sprite.Modulate);
 			sprite.ZIndex = occludedCells
 				.Select(cell => _roomBuilder.GetCanvasSortOrderForBuildCell(cell, WallOccluderSortBias))
 				.Max();
@@ -1274,12 +1468,14 @@ public partial class MissionMap : Node2D
 					Vector2I doorCell = door.Cell;
 					door.ZAsRelative = false;
 					door.ZIndex = _roomBuilder.GetCanvasSortOrderForBuildCell(doorCell, WallBaseSortBias);
+					Color doorColor = GetStructureFogColor(doorCell);
 					List<Vector2I> occludedDoorCells = GetOccludedBuildCellsForOrientation(door.OrientationSuffix, doorCell)
 						.Where(IsAnyVisibleOccludableEntityInBuildCell)
 						.Distinct()
 						.ToList();
 					if (occludedDoorCells.Count > 0)
 					{
+						doorColor = GetOccludedStructureColor(doorColor);
 						door.ZIndex = occludedDoorCells
 							.Select(cell => _roomBuilder.GetCanvasSortOrderForBuildCell(cell, WallOccluderSortBias))
 							.Max();
@@ -1288,6 +1484,7 @@ public partial class MissionMap : Node2D
 							SetPropsInBuildCellOccluded(occludedDoorCell);
 						}
 					}
+					door.SetVisualModulate(doorColor);
 					break;
 				}
 				case Sprite2D sprite:
@@ -1302,6 +1499,7 @@ public partial class MissionMap : Node2D
 					}
 
 					sprite.ZAsRelative = false;
+					sprite.Modulate = GetFogAdjustedSpriteColor(sprite, propCell);
 					string orientationSuffix = sprite.GetMeta("orientation_suffix", string.Empty).AsString();
 					List<Vector2I> occludedPropCells = GetWallOccludedBuildCells(orientationSuffix, tileId, propCell)
 						.Where(IsAnyVisibleOccludableEntityInBuildCell)
@@ -1309,6 +1507,7 @@ public partial class MissionMap : Node2D
 						.ToList();
 					if (occludedPropCells.Count > 0)
 					{
+						sprite.Modulate = GetOccludedStructureColor(sprite.Modulate);
 						sprite.ZIndex = occludedPropCells
 							.Select(cell => _roomBuilder.GetCanvasSortOrderForBuildCell(cell, WallOccluderSortBias))
 							.Max();
@@ -1439,12 +1638,12 @@ public partial class MissionMap : Node2D
 			if (_visibleCells.Contains(movementCell))
 			{
 				outline.Visible = true;
-				outline.DefaultColor = new Color(0.20f, 0.68f, 1.00f, 0.26f);
+				outline.DefaultColor = new Color(0.30f, 0.76f, 1.00f, 0.30f);
 			}
 			else if (_exploredCells.Contains(movementCell))
 			{
 				outline.Visible = true;
-				outline.DefaultColor = new Color(0.14f, 0.34f, 0.56f, 0.16f);
+				outline.DefaultColor = new Color(0.14f, 0.34f, 0.56f, 0.17f);
 			}
 			else
 			{
@@ -1464,8 +1663,10 @@ public partial class MissionMap : Node2D
 			(_missionState?.MissionTitle ?? "Away Mission").ToUpper(),
 			GetMissionObjectiveText(),
 			GetMissionPromptText());
+		_missionUi.ClearActionLog();
 		_missionUi.ExtractionOutcomeChosen += OnExtractionOutcomeChosen;
 		_missionUi.CombatEndTurnPressed += OnCombatEndTurnPressed;
+		_missionUi.MissionSaveConfirmed += OnMissionSaveConfirmed;
 		_missionUi.StoryEventConfirmed += OnStoryEventConfirmed;
 		_missionUi.ConfirmationAccepted += OnConfirmationAccepted;
 		_missionUi.ConfirmationCancelled += OnConfirmationCancelled;
@@ -1485,6 +1686,609 @@ public partial class MissionMap : Node2D
 
 		_dialogueUi.ConversationEnded += OnMissionConversationEnded;
 		_dialogueUi.DialogueStateChanged += OnMissionDialogueStateChanged;
+	}
+
+	private void BuildPauseMenuUI()
+	{
+		CanvasLayer pauseLayer = new CanvasLayer { Layer = 176 };
+		AddChild(pauseLayer);
+
+		_pauseMenuWrapper = new CenterContainer();
+		_pauseMenuWrapper.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+		_pauseMenuWrapper.MouseFilter = Control.MouseFilterEnum.Stop;
+		_pauseMenuWrapper.Visible = false;
+		pauseLayer.AddChild(_pauseMenuWrapper);
+
+		PanelContainer pausePanel = new PanelContainer
+		{
+			CustomMinimumSize = new Vector2(440f, 320f)
+		};
+		pausePanel.AddThemeStyleboxOverride("panel", CreateOverlayPanelStyle());
+		_pauseMenuWrapper.AddChild(pausePanel);
+
+		VBoxContainer content = new VBoxContainer
+		{
+			Alignment = BoxContainer.AlignmentMode.Center
+		};
+		content.AddThemeConstantOverride("separation", 12);
+		pausePanel.AddChild(content);
+
+		Label title = new Label
+		{
+			Text = "GAME MENU",
+			HorizontalAlignment = HorizontalAlignment.Center
+		};
+		title.AddThemeFontSizeOverride("font_size", 26);
+		content.AddChild(title);
+
+		content.AddChild(BuildPauseMenuButton("SAVE GAME", OpenPauseSavePrompt));
+		content.AddChild(BuildPauseMenuButton("LOAD GAME", ShowLoadGameMenu));
+		content.AddChild(BuildPauseMenuButton("RETURN TO GAME", HidePauseMenus));
+		content.AddChild(BuildPauseMenuButton("RETURN TO MAIN MENU", ReturnToMainMenuFromPause));
+	}
+
+	private void BuildLoadGameMenuUI()
+	{
+		CanvasLayer loadLayer = new CanvasLayer { Layer = 177 };
+		AddChild(loadLayer);
+
+		_loadMenuWrapper = new CenterContainer();
+		_loadMenuWrapper.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+		_loadMenuWrapper.MouseFilter = Control.MouseFilterEnum.Stop;
+		_loadMenuWrapper.Visible = false;
+		loadLayer.AddChild(_loadMenuWrapper);
+
+		PanelContainer loadPanel = new PanelContainer
+		{
+			CustomMinimumSize = new Vector2(720f, 560f)
+		};
+		loadPanel.AddThemeStyleboxOverride("panel", CreateOverlayPanelStyle());
+		_loadMenuWrapper.AddChild(loadPanel);
+
+		VBoxContainer content = new VBoxContainer();
+		content.AddThemeConstantOverride("separation", 14);
+		loadPanel.AddChild(content);
+
+		Label title = new Label
+		{
+			Text = "LOAD GAME",
+			HorizontalAlignment = HorizontalAlignment.Center
+		};
+		title.AddThemeFontSizeOverride("font_size", 28);
+		content.AddChild(title);
+
+		_loadSaveList = new ItemList
+		{
+			CustomMinimumSize = new Vector2(0f, 250f),
+			SelectMode = ItemList.SelectModeEnum.Single
+		};
+		_loadSaveList.ItemSelected += index => UpdateLoadGameSelection((int)index);
+		_loadSaveList.ItemActivated += index =>
+		{
+			UpdateLoadGameSelection((int)index);
+			LoadSelectedPauseSave();
+		};
+		content.AddChild(_loadSaveList);
+
+		_loadSaveDetailsLabel = new Label
+		{
+			CustomMinimumSize = new Vector2(0f, 108f),
+			AutowrapMode = TextServer.AutowrapMode.WordSmart
+		};
+		content.AddChild(_loadSaveDetailsLabel);
+
+		_loadSaveStatusLabel = new Label
+		{
+			HorizontalAlignment = HorizontalAlignment.Center,
+			AutowrapMode = TextServer.AutowrapMode.WordSmart
+		};
+		_loadSaveStatusLabel.AddThemeColorOverride("font_color", new Color(1f, 0.45f, 0.45f));
+		content.AddChild(_loadSaveStatusLabel);
+
+		HBoxContainer buttonRow = new HBoxContainer
+		{
+			Alignment = BoxContainer.AlignmentMode.Center
+		};
+		buttonRow.AddThemeConstantOverride("separation", 12);
+		content.AddChild(buttonRow);
+
+		buttonRow.AddChild(BuildPauseMenuButton("BACK", ShowPauseMenu, 180f));
+
+		_loadSelectedSaveButton = BuildPauseMenuButton("LOAD SELECTED", LoadSelectedPauseSave, 220f);
+		_loadSelectedSaveButton.Disabled = true;
+		buttonRow.AddChild(_loadSelectedSaveButton);
+	}
+
+	private void OnMissionSaveConfirmed(string saveName)
+	{
+		if (_globalData == null)
+		{
+			return;
+		}
+
+		_globalData.CurrentMissionSaveState = BuildCurrentMissionSaveState();
+		_globalData.SaveNamedGame(saveName, ResolveMissionScenePath());
+		AppendActionLog($"Mission saved as {saveName}.");
+	}
+
+	private void ShowPauseMenu()
+	{
+		if (_pauseMenuWrapper == null)
+		{
+			return;
+		}
+
+		_pauseMenuWrapper.Visible = true;
+		if (_loadMenuWrapper != null)
+		{
+			_loadMenuWrapper.Visible = false;
+		}
+	}
+
+	private void HidePauseMenus()
+	{
+		if (_pauseMenuWrapper != null)
+		{
+			_pauseMenuWrapper.Visible = false;
+		}
+
+		if (_loadMenuWrapper != null)
+		{
+			_loadMenuWrapper.Visible = false;
+		}
+	}
+
+	private void TogglePauseMenu()
+	{
+		if (_loadMenuWrapper?.Visible == true)
+		{
+			ShowPauseMenu();
+			return;
+		}
+
+		if (_missionUi?.IsMissionSavePromptVisible == true)
+		{
+			_missionUi.HideMissionSavePrompt();
+			return;
+		}
+
+		if (_pauseMenuWrapper == null)
+		{
+			return;
+		}
+
+		_pauseMenuWrapper.Visible = !_pauseMenuWrapper.Visible;
+	}
+
+	private void OpenPauseSavePrompt()
+	{
+		HidePauseMenus();
+		_missionUi?.ShowMissionSavePrompt($"{(_missionState?.MissionTitle ?? "Mission").Trim()} Save");
+	}
+
+	private void ShowLoadGameMenu()
+	{
+		if (_globalData == null || _loadMenuWrapper == null || _loadSaveList == null)
+		{
+			return;
+		}
+
+		_availableSaveGames.Clear();
+		_availableSaveGames.AddRange(_globalData.GetAvailableSaveGames());
+		_loadSaveList.Clear();
+		_loadSaveDetailsLabel.Text = string.Empty;
+		_loadSaveStatusLabel.Text = string.Empty;
+		_loadSelectedSaveButton.Disabled = _availableSaveGames.Count == 0;
+
+		for (int i = 0; i < _availableSaveGames.Count; i++)
+		{
+			SaveGameSlotInfo save = _availableSaveGames[i];
+			string label = save.DisplayName;
+			if (save.IsAutoSave)
+			{
+				label += " [AUTOSAVE]";
+			}
+			else if (save.IsLegacySave)
+			{
+				label += " [QUICKSAVE]";
+			}
+
+			_loadSaveList.AddItem(label);
+		}
+
+		_pauseMenuWrapper.Visible = false;
+		_loadMenuWrapper.Visible = true;
+		if (_availableSaveGames.Count > 0)
+		{
+			_loadSaveList.Select(0);
+			UpdateLoadGameSelection(0);
+		}
+		else
+		{
+			_loadSaveStatusLabel.Text = "No save files found.";
+		}
+	}
+
+	private void UpdateLoadGameSelection(int index)
+	{
+		if (index < 0 || index >= _availableSaveGames.Count)
+		{
+			_loadSaveDetailsLabel.Text = string.Empty;
+			_loadSelectedSaveButton.Disabled = true;
+			return;
+		}
+
+		SaveGameSlotInfo save = _availableSaveGames[index];
+		string locationText = !string.IsNullOrWhiteSpace(save.CurrentMissionTitle)
+			? $"Mission: {save.CurrentMissionTitle}"
+			: !string.IsNullOrWhiteSpace(save.SavedSystem)
+				? $"System: {save.SavedSystem}{(string.IsNullOrWhiteSpace(save.SavedPlanet) ? string.Empty : $" | Planet: {save.SavedPlanet}")}"
+				: "Location: Unknown";
+		_loadSaveDetailsLabel.Text = $"{locationText}\nTurn: {save.CurrentTurn}\nSaved: {FormatSaveTimestamp(save.SavedAtUtc)}";
+		_loadSelectedSaveButton.Disabled = false;
+	}
+
+	private void LoadSelectedPauseSave()
+	{
+		if (_globalData == null || _loadSaveList == null)
+		{
+			return;
+		}
+
+		int[] selectedItems = _loadSaveList.GetSelectedItems();
+		if (selectedItems.Length == 0)
+		{
+			_loadSaveStatusLabel.Text = "Select a save first.";
+			return;
+		}
+
+		int selectedIndex = selectedItems[0];
+		if (selectedIndex < 0 || selectedIndex >= _availableSaveGames.Count)
+		{
+			_loadSaveStatusLabel.Text = "That save could not be found.";
+			return;
+		}
+
+		SaveGameSlotInfo selectedSave = _availableSaveGames[selectedIndex];
+		if (!_globalData.LoadGame(selectedSave.SlotId))
+		{
+			_loadSaveStatusLabel.Text = "Unable to load that save.";
+			return;
+		}
+
+		string scenePath = ResolveLoadedScenePath(_globalData, selectedSave);
+		SceneTransition transitioner = GetNodeOrNull<SceneTransition>("/root/SceneTransition");
+		if (transitioner != null)
+		{
+			transitioner.ChangeScene(scenePath);
+			return;
+		}
+
+		GetTree().ChangeSceneToFile(scenePath);
+	}
+
+	private MissionRuntimeSaveData BuildCurrentMissionSaveState()
+	{
+		return new MissionRuntimeSaveData
+		{
+			MissionId = GetActiveMissionId(),
+			ScenePath = ResolveMissionScenePath(),
+			CombatRound = _combatRound,
+			CombatActive = _combatActive,
+			CombatActiveIndex = _combatActiveIndex,
+			FocusedEnemyId = _focusedEnemy?.NpcId ?? string.Empty,
+			SelectedOfficerIndex = _selectedOfficerIndex,
+			SelectedOfficerIds = _selectedOfficerIds.ToList(),
+			ConsumedTriggerKeys = _consumedTriggerKeys.ToList(),
+			EngagedEnemyIds = _engagedEnemyIds.ToList(),
+			ExploredCells = _exploredCells.Select(Vector2ISaveData.FromVector2I).ToList(),
+			Officers = _officerPawns
+				.Where(pawn => pawn != null && !string.IsNullOrWhiteSpace(pawn.OfficerID))
+				.Select(pawn => new MissionActorSaveData
+				{
+					ActorId = pawn.OfficerID,
+					Cell = Vector2ISaveData.FromVector2I(pawn.CurrentCell),
+					CurrentHP = pawn.CurrentHP,
+					CurrentShields = pawn.CurrentShields,
+					CurrentActions = pawn.CurrentActions,
+					ActiveStatusEffectId = pawn.ActiveStatusEffectId,
+					IsDead = pawn.IsDead
+				})
+				.ToList(),
+			Npcs = _missionNpcs
+				.Where(npc => npc != null && !string.IsNullOrWhiteSpace(npc.NpcId))
+				.Select(npc => new MissionActorSaveData
+				{
+					ActorId = npc.NpcId,
+					Cell = Vector2ISaveData.FromVector2I(npc.CurrentCell),
+					CurrentHP = npc.CurrentHP,
+					CurrentShields = npc.CurrentShields,
+					CurrentActions = npc.CurrentActions,
+					ActiveStatusEffectId = npc.ActiveStatusEffectId,
+					IsDead = npc.IsDead,
+					IsConsumed = npc.IsConsumed
+				})
+				.ToList(),
+			Props = _missionPropsByCell.Values
+				.Where(prop => prop != null && !string.IsNullOrWhiteSpace(prop.PropInstanceId))
+				.Distinct()
+				.Select(prop => new MissionPropSaveData
+				{
+					PropInstanceId = prop.PropInstanceId,
+					IsConsumed = prop.IsConsumed
+				})
+				.ToList(),
+			Doors = (_roomBuilder?.GetDoorIds() ?? Enumerable.Empty<string>())
+				.Where(doorId => !string.IsNullOrWhiteSpace(doorId))
+				.Select(doorId => new MissionDoorSaveData
+				{
+					DoorId = doorId,
+					IsOpen = _roomBuilder.IsDoorOpen(doorId)
+				})
+				.ToList(),
+			CombatQueue = _combatQueue
+				.Where(entry => entry != null && !string.IsNullOrWhiteSpace(entry.CombatantId))
+				.Select(entry => new MissionCombatTurnSaveData
+				{
+					CombatantId = entry.CombatantId,
+					IsOfficer = entry.IsOfficer
+				})
+				.ToList()
+		};
+	}
+
+	private void RestoreSavedMissionStateIfAvailable()
+	{
+		MissionRuntimeSaveData saveState = _globalData?.CurrentMissionSaveState;
+		if (saveState == null || !IsCompatibleMissionSave(saveState))
+		{
+			return;
+		}
+
+		RestoreDoorStates(saveState);
+		RestorePropStates(saveState);
+		RestoreOfficerStates(saveState);
+		RestoreNpcStates(saveState);
+		RestoreMissionCollections(saveState);
+		RestoreMissionSelection(saveState);
+		RestoreMissionCombatState(saveState);
+		_pendingInteractionKey = string.Empty;
+		_pendingInteractionOfficerId = string.Empty;
+		_pendingDoorId = string.Empty;
+		_pendingPropInstanceId = string.Empty;
+		_pendingNpcId = string.Empty;
+		_pendingCombatMoveOfficerId = string.Empty;
+		_pendingCombatAttackEnemyId = string.Empty;
+		_pendingCombatMoveCost = 0;
+		_enemyTurnInProgress = false;
+		_pendingStoryProp = null;
+		_pendingStoryResult = null;
+		_pendingStoryContext = null;
+		_pendingMedicalBedProp = null;
+		_pendingMedicalBedOfficerId = string.Empty;
+		UpdateMovementGridVisibility();
+	}
+
+	private bool IsCompatibleMissionSave(MissionRuntimeSaveData saveState)
+	{
+		return saveState != null
+			&& !string.IsNullOrWhiteSpace(saveState.MissionId)
+			&& string.Equals(saveState.MissionId, GetActiveMissionId(), StringComparison.Ordinal);
+	}
+
+	private void RestoreDoorStates(MissionRuntimeSaveData saveState)
+	{
+		if (_roomBuilder == null)
+		{
+			return;
+		}
+
+		foreach (MissionDoorSaveData doorState in saveState.Doors ?? new List<MissionDoorSaveData>())
+		{
+			if (doorState == null || string.IsNullOrWhiteSpace(doorState.DoorId))
+			{
+				continue;
+			}
+
+			_roomBuilder.TrySetDoorOpen(doorState.DoorId, doorState.IsOpen, false);
+		}
+	}
+
+	private void RestorePropStates(MissionRuntimeSaveData saveState)
+	{
+		foreach (MissionPropSaveData propState in saveState.Props ?? new List<MissionPropSaveData>())
+		{
+			if (propState == null || string.IsNullOrWhiteSpace(propState.PropInstanceId))
+			{
+				continue;
+			}
+
+			MissionProp prop = _missionPropsByCell.Values.FirstOrDefault(candidate => candidate != null && candidate.PropInstanceId == propState.PropInstanceId);
+			prop?.ApplySavedConsumptionState(propState.IsConsumed);
+		}
+	}
+
+	private void RestoreOfficerStates(MissionRuntimeSaveData saveState)
+	{
+		foreach (MissionActorSaveData officerState in saveState.Officers ?? new List<MissionActorSaveData>())
+		{
+			if (officerState == null || string.IsNullOrWhiteSpace(officerState.ActorId) || officerState.Cell == null)
+			{
+				continue;
+			}
+
+			OfficerPawn pawn = _officerPawns.FirstOrDefault(candidate => candidate != null && candidate.OfficerID == officerState.ActorId);
+			if (pawn == null)
+			{
+				continue;
+			}
+
+			Vector2I cell = officerState.Cell.ToVector2I();
+			pawn.SetGridCell(cell, GetMovementCellGlobalPosition(cell));
+			pawn.ApplySavedRuntimeState(
+				officerState.CurrentHP,
+				officerState.CurrentShields,
+				officerState.CurrentActions,
+				officerState.ActiveStatusEffectId,
+				officerState.IsDead);
+		}
+	}
+
+	private void RestoreNpcStates(MissionRuntimeSaveData saveState)
+	{
+		foreach (MissionActorSaveData npcState in saveState.Npcs ?? new List<MissionActorSaveData>())
+		{
+			if (npcState == null || string.IsNullOrWhiteSpace(npcState.ActorId) || npcState.Cell == null)
+			{
+				continue;
+			}
+
+			MissionNpcPawn npc = _missionNpcs.FirstOrDefault(candidate => candidate != null && candidate.NpcId == npcState.ActorId);
+			if (npc == null)
+			{
+				continue;
+			}
+
+			Vector2I cell = npcState.Cell.ToVector2I();
+			npc.SetGridCell(cell, GetMovementCellGlobalPosition(cell));
+			npc.ApplySavedRuntimeState(
+				npcState.CurrentHP,
+				npcState.CurrentShields,
+				npcState.CurrentActions,
+				npcState.ActiveStatusEffectId,
+				npcState.IsDead,
+				npcState.IsConsumed);
+		}
+
+		ReindexMissionNpcCells();
+	}
+
+	private void RestoreMissionCollections(MissionRuntimeSaveData saveState)
+	{
+		_consumedTriggerKeys.Clear();
+		foreach (string key in saveState.ConsumedTriggerKeys ?? new List<string>())
+		{
+			if (!string.IsNullOrWhiteSpace(key))
+			{
+				_consumedTriggerKeys.Add(key);
+			}
+		}
+
+		_engagedEnemyIds.Clear();
+		foreach (string enemyId in saveState.EngagedEnemyIds ?? new List<string>())
+		{
+			if (!string.IsNullOrWhiteSpace(enemyId))
+			{
+				_engagedEnemyIds.Add(enemyId);
+			}
+		}
+
+		_exploredCells.Clear();
+		foreach (Vector2ISaveData exploredCell in saveState.ExploredCells ?? new List<Vector2ISaveData>())
+		{
+			if (exploredCell != null)
+			{
+				_exploredCells.Add(exploredCell.ToVector2I());
+			}
+		}
+	}
+
+	private void RestoreMissionSelection(MissionRuntimeSaveData saveState)
+	{
+		_selectedOfficerIndex = Mathf.Clamp(saveState.SelectedOfficerIndex, 0, Mathf.Max(0, _officerPawns.Count - 1));
+		_selectedOfficerIds.Clear();
+		foreach (string officerId in saveState.SelectedOfficerIds ?? new List<string>())
+		{
+			if (!string.IsNullOrWhiteSpace(officerId)
+				&& _officerPawns.Any(pawn => pawn != null && !pawn.IsDead && pawn.OfficerID == officerId))
+			{
+				_selectedOfficerIds.Add(officerId);
+			}
+		}
+
+		OfficerPawn indexedOfficer = GetSelectedOfficer();
+		if (_selectedOfficerIds.Count == 0)
+		{
+			OfficerPawn fallbackOfficer = indexedOfficer ?? _officerPawns.FirstOrDefault(pawn => pawn != null && !pawn.IsDead);
+			if (fallbackOfficer != null)
+			{
+				_selectedOfficerIndex = _officerPawns.IndexOf(fallbackOfficer);
+				_selectedOfficerIds.Add(fallbackOfficer.OfficerID);
+			}
+		}
+
+		UpdateOfficerSelectionVisuals();
+	}
+
+	private void RestoreMissionCombatState(MissionRuntimeSaveData saveState)
+	{
+		_combatRound = Mathf.Max(1, saveState.CombatRound);
+		_combatActive = saveState.CombatActive && _engagedEnemyIds.Count > 0 && GetAliveOfficers().Any();
+		_focusedEnemy = _missionNpcs.FirstOrDefault(npc => npc != null && npc.NpcId == saveState.FocusedEnemyId && !npc.IsDead);
+		_combatQueue.Clear();
+		foreach (MissionCombatTurnSaveData turnState in saveState.CombatQueue ?? new List<MissionCombatTurnSaveData>())
+		{
+			if (turnState == null || string.IsNullOrWhiteSpace(turnState.CombatantId))
+			{
+				continue;
+			}
+
+			if (turnState.IsOfficer)
+			{
+				OfficerPawn officer = _officerPawns.FirstOrDefault(candidate => candidate != null && candidate.OfficerID == turnState.CombatantId && !candidate.IsDead);
+				if (officer != null)
+				{
+					_combatQueue.Add(new MissionCombatTurnEntry
+					{
+						CombatantId = officer.OfficerID,
+						IsOfficer = true,
+						InitiativeScore = 0,
+						Officer = officer
+					});
+				}
+				continue;
+			}
+
+			MissionNpcPawn enemy = _missionNpcs.FirstOrDefault(candidate => candidate != null && candidate.NpcId == turnState.CombatantId && !candidate.IsDead);
+			if (enemy != null)
+			{
+				_combatQueue.Add(new MissionCombatTurnEntry
+				{
+					CombatantId = enemy.NpcId,
+					IsOfficer = false,
+					InitiativeScore = 0,
+					Enemy = enemy
+				});
+			}
+		}
+
+		if (_combatActive && _combatQueue.Count == 0)
+		{
+			RebuildCombatQueue();
+		}
+
+		_combatActiveIndex = _combatActive
+			? Mathf.Clamp(saveState.CombatActiveIndex, -1, _combatQueue.Count - 1)
+			: -1;
+		if (!_combatActive)
+		{
+			_combatQueue.Clear();
+		}
+	}
+
+	private string ResolveMissionScenePath()
+	{
+		if (!string.IsNullOrWhiteSpace(_missionState?.ScenePath))
+		{
+			return _missionState.ScenePath;
+		}
+
+		if (GetTree()?.CurrentScene != null && !string.IsNullOrWhiteSpace(GetTree().CurrentScene.SceneFilePath))
+		{
+			return GetTree().CurrentScene.SceneFilePath;
+		}
+
+		return "res://black_site_relay.tscn";
 	}
 
 	private void EnsureSelectionBox()
@@ -1614,13 +2418,26 @@ public partial class MissionMap : Node2D
 
 	private void UpdateSelectedOfficerDisplay()
 	{
-		OfficerPawn activeOfficer = GetSelectedOfficer();
-		if (activeOfficer == null || _missionUi == null)
+		if (_missionUi == null)
 		{
 			return;
 		}
 
+		OfficerPawn activeOfficer = GetSelectedOfficer();
+		if (activeOfficer == null)
+		{
+			_missionUi.SetExplorationSelectionInfo(Array.Empty<MissionCombatantSummary>(), false);
+			return;
+		}
+
 		List<OfficerPawn> selectedOfficers = GetSelectedOfficers();
+		_missionUi.SetExplorationSelectionInfo(
+			selectedOfficers
+				.Take(2)
+				.Select(BuildOfficerSummary)
+				.Where(summary => summary != null)
+				.ToList(),
+			!_combatActive && !_missionGameOver);
 		if (selectedOfficers.Count > 1)
 		{
 			_missionUi.SetSelectedOfficer(
@@ -2409,6 +3226,9 @@ public partial class MissionMap : Node2D
 			return false;
 		}
 
+		targetCell = steppedCells[^1];
+		Vector2I targetBuildCell = GetBuildCell(targetCell);
+
 		if (_combatActive)
 		{
 			int maxMovementSteps = GetMaxMovementStepsForActions(officer.CurrentActions);
@@ -2423,8 +3243,12 @@ public partial class MissionMap : Node2D
 			officer.SpendActions(moveCost);
 			_pendingCombatMoveOfficerId = officer.OfficerID;
 			_pendingCombatMoveCost = moveCost;
-			Vector2I targetBuildCell = GetBuildCell(targetCell);
+			targetBuildCell = GetBuildCell(targetCell);
 			AppendCombatLog($"{officer.OfficerName} repositions {moveCost} tile{(moveCost == 1 ? string.Empty : "s")} toward {targetBuildCell.X},{targetBuildCell.Y}, conserving {officer.WeaponName.ToLowerInvariant()} fire for the next opening.");
+		}
+		else
+		{
+			AppendActionLog($"{officer.OfficerName} moves to {targetBuildCell.X},{targetBuildCell.Y}.");
 		}
 
 		List<Vector2> pathPoints = steppedCells
@@ -2797,6 +3621,7 @@ public partial class MissionMap : Node2D
 			{
 				officer.SpendActions(CombatInteractionActionCost);
 			}
+			AppendActionLog($"{officer.OfficerName} moves into the evac zone.");
 			UpdateMissionCompletionActions();
 			if (interaction.OneShot)
 			{
@@ -2807,11 +3632,13 @@ public partial class MissionMap : Node2D
 
 		if (interaction.LogicRole == "door")
 		{
+			bool nextOpenState = !_roomBuilder.IsDoorOpen(interaction.TargetId);
 			if (_combatActive)
 			{
 				officer.SpendActions(CombatInteractionActionCost);
 			}
 			ToggleDoorInteraction(interaction);
+			AppendActionLog($"{officer.OfficerName} {(nextOpenState ? "opens" : "closes")} {GetInteractionDisplayName(interaction)}.");
 			if (interaction.OneShot)
 			{
 				_consumedTriggerKeys.Add(interactionKey);
@@ -2823,16 +3650,20 @@ public partial class MissionMap : Node2D
 
 		if (interaction.LogicRole == "terminal")
 		{
+			bool controlsDoor = !string.IsNullOrEmpty(interaction.TargetId);
+			bool nextOpenState = controlsDoor && !_roomBuilder.IsDoorOpen(interaction.TargetId);
 			if (_combatActive)
 			{
 				officer.SpendActions(CombatInteractionActionCost);
 			}
 			if (!string.IsNullOrEmpty(interaction.TargetId))
 			{
-				bool nextOpenState = !_roomBuilder.IsDoorOpen(interaction.TargetId);
 				_roomBuilder.TrySetDoorOpen(interaction.TargetId, nextOpenState, true);
 				UpdateFogOfWar();
 			}
+			AppendActionLog(controlsDoor
+				? $"{officer.OfficerName} uses {GetInteractionDisplayName(interaction)} to {(nextOpenState ? "open" : "close")} a bulkhead."
+				: $"{officer.OfficerName} uses {GetInteractionDisplayName(interaction)}.");
 			if (interaction.OneShot)
 			{
 				_consumedTriggerKeys.Add(interactionKey);
@@ -2847,6 +3678,7 @@ public partial class MissionMap : Node2D
 			{
 				officer.SpendActions(CombatInteractionActionCost);
 			}
+			AppendActionLog($"{officer.OfficerName} initiates a conversation.");
 			_dialogueUi.StartConversation(
 				ResolveDialogueTargetId(interaction),
 				officer.OfficerName,
@@ -3798,6 +4630,12 @@ public partial class MissionMap : Node2D
 			return;
 		}
 
+		OfficerPawn activeOfficer = GetActiveCombatOfficer();
+		if (activeOfficer != null)
+		{
+			AppendActionLog($"{activeOfficer.OfficerName} ends their turn.");
+		}
+
 		EndCurrentCombatTurn();
 	}
 
@@ -4234,12 +5072,14 @@ public partial class MissionMap : Node2D
 
 	private void SpawnRangedTracerEffect(Vector2 start, Vector2 end, Color color)
 	{
+		int effectZIndex = GetCombatEffectZIndexForWorldPositions(start, end);
 		Line2D beam = new Line2D
 		{
 			Width = 5f,
 			DefaultColor = color,
-			ZIndex = 40
+			ZIndex = effectZIndex
 		};
+		beam.ZAsRelative = false;
 		beam.AddPoint(_combatEffectLayer.ToLocal(start));
 		beam.AddPoint(_combatEffectLayer.ToLocal(end));
 		_combatEffectLayer.AddChild(beam);
@@ -4255,8 +5095,9 @@ public partial class MissionMap : Node2D
 		Node2D root = new Node2D
 		{
 			Position = _combatEffectLayer.ToLocal(targetPosition),
-			ZIndex = 41
+			ZIndex = GetCombatEffectZIndexForWorldPosition(targetPosition)
 		};
+		root.ZAsRelative = false;
 		_combatEffectLayer.AddChild(root);
 
 		Line2D slashA = new Line2D
@@ -4288,8 +5129,9 @@ public partial class MissionMap : Node2D
 		Node2D root = new Node2D
 		{
 			Position = _combatEffectLayer.ToLocal(targetPosition),
-			ZIndex = 42
+			ZIndex = GetCombatEffectZIndexForWorldPosition(targetPosition)
 		};
+		root.ZAsRelative = false;
 		_combatEffectLayer.AddChild(root);
 
 		Polygon2D burst = new Polygon2D
@@ -4345,8 +5187,9 @@ public partial class MissionMap : Node2D
 		{
 			Text = text,
 			Position = _combatEffectLayer.ToLocal(worldPosition),
-			ZIndex = 43
+			ZIndex = GetCombatEffectZIndexForWorldPosition(worldPosition)
 		};
+		label.ZAsRelative = false;
 		label.AddThemeFontSizeOverride("font_size", 16);
 		label.AddThemeColorOverride("font_color", color);
 		label.AddThemeColorOverride("font_outline_color", new Color(0.02f, 0.04f, 0.06f, 0.95f));
@@ -4368,6 +5211,31 @@ public partial class MissionMap : Node2D
 			new Vector2(0f, halfHeight),
 			new Vector2(-halfWidth, 0f)
 		};
+	}
+
+	private int GetCombatEffectZIndexForWorldPositions(Vector2 a, Vector2 b)
+	{
+		if (_roomBuilder == null || _isoWorld == null)
+		{
+			return 240;
+		}
+
+		Vector2I cellA = GetBuildCell(_roomBuilder.GetNearestMovementCell(_isoWorld.ToLocal(a)));
+		Vector2I cellB = GetBuildCell(_roomBuilder.GetNearestMovementCell(_isoWorld.ToLocal(b)));
+		return Mathf.Max(
+			_roomBuilder.GetCanvasSortOrderForBuildCell(cellA, CombatEffectSortBias),
+			_roomBuilder.GetCanvasSortOrderForBuildCell(cellB, CombatEffectSortBias));
+	}
+
+	private int GetCombatEffectZIndexForWorldPosition(Vector2 worldPosition)
+	{
+		if (_roomBuilder == null || _isoWorld == null)
+		{
+			return 240;
+		}
+
+		Vector2I buildCell = GetBuildCell(_roomBuilder.GetNearestMovementCell(_isoWorld.ToLocal(worldPosition)));
+		return _roomBuilder.GetCanvasSortOrderForBuildCell(buildCell, CombatEffectSortBias);
 	}
 
 	private bool TryApplyStatusEffect(OfficerPawn target, MissionAttackProfile attackProfile)
@@ -4518,6 +5386,17 @@ public partial class MissionMap : Node2D
 		}
 
 		_missionUi?.AppendCombatLog(message);
+		_missionUi?.AppendActionLog(message);
+	}
+
+	private void AppendActionLog(string message)
+	{
+		if (string.IsNullOrWhiteSpace(message))
+		{
+			return;
+		}
+
+		_missionUi?.AppendActionLog(message);
 	}
 
 	private void UpdateCombatHoverSummary()
@@ -4666,6 +5545,13 @@ public partial class MissionMap : Node2D
 			_missionUi.SetCombatEndTurnEnabled(false, false);
 			_missionUi.SetPlayerCombatInfo(null);
 			_missionUi.SetEnemyCombatInfo(null);
+			_missionUi.SetExplorationSelectionInfo(
+				GetSelectedOfficers()
+					.Take(2)
+					.Select(BuildOfficerSummary)
+					.Where(summary => summary != null)
+					.ToList(),
+				!_missionGameOver);
 			_missionUi.SetCombatTurnLabel("MISSION COMBAT");
 			_missionUi.SetCombatInitiative(Array.Empty<MissionCombatantSummary>(), -1);
 			RefreshMissionPrompt();
@@ -4790,6 +5676,18 @@ public partial class MissionMap : Node2D
 		return string.Join("\n", notes);
 	}
 
+	private static string BuildActionResultMessage(string actorName, string statusMessage, string fallbackMessage)
+	{
+		if (!string.IsNullOrWhiteSpace(statusMessage))
+		{
+			return string.IsNullOrWhiteSpace(actorName)
+				? statusMessage.Trim()
+				: $"{actorName}: {statusMessage.Trim()}";
+		}
+
+		return fallbackMessage;
+	}
+
 	private void HandleMissionGameOver()
 	{
 		if (_missionGameOver)
@@ -4816,6 +5714,80 @@ public partial class MissionMap : Node2D
 		}
 
 		GetTree().ChangeSceneToFile("res://main_menu.tscn");
+	}
+
+	private void ReturnToMainMenuFromPause()
+	{
+		HidePauseMenus();
+		ReturnToMainMenu();
+	}
+
+	private Button BuildPauseMenuButton(string text, Action onPressed, float width = 260f)
+	{
+		Button button = new Button
+		{
+			Text = text,
+			CustomMinimumSize = new Vector2(width, 42f),
+			SizeFlagsHorizontal = Control.SizeFlags.ShrinkCenter
+		};
+		button.Pressed += () => onPressed?.Invoke();
+		return button;
+	}
+
+	private static StyleBoxFlat CreateOverlayPanelStyle()
+	{
+		return new StyleBoxFlat
+		{
+			BgColor = new Color(0.05f, 0.07f, 0.11f, 0.96f),
+			BorderWidthTop = 2,
+			BorderWidthBottom = 2,
+			BorderWidthLeft = 2,
+			BorderWidthRight = 2,
+			BorderColor = new Color(0.3f, 0.95f, 1f, 0.85f),
+			ContentMarginLeft = 24,
+			ContentMarginRight = 24,
+			ContentMarginTop = 20,
+			ContentMarginBottom = 20,
+			CornerRadiusTopLeft = 8,
+			CornerRadiusTopRight = 8,
+			CornerRadiusBottomLeft = 8,
+			CornerRadiusBottomRight = 8
+		};
+	}
+
+	private static string ResolveLoadedScenePath(GlobalData globalData, SaveGameSlotInfo selectedSave)
+	{
+		if (!string.IsNullOrWhiteSpace(selectedSave?.LastSavedScenePath))
+		{
+			return selectedSave.LastSavedScenePath;
+		}
+
+		if (!string.IsNullOrWhiteSpace(globalData?.LastSavedScenePath))
+		{
+			return globalData.LastSavedScenePath;
+		}
+
+		if (!string.IsNullOrWhiteSpace(globalData?.CurrentMissionScenePath))
+		{
+			return globalData.CurrentMissionScenePath;
+		}
+
+		if (globalData?.CurrentSectorStars?.Count > 0)
+		{
+			return "res://galactic_map.tscn";
+		}
+
+		return "res://exploration_battle.tscn";
+	}
+
+	private static string FormatSaveTimestamp(string savedAtUtc)
+	{
+		if (DateTime.TryParse(savedAtUtc, out DateTime parsed))
+		{
+			return parsed.ToLocalTime().ToString("MMM d, yyyy h:mm tt");
+		}
+
+		return "Unknown";
 	}
 
 	private string ResolveDialogueTargetId(MissionRoomBuilder.MarkerPlacement marker)
@@ -5221,6 +6193,10 @@ public partial class MissionMap : Node2D
 		}
 
 		prop.CommitInteractionResult(result, context);
+		AppendActionLog(BuildActionResultMessage(
+			context?.Officer?.OfficerName,
+			result.StatusMessage,
+			$"{context?.Officer?.OfficerName ?? "Officer"} secures {prop.Definition?.DisplayName ?? "the objective"}.")); 
 		UpdateFogOfWar();
 		UpdateMissionCompletionActions();
 
@@ -5322,6 +6298,10 @@ public partial class MissionMap : Node2D
 		}
 
 		npc.CommitInteractionResult(result, context);
+		AppendActionLog(BuildActionResultMessage(
+			context?.Officer?.OfficerName,
+			result.StatusMessage,
+			$"{context?.Officer?.OfficerName ?? "Officer"} speaks with {npc.DisplayName}.")); 
 		UpdateMissionCompletionActions();
 
 		if (!string.IsNullOrWhiteSpace(result.DialogueId) && _dialogueUi != null)
@@ -5339,6 +6319,26 @@ public partial class MissionMap : Node2D
 		string roleOrMarker = !string.IsNullOrEmpty(marker.MarkerId) ? marker.MarkerId : marker.LogicRole;
 		string tileId = marker.TileId ?? string.Empty;
 		return $"{roleOrMarker}:{tileId}:{marker.Cell.X},{marker.Cell.Y}:{marker.TargetId}";
+	}
+
+	private static string GetInteractionDisplayName(MissionRoomBuilder.MarkerPlacement interaction)
+	{
+		if (!string.IsNullOrWhiteSpace(interaction?.Label))
+		{
+			return interaction.Label.Trim();
+		}
+
+		if (string.Equals(interaction?.LogicRole, "door", StringComparison.OrdinalIgnoreCase))
+		{
+			return "Bulkhead Door";
+		}
+
+		if (string.Equals(interaction?.LogicRole, "terminal", StringComparison.OrdinalIgnoreCase))
+		{
+			return "Terminal";
+		}
+
+		return "the objective";
 	}
 
 	private List<MissionExtractionOption> GetAvailableExtractionOptions()

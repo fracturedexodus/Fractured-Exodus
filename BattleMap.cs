@@ -79,6 +79,16 @@ public partial class BattleMap : Node2D
 	private CenterContainer _equipMenuWrapper;
 	private VBoxContainer _equipItemList;
 	private Button _btnMission;
+	private CenterContainer _savePromptWrapper;
+	private LineEdit _saveNameLineEdit;
+	private Label _savePromptStatusLabel;
+	private CenterContainer _pauseMenuWrapper;
+	private CenterContainer _loadMenuWrapper;
+	private ItemList _loadSaveList;
+	private Label _loadSaveDetailsLabel;
+	private Label _loadSaveStatusLabel;
+	private Button _loadSelectedSaveButton;
+	private readonly List<SaveGameSlotInfo> _availableSaveGames = new List<SaveGameSlotInfo>();
 	private CenterContainer _missionPromptWrapper;
 	private Label _missionPromptTitle;
 	private RichTextLabel _missionPromptDescription;
@@ -216,6 +226,9 @@ public partial class BattleMap : Node2D
 		BuildStrandedMenu(); 
 		BuildShopUI(); 
 		BuildEquipUI(); // --- NEW: BUILD THE EQUIP UI ---
+		BuildSavePromptUI();
+		BuildPauseMenuUI();
+		BuildLoadGameMenuUI();
 		BuildMissionPromptUI();
 		BuildOfficerPanel();
 		
@@ -396,10 +409,8 @@ public partial class BattleMap : Node2D
 	{
 		if (UI == null) return;
 		UI.EndTurnButton.Pressed += OnEndTurnPressed;
-		UI.SaveGameButton.Pressed += OnManualSaveGamePressed;
 		UI.RepairFleetButton.Pressed += OnRepairFleetPressed;
 		UI.InventoryButton.Pressed += OnInventoryPressed;
-		UI.MainMenuButton.Pressed += OnMainMenuPressed;
 		UI.JumpButton.Pressed += OnJumpPressed;
 		UI.AttackButton.Pressed += OnAttackPressed;
 		if (UI.MissileButton != null) UI.MissileButton.Pressed += OnMissilePressed;
@@ -412,6 +423,406 @@ public partial class BattleMap : Node2D
 		UI.TurnLabel.Text = $"TURN {CurrentTurn}";
 		
 		if (UI.BtnLongRange != null) UI.BtnLongRange.Pressed += OnLongRangePressed;
+	}
+
+	private void BuildSavePromptUI()
+	{
+		CanvasLayer saveLayer = new CanvasLayer { Layer = 175 };
+		AddChild(saveLayer);
+
+		_savePromptWrapper = new CenterContainer();
+		_savePromptWrapper.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+		_savePromptWrapper.MouseFilter = Control.MouseFilterEnum.Stop;
+		_savePromptWrapper.Visible = false;
+		saveLayer.AddChild(_savePromptWrapper);
+
+		PanelContainer savePanel = new PanelContainer();
+		StyleBoxFlat style = new StyleBoxFlat
+		{
+			BgColor = new Color(0.05f, 0.07f, 0.11f, 0.96f),
+			BorderWidthTop = 2,
+			BorderWidthBottom = 2,
+			BorderWidthLeft = 2,
+			BorderWidthRight = 2,
+			BorderColor = new Color(0.3f, 0.95f, 1f, 0.85f),
+			ContentMarginLeft = 24,
+			ContentMarginRight = 24,
+			ContentMarginTop = 20,
+			ContentMarginBottom = 20
+		};
+		savePanel.AddThemeStyleboxOverride("panel", style);
+		savePanel.CustomMinimumSize = new Vector2(520f, 220f);
+		_savePromptWrapper.AddChild(savePanel);
+
+		VBoxContainer content = new VBoxContainer();
+		content.AddThemeConstantOverride("separation", 14);
+		savePanel.AddChild(content);
+
+		Label title = new Label
+		{
+			Text = "NAME SAVE FILE",
+			HorizontalAlignment = HorizontalAlignment.Center
+		};
+		title.AddThemeFontSizeOverride("font_size", 24);
+		title.AddThemeColorOverride("font_color", new Color(0.88f, 0.98f, 1f));
+		content.AddChild(title);
+
+		Label body = new Label
+		{
+			Text = "Enter a name for this campaign save.",
+			HorizontalAlignment = HorizontalAlignment.Center,
+			AutowrapMode = TextServer.AutowrapMode.WordSmart
+		};
+		content.AddChild(body);
+
+		_saveNameLineEdit = new LineEdit
+		{
+			PlaceholderText = "Black Site - Turn 3",
+			CustomMinimumSize = new Vector2(0f, 42f)
+		};
+		_saveNameLineEdit.TextSubmitted += _ => ConfirmManualSavePrompt();
+		content.AddChild(_saveNameLineEdit);
+
+		_savePromptStatusLabel = new Label
+		{
+			HorizontalAlignment = HorizontalAlignment.Center,
+			AutowrapMode = TextServer.AutowrapMode.WordSmart
+		};
+		_savePromptStatusLabel.AddThemeColorOverride("font_color", new Color(1f, 0.55f, 0.55f));
+		content.AddChild(_savePromptStatusLabel);
+
+		HBoxContainer buttonRow = new HBoxContainer
+		{
+			Alignment = BoxContainer.AlignmentMode.Center
+		};
+		buttonRow.AddThemeConstantOverride("separation", 12);
+		content.AddChild(buttonRow);
+
+		Button cancelButton = new Button
+		{
+			Text = "CANCEL",
+			CustomMinimumSize = new Vector2(180f, 42f)
+		};
+		cancelButton.Pressed += HideSavePrompt;
+		buttonRow.AddChild(cancelButton);
+
+		Button saveButton = new Button
+		{
+			Text = "SAVE",
+			CustomMinimumSize = new Vector2(180f, 42f)
+		};
+		saveButton.Pressed += ConfirmManualSavePrompt;
+		buttonRow.AddChild(saveButton);
+	}
+
+	private void BuildPauseMenuUI()
+	{
+		CanvasLayer pauseLayer = new CanvasLayer { Layer = 176 };
+		AddChild(pauseLayer);
+
+		_pauseMenuWrapper = new CenterContainer();
+		_pauseMenuWrapper.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+		_pauseMenuWrapper.MouseFilter = Control.MouseFilterEnum.Stop;
+		_pauseMenuWrapper.Visible = false;
+		pauseLayer.AddChild(_pauseMenuWrapper);
+
+		PanelContainer pausePanel = new PanelContainer();
+		pausePanel.CustomMinimumSize = new Vector2(440f, 320f);
+		pausePanel.AddThemeStyleboxOverride("panel", CreateOverlayPanelStyle());
+		_pauseMenuWrapper.AddChild(pausePanel);
+
+		VBoxContainer content = new VBoxContainer
+		{
+			Alignment = BoxContainer.AlignmentMode.Center
+		};
+		content.AddThemeConstantOverride("separation", 12);
+		pausePanel.AddChild(content);
+
+		Label title = new Label
+		{
+			Text = "GAME MENU",
+			HorizontalAlignment = HorizontalAlignment.Center
+		};
+		title.AddThemeFontSizeOverride("font_size", 26);
+		content.AddChild(title);
+
+		content.AddChild(BuildPauseMenuButton("SAVE GAME", OpenPauseSavePrompt));
+		content.AddChild(BuildPauseMenuButton("LOAD GAME", ShowLoadGameMenu));
+		content.AddChild(BuildPauseMenuButton("RETURN TO GAME", HidePauseMenus));
+		content.AddChild(BuildPauseMenuButton("RETURN TO MAIN MENU", ReturnToMainMenuFromPause));
+	}
+
+	private void BuildLoadGameMenuUI()
+	{
+		CanvasLayer loadLayer = new CanvasLayer { Layer = 177 };
+		AddChild(loadLayer);
+
+		_loadMenuWrapper = new CenterContainer();
+		_loadMenuWrapper.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+		_loadMenuWrapper.MouseFilter = Control.MouseFilterEnum.Stop;
+		_loadMenuWrapper.Visible = false;
+		loadLayer.AddChild(_loadMenuWrapper);
+
+		PanelContainer loadPanel = new PanelContainer();
+		loadPanel.CustomMinimumSize = new Vector2(720f, 560f);
+		loadPanel.AddThemeStyleboxOverride("panel", CreateOverlayPanelStyle());
+		_loadMenuWrapper.AddChild(loadPanel);
+
+		VBoxContainer content = new VBoxContainer();
+		content.AddThemeConstantOverride("separation", 14);
+		loadPanel.AddChild(content);
+
+		Label title = new Label
+		{
+			Text = "LOAD GAME",
+			HorizontalAlignment = HorizontalAlignment.Center
+		};
+		title.AddThemeFontSizeOverride("font_size", 28);
+		content.AddChild(title);
+
+		_loadSaveList = new ItemList
+		{
+			CustomMinimumSize = new Vector2(0f, 250f),
+			SelectMode = ItemList.SelectModeEnum.Single
+		};
+		_loadSaveList.ItemSelected += index => UpdateLoadGameSelection((int)index);
+		_loadSaveList.ItemActivated += index =>
+		{
+			UpdateLoadGameSelection((int)index);
+			LoadSelectedPauseSave();
+		};
+		content.AddChild(_loadSaveList);
+
+		_loadSaveDetailsLabel = new Label
+		{
+			CustomMinimumSize = new Vector2(0f, 108f),
+			AutowrapMode = TextServer.AutowrapMode.WordSmart
+		};
+		content.AddChild(_loadSaveDetailsLabel);
+
+		_loadSaveStatusLabel = new Label
+		{
+			HorizontalAlignment = HorizontalAlignment.Center,
+			AutowrapMode = TextServer.AutowrapMode.WordSmart
+		};
+		_loadSaveStatusLabel.AddThemeColorOverride("font_color", new Color(1f, 0.45f, 0.45f));
+		content.AddChild(_loadSaveStatusLabel);
+
+		HBoxContainer buttonRow = new HBoxContainer
+		{
+			Alignment = BoxContainer.AlignmentMode.Center
+		};
+		buttonRow.AddThemeConstantOverride("separation", 12);
+		content.AddChild(buttonRow);
+
+		buttonRow.AddChild(BuildPauseMenuButton("BACK", ShowPauseMenu, 180f));
+
+		_loadSelectedSaveButton = BuildPauseMenuButton("LOAD SELECTED", LoadSelectedPauseSave, 220f);
+		_loadSelectedSaveButton.Disabled = true;
+		buttonRow.AddChild(_loadSelectedSaveButton);
+	}
+
+	private void ShowSavePrompt()
+	{
+		if (_savePromptWrapper == null || _saveNameLineEdit == null)
+		{
+			return;
+		}
+
+		_savePromptStatusLabel.Text = string.Empty;
+		_saveNameLineEdit.Text = BuildDefaultSaveName();
+		_savePromptWrapper.Visible = true;
+		_saveNameLineEdit.GrabFocus();
+		_saveNameLineEdit.SelectAll();
+	}
+
+	private void HideSavePrompt()
+	{
+		if (_savePromptWrapper != null)
+		{
+			_savePromptWrapper.Visible = false;
+		}
+	}
+
+	private void ShowPauseMenu()
+	{
+		if (_pauseMenuWrapper == null)
+		{
+			return;
+		}
+
+		_pauseMenuWrapper.Visible = true;
+		if (_loadMenuWrapper != null)
+		{
+			_loadMenuWrapper.Visible = false;
+		}
+	}
+
+	private void HidePauseMenus()
+	{
+		if (_pauseMenuWrapper != null)
+		{
+			_pauseMenuWrapper.Visible = false;
+		}
+
+		if (_loadMenuWrapper != null)
+		{
+			_loadMenuWrapper.Visible = false;
+		}
+	}
+
+	private void TogglePauseMenu()
+	{
+		if (_loadMenuWrapper?.Visible == true)
+		{
+			ShowPauseMenu();
+			return;
+		}
+
+		if (_savePromptWrapper?.Visible == true)
+		{
+			HideSavePrompt();
+			return;
+		}
+
+		if (_pauseMenuWrapper == null)
+		{
+			return;
+		}
+
+		_pauseMenuWrapper.Visible = !_pauseMenuWrapper.Visible;
+	}
+
+	private void OpenPauseSavePrompt()
+	{
+		HidePauseMenus();
+		ShowSavePrompt();
+	}
+
+	private void ShowLoadGameMenu()
+	{
+		if (_globalData == null || _loadMenuWrapper == null || _loadSaveList == null)
+		{
+			return;
+		}
+
+		_availableSaveGames.Clear();
+		_availableSaveGames.AddRange(_globalData.GetAvailableSaveGames());
+		_loadSaveList.Clear();
+		_loadSaveDetailsLabel.Text = string.Empty;
+		_loadSaveStatusLabel.Text = string.Empty;
+		_loadSelectedSaveButton.Disabled = _availableSaveGames.Count == 0;
+
+		for (int i = 0; i < _availableSaveGames.Count; i++)
+		{
+			SaveGameSlotInfo save = _availableSaveGames[i];
+			string label = save.DisplayName;
+			if (save.IsAutoSave)
+			{
+				label += " [AUTOSAVE]";
+			}
+			else if (save.IsLegacySave)
+			{
+				label += " [QUICKSAVE]";
+			}
+
+			_loadSaveList.AddItem(label);
+		}
+
+		_pauseMenuWrapper.Visible = false;
+		_loadMenuWrapper.Visible = true;
+		if (_availableSaveGames.Count > 0)
+		{
+			_loadSaveList.Select(0);
+			UpdateLoadGameSelection(0);
+		}
+		else
+		{
+			_loadSaveStatusLabel.Text = "No save files found.";
+		}
+	}
+
+	private void UpdateLoadGameSelection(int index)
+	{
+		if (index < 0 || index >= _availableSaveGames.Count)
+		{
+			_loadSaveDetailsLabel.Text = string.Empty;
+			_loadSelectedSaveButton.Disabled = true;
+			return;
+		}
+
+		SaveGameSlotInfo save = _availableSaveGames[index];
+		string locationText = !string.IsNullOrWhiteSpace(save.CurrentMissionTitle)
+			? $"Mission: {save.CurrentMissionTitle}"
+			: !string.IsNullOrWhiteSpace(save.SavedSystem)
+				? $"System: {save.SavedSystem}{(string.IsNullOrWhiteSpace(save.SavedPlanet) ? string.Empty : $" | Planet: {save.SavedPlanet}")}"
+				: "Location: Unknown";
+		_loadSaveDetailsLabel.Text = $"{locationText}\nTurn: {save.CurrentTurn}\nSaved: {FormatSaveTimestamp(save.SavedAtUtc)}";
+		_loadSelectedSaveButton.Disabled = false;
+	}
+
+	private void LoadSelectedPauseSave()
+	{
+		if (_globalData == null || _loadSaveList == null)
+		{
+			return;
+		}
+
+		int[] selectedItems = _loadSaveList.GetSelectedItems();
+		if (selectedItems.Length == 0)
+		{
+			_loadSaveStatusLabel.Text = "Select a save first.";
+			return;
+		}
+
+		int selectedIndex = selectedItems[0];
+		if (selectedIndex < 0 || selectedIndex >= _availableSaveGames.Count)
+		{
+			_loadSaveStatusLabel.Text = "That save could not be found.";
+			return;
+		}
+
+		SaveGameSlotInfo selectedSave = _availableSaveGames[selectedIndex];
+		if (!_globalData.LoadGame(selectedSave.SlotId))
+		{
+			_loadSaveStatusLabel.Text = "Unable to load that save.";
+			return;
+		}
+
+		string scenePath = ResolveLoadedScenePath(_globalData, selectedSave);
+		SceneTransition transitioner = GetNodeOrNull<SceneTransition>("/root/SceneTransition");
+		if (transitioner != null)
+		{
+			transitioner.ChangeScene(scenePath);
+			return;
+		}
+
+		GetTree().ChangeSceneToFile(scenePath);
+	}
+
+	private void ConfirmManualSavePrompt()
+	{
+		string saveName = _saveNameLineEdit?.Text?.Trim() ?? string.Empty;
+		if (string.IsNullOrWhiteSpace(saveName))
+		{
+			if (_savePromptStatusLabel != null)
+			{
+				_savePromptStatusLabel.Text = "Enter a name before saving.";
+			}
+			_saveNameLineEdit?.GrabFocus();
+			return;
+		}
+
+		SaveCampaign(false, saveName);
+		HideSavePrompt();
+	}
+
+	private string BuildDefaultSaveName()
+	{
+		string systemName = !string.IsNullOrWhiteSpace(_globalData?.SavedSystem)
+			? _globalData.SavedSystem.ToUpperInvariant()
+			: "CAMPAIGN";
+		return $"{systemName} TURN {CurrentTurn}";
 	}
 
 	private void BuildMissionPromptUI()
@@ -1247,6 +1658,16 @@ public partial class BattleMap : Node2D
 
 	public override void _Input(InputEvent @event)
 	{
+		if (@event is InputEventKey escapeEvent && escapeEvent.Pressed && !escapeEvent.Echo && escapeEvent.Keycode == Key.Escape)
+		{
+			TogglePauseMenu();
+			GetViewport().SetInputAsHandled();
+			return;
+		}
+
+		if (_pauseMenuWrapper != null && _pauseMenuWrapper.Visible) return;
+		if (_loadMenuWrapper != null && _loadMenuWrapper.Visible) return;
+		if (_savePromptWrapper != null && _savePromptWrapper.Visible) return;
 		if (_strandedMenuWrapper != null && _strandedMenuWrapper.Visible) return;
 		if (_shopMenuWrapper != null && _shopMenuWrapper.Visible) return; 
 		if (_equipMenuWrapper != null && _equipMenuWrapper.Visible) return; // Prevent movement while equipping
@@ -2233,10 +2654,10 @@ public partial class BattleMap : Node2D
 
 	private void OnManualSaveGamePressed()
 	{
-		SaveCampaign(false);
+		ShowSavePrompt();
 	}
 
-	private void SaveCampaign(bool autoSave)
+	private void SaveCampaign(bool autoSave, string saveName = "")
 	{
 		if (_globalData == null || _battleMapSaveSnapshotService == null) return;
 
@@ -2250,17 +2671,22 @@ public partial class BattleMap : Node2D
 			Fog != null ? Fog.GetExploredHexes() : Enumerable.Empty<Vector2I>(),
 			HexContents);
 
-		_globalData.SaveGame(autoSave);
-
-		if (!autoSave && UI != null)
+		if (autoSave)
 		{
-			UI.SaveGameButton.Text = "GAME SAVED!";
-			UI.SaveGameButton.AddThemeColorOverride("font_color", new Color(0.3f, 1f, 0.3f));
-			GetTree().CreateTimer(2.0f).Timeout += () =>
+			_globalData.SaveGame(true, "res://exploration_battle.tscn");
+		}
+		else
+		{
+			_globalData.SaveNamedGame(saveName, "res://exploration_battle.tscn");
+		}
+
+		if (!autoSave)
+		{
+			if (UI?.CombatLogPanel != null)
 			{
-				UI.SaveGameButton.Text = "SAVE GAME";
-				UI.SaveGameButton.RemoveThemeColorOverride("font_color");
-			};
+				UI.CombatLogPanel.Visible = true;
+			}
+			LogCombatMessage($"\n[color=green]--- GAME SAVED: {saveName.ToUpperInvariant()} ---[/color]");
 		}
 	}
 
@@ -2269,6 +2695,80 @@ public partial class BattleMap : Node2D
 		SceneTransition transitioner = GetNodeOrNull<SceneTransition>("/root/SceneTransition");
 		if (transitioner != null) transitioner.ChangeScene("res://main_menu.tscn");
 		else GetTree().ChangeSceneToFile("res://main_menu.tscn");
+	}
+
+	private void ReturnToMainMenuFromPause()
+	{
+		HidePauseMenus();
+		OnMainMenuPressed();
+	}
+
+	private Button BuildPauseMenuButton(string text, Action onPressed, float width = 260f)
+	{
+		Button button = new Button
+		{
+			Text = text,
+			CustomMinimumSize = new Vector2(width, 42f),
+			SizeFlagsHorizontal = Control.SizeFlags.ShrinkCenter
+		};
+		button.Pressed += () => onPressed?.Invoke();
+		return button;
+	}
+
+	private static StyleBoxFlat CreateOverlayPanelStyle()
+	{
+		return new StyleBoxFlat
+		{
+			BgColor = new Color(0.05f, 0.07f, 0.11f, 0.96f),
+			BorderWidthTop = 2,
+			BorderWidthBottom = 2,
+			BorderWidthLeft = 2,
+			BorderWidthRight = 2,
+			BorderColor = new Color(0.3f, 0.95f, 1f, 0.85f),
+			ContentMarginLeft = 24,
+			ContentMarginRight = 24,
+			ContentMarginTop = 20,
+			ContentMarginBottom = 20,
+			CornerRadiusTopLeft = 8,
+			CornerRadiusTopRight = 8,
+			CornerRadiusBottomLeft = 8,
+			CornerRadiusBottomRight = 8
+		};
+	}
+
+	private static string ResolveLoadedScenePath(GlobalData globalData, SaveGameSlotInfo selectedSave)
+	{
+		if (!string.IsNullOrWhiteSpace(selectedSave?.LastSavedScenePath))
+		{
+			return selectedSave.LastSavedScenePath;
+		}
+
+		if (!string.IsNullOrWhiteSpace(globalData?.LastSavedScenePath))
+		{
+			return globalData.LastSavedScenePath;
+		}
+
+		if (!string.IsNullOrWhiteSpace(globalData?.CurrentMissionScenePath))
+		{
+			return globalData.CurrentMissionScenePath;
+		}
+
+		if (globalData?.CurrentSectorStars?.Count > 0)
+		{
+			return "res://galactic_map.tscn";
+		}
+
+		return "res://exploration_battle.tscn";
+	}
+
+	private static string FormatSaveTimestamp(string savedAtUtc)
+	{
+		if (DateTime.TryParse(savedAtUtc, out DateTime parsed))
+		{
+			return parsed.ToLocalTime().ToString("MMM d, yyyy h:mm tt");
+		}
+
+		return "Unknown";
 	}
 
 	internal void MoveShip(Vector2I fromHex, Vector2I toHex, int cost)

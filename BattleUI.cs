@@ -7,10 +7,8 @@ public partial class BattleUI : CanvasLayer
 	[Export] public Label TurnLabel;
 	[Export] public Label InventoryDisplay;
 	[Export] public Button EndTurnButton;
-	[Export] public Button SaveGameButton;
 	[Export] public Button RepairFleetButton;
 	[Export] public Button InventoryButton;
-	[Export] public Button MainMenuButton;
 	
 	[ExportGroup("Combat Controls")]
 	[Export] public Button AttackButton;

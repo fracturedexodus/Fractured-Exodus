@@ -275,6 +275,11 @@ public partial class MissionRoomBuilder : Node
 		return _doorIdsByCell.TryGetValue(GetBuildCellForMovementCell(movementCell), out doorId);
 	}
 
+	public IEnumerable<string> GetDoorIds()
+	{
+		return _doorsById.Keys.ToList();
+	}
+
 	public Vector2I GetNearestCell(Vector2 localPosition)
 	{
 		return IsoGridHelper.WorldToGrid(localPosition, TileStep, Origin);

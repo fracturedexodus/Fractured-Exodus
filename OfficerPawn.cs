@@ -4,7 +4,9 @@ using System.Collections.Generic;
 public partial class OfficerPawn : Node2D
 {
 	private const int NameLabelZIndex = 220;
-	private const int SelectionRingZIndex = 210;
+	private const float SelectionCellHalfWidth = 14f;
+	private const float SelectionCellHalfHeight = 8f;
+	private static readonly Vector2 SelectionRingOffset = new Vector2(0f, 10f);
 	private const string OperativeNorthEastPath = "res://Assets/Missions/Characters/Operative01/operative_ne.png";
 	private const string OperativeNorthWestPath = "res://Assets/Missions/Characters/Operative01/operative_nw.png";
 	private const string OperativeSouthEastPath = "res://Assets/Missions/Characters/Operative01/operative_se.png";
@@ -346,6 +348,31 @@ public partial class OfficerPawn : Node2D
 		_isMoving = false;
 	}
 
+	public void ApplySavedRuntimeState(int currentHp, int currentShields, int currentActions, string activeStatusEffectId, bool isDead)
+	{
+		CurrentHP = Mathf.Clamp(currentHp, 0, MaxHP);
+		CurrentShields = Mathf.Clamp(currentShields, 0, MaxShields);
+		CurrentActions = Mathf.Clamp(currentActions, 0, MaxActions);
+		ActiveStatusEffectId = activeStatusEffectId ?? string.Empty;
+		IsDead = isDead || CurrentHP <= 0;
+		_pathPoints.Clear();
+		_pathCells.Clear();
+		_targetCell = CurrentCell;
+		_pendingDestinationCell = CurrentCell;
+		_targetPosition = GlobalPosition;
+		_isMoving = false;
+
+		if (IsDead)
+		{
+			Visible = false;
+			SetProcess(false);
+			return;
+		}
+
+		Visible = true;
+		SetProcess(true);
+	}
+
 	public void MoveAlongPath(IReadOnlyList<Vector2> globalPathPoints, IReadOnlyList<Vector2I> pathCells, Vector2I destinationCell)
 	{
 		if (globalPathPoints == null || pathCells == null || globalPathPoints.Count == 0 || globalPathPoints.Count != pathCells.Count)
@@ -372,11 +399,12 @@ public partial class OfficerPawn : Node2D
 		_selectionRing = new Polygon2D
 		{
 			Visible = false,
-			Color = new Color(0.15f, 0.95f, 0.95f, 0.35f),
-			Polygon = BuildDiamond(34f, 18f)
+			Color = new Color(0.15f, 0.95f, 0.95f, 0.30f),
+			Polygon = BuildDiamond(SelectionCellHalfWidth, SelectionCellHalfHeight),
+			Position = SelectionRingOffset
 		};
-		_selectionRing.ZAsRelative = false;
-		_selectionRing.ZIndex = SelectionRingZIndex;
+		_selectionRing.ZAsRelative = true;
+		_selectionRing.ZIndex = -1;
 		AddChild(_selectionRing);
 
 		_shadow = new Polygon2D
