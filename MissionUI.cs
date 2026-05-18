@@ -29,6 +29,10 @@ public sealed class MissionCombatantSummary
 
 public partial class MissionUI : CanvasLayer
 {
+	private static readonly Color HudPanelBackground = new Color(0.04f, 0.05f, 0.08f, 0.74f);
+	private static readonly Color HudPanelBorder = new Color(0.22f, 0.28f, 0.36f, 0.62f);
+	private static readonly Color HudAccentBorder = new Color(0.24f, 0.64f, 0.78f, 0.82f);
+
 	private const float ExplorationSelectionSingleWidth = 372f;
 	private const float ExplorationSelectionDoubleWidth = 732f;
 	private const float ExplorationCardWidth = 348f;
@@ -74,16 +78,20 @@ public partial class MissionUI : CanvasLayer
 	private Button _combatEndTurnButton;
 	private PanelContainer _playerCombatInfoPanel;
 	private TextureRect _playerCombatIcon;
+	private Label _playerCombatHeaderLabel;
 	private Label _playerCombatInfoLabel;
 	private PanelContainer _enemyCombatInfoPanel;
 	private TextureRect _enemyCombatIcon;
+	private Label _enemyCombatHeaderLabel;
 	private Label _enemyCombatInfoLabel;
 	private PanelContainer _explorationSelectionPanel;
 	private PanelContainer _explorationPrimaryInfoPanel;
 	private TextureRect _explorationPrimaryIcon;
+	private Label _explorationPrimaryHeaderLabel;
 	private Label _explorationPrimaryInfoLabel;
 	private PanelContainer _explorationSecondaryInfoPanel;
 	private TextureRect _explorationSecondaryIcon;
+	private Label _explorationSecondaryHeaderLabel;
 	private Label _explorationSecondaryInfoLabel;
 	private PanelContainer _combatLogPanel;
 	private RichTextLabel _combatLogText;
@@ -121,7 +129,14 @@ public partial class MissionUI : CanvasLayer
 		PromptLabel = GetNode<Label>("UIRoot/TopLeftPanel/Margin/Content/PromptLabel");
 		if (_topLeftPanel != null)
 		{
-			_topLeftPanel.OffsetBottom = 170f;
+			_topLeftPanel.SetAnchorsPreset(Control.LayoutPreset.TopWide);
+			_topLeftPanel.AnchorLeft = 0.5f;
+			_topLeftPanel.AnchorRight = 0.5f;
+			_topLeftPanel.OffsetLeft = -280f;
+			_topLeftPanel.OffsetTop = 20f;
+			_topLeftPanel.OffsetRight = 280f;
+			_topLeftPanel.OffsetBottom = 156f;
+			_topLeftPanel.AddThemeStyleboxOverride("panel", CreateHudPanelStyle());
 		}
 		if (SelectedOfficerLabel != null)
 		{
@@ -147,6 +162,7 @@ public partial class MissionUI : CanvasLayer
 		BuildConfirmationPrompt();
 		BuildMissionSavePrompt();
 		BuildGameOverPanel();
+		ApplyBattlemapLabelStyling();
 	}
 
 	public void SetMissionText(string title, string objective, string prompt)
@@ -302,12 +318,12 @@ public partial class MissionUI : CanvasLayer
 
 	public void SetPlayerCombatInfo(MissionCombatantSummary summary)
 	{
-		UpdateCombatInfoPanel(summary, _playerCombatInfoPanel, _playerCombatIcon, _playerCombatInfoLabel, "OFFICER");
+		UpdateCombatInfoPanel(summary, _playerCombatInfoPanel, _playerCombatIcon, _playerCombatHeaderLabel, _playerCombatInfoLabel, "OFFICER");
 	}
 
 	public void SetEnemyCombatInfo(MissionCombatantSummary summary)
 	{
-		UpdateCombatInfoPanel(summary, _enemyCombatInfoPanel, _enemyCombatIcon, _enemyCombatInfoLabel, "ENEMY");
+		UpdateCombatInfoPanel(summary, _enemyCombatInfoPanel, _enemyCombatIcon, _enemyCombatHeaderLabel, _enemyCombatInfoLabel, "ENEMY");
 	}
 
 	public void SetExplorationSelectionInfo(IReadOnlyList<MissionCombatantSummary> summaries, bool visible)
@@ -329,12 +345,14 @@ public partial class MissionUI : CanvasLayer
 			summaries.Count > 0 ? summaries[0] : null,
 			_explorationPrimaryInfoPanel,
 			_explorationPrimaryIcon,
+			_explorationPrimaryHeaderLabel,
 			_explorationPrimaryInfoLabel,
 			"OFFICER");
 		UpdateCombatInfoPanel(
 			summaries.Count > 1 ? summaries[1] : null,
 			_explorationSecondaryInfoPanel,
 			_explorationSecondaryIcon,
+			_explorationSecondaryHeaderLabel,
 			_explorationSecondaryInfoLabel,
 			"OFFICER");
 	}
@@ -392,7 +410,7 @@ public partial class MissionUI : CanvasLayer
 		}
 
 		_actionLogText.Text = string.Join("\n\n", _actionLogEntries);
-		_actionLogText.CallDeferred(nameof(ScrollActionLogToBottom));
+		CallDeferred(nameof(ScrollActionLogToBottom));
 	}
 
 	public void ClearCombatLog()
@@ -410,7 +428,7 @@ public partial class MissionUI : CanvasLayer
 		if (_actionLogText != null)
 		{
 			_actionLogText.Text = string.Empty;
-			_actionLogText.CallDeferred(nameof(ScrollActionLogToBottom));
+			CallDeferred(nameof(ScrollActionLogToBottom));
 		}
 	}
 
@@ -530,6 +548,7 @@ public partial class MissionUI : CanvasLayer
 			OffsetRight = 1310f,
 			OffsetBottom = 1040f
 		};
+		_extractionPromptPanel.AddThemeStyleboxOverride("panel", CreateHudPanelStyle(0.88f, true));
 		_uiRoot.AddChild(_extractionPromptPanel);
 
 		MarginContainer margin = new MarginContainer();
@@ -573,27 +592,25 @@ public partial class MissionUI : CanvasLayer
 		{
 			Visible = false
 		};
-		_initiativeRoot.SetAnchorsPreset(Control.LayoutPreset.TopWide);
-		_initiativeRoot.AnchorLeft = 0.5f;
-		_initiativeRoot.AnchorRight = 0.5f;
-		_initiativeRoot.OffsetLeft = -360f;
-		_initiativeRoot.OffsetTop = 18f;
-		_initiativeRoot.OffsetRight = 360f;
-		_initiativeRoot.OffsetBottom = 182f;
+		_initiativeRoot.SetAnchorsPreset(Control.LayoutPreset.TopLeft);
+		_initiativeRoot.OffsetLeft = 20f;
+		_initiativeRoot.OffsetTop = 20f;
+		_initiativeRoot.OffsetRight = 440f;
+		_initiativeRoot.OffsetBottom = 210f;
 		_initiativeRoot.AddThemeConstantOverride("separation", 8);
 		_uiRoot.AddChild(_initiativeRoot);
 
 		_combatTurnLabel = new Label
 		{
 			Text = "MISSION COMBAT",
-			HorizontalAlignment = HorizontalAlignment.Center
+			HorizontalAlignment = HorizontalAlignment.Left
 		};
 		_combatTurnLabel.AddThemeFontSizeOverride("font_size", 22);
 		_initiativeRoot.AddChild(_combatTurnLabel);
 
 		_combatInitiativeRow = new HBoxContainer
 		{
-			Alignment = BoxContainer.AlignmentMode.Center
+			Alignment = BoxContainer.AlignmentMode.Begin
 		};
 		_combatInitiativeRow.AddThemeConstantOverride("separation", 8);
 		_initiativeRoot.AddChild(_combatInitiativeRow);
@@ -602,13 +619,13 @@ public partial class MissionUI : CanvasLayer
 		{
 			Text = "END TURN",
 			CustomMinimumSize = new Vector2(180f, 42f),
-			SizeFlagsHorizontal = Control.SizeFlags.ShrinkCenter
+			SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin
 		};
 		_combatEndTurnButton.Pressed += () => EmitSignal(SignalName.CombatEndTurnPressed);
 		_initiativeRoot.AddChild(_combatEndTurnButton);
 
-		_playerCombatInfoPanel = BuildCombatInfoPanel(new Vector2(20f, 760f), out _playerCombatIcon, out _playerCombatInfoLabel);
-		_enemyCombatInfoPanel = BuildCombatInfoPanel(new Vector2(1500f, 760f), out _enemyCombatIcon, out _enemyCombatInfoLabel);
+		_playerCombatInfoPanel = BuildCombatInfoPanel(new Vector2(20f, 760f), out _playerCombatIcon, out _playerCombatHeaderLabel, out _playerCombatInfoLabel);
+		_enemyCombatInfoPanel = BuildCombatInfoPanel(new Vector2(1500f, 760f), out _enemyCombatIcon, out _enemyCombatHeaderLabel, out _enemyCombatInfoLabel);
 		_playerCombatInfoPanel.Visible = false;
 		_enemyCombatInfoPanel.Visible = false;
 		_uiRoot.AddChild(_playerCombatInfoPanel);
@@ -651,12 +668,14 @@ public partial class MissionUI : CanvasLayer
 		_explorationPrimaryInfoPanel = BuildCombatInfoPanel(
 			Vector2.Zero,
 			out _explorationPrimaryIcon,
+			out _explorationPrimaryHeaderLabel,
 			out _explorationPrimaryInfoLabel,
 			new Vector2(ExplorationCardWidth, ExplorationCardHeight),
 			new Vector2(156f, 132f));
 		_explorationSecondaryInfoPanel = BuildCombatInfoPanel(
 			Vector2.Zero,
 			out _explorationSecondaryIcon,
+			out _explorationSecondaryHeaderLabel,
 			out _explorationSecondaryInfoLabel,
 			new Vector2(ExplorationCardWidth, ExplorationCardHeight),
 			new Vector2(156f, 132f));
@@ -681,13 +700,12 @@ public partial class MissionUI : CanvasLayer
 		{
 			Visible = false
 		};
-		_combatLogPanel.SetAnchorsPreset(Control.LayoutPreset.BottomWide);
-		_combatLogPanel.AnchorLeft = 0.5f;
-		_combatLogPanel.AnchorRight = 0.5f;
-		_combatLogPanel.OffsetLeft = -320f;
-		_combatLogPanel.OffsetTop = -220f;
-		_combatLogPanel.OffsetRight = 320f;
-		_combatLogPanel.OffsetBottom = -18f;
+		_combatLogPanel.SetAnchorsPreset(Control.LayoutPreset.BottomLeft);
+		_combatLogPanel.OffsetLeft = 20f;
+		_combatLogPanel.OffsetTop = -280f;
+		_combatLogPanel.OffsetRight = 370f;
+		_combatLogPanel.OffsetBottom = -20f;
+		_combatLogPanel.AddThemeStyleboxOverride("panel", CreateHudPanelStyle());
 		_uiRoot.AddChild(_combatLogPanel);
 
 		MarginContainer margin = new MarginContainer();
@@ -729,11 +747,11 @@ public partial class MissionUI : CanvasLayer
 
 		_actionLogPanel = new PanelContainer();
 		_actionLogPanel.SetAnchorsPreset(Control.LayoutPreset.TopRight);
-		_actionLogPanel.OffsetLeft = -430f;
-		_actionLogPanel.OffsetTop = 18f;
-		_actionLogPanel.OffsetRight = -18f;
-		_actionLogPanel.OffsetBottom = 308f;
-		_actionLogPanel.AddThemeStyleboxOverride("panel", CreateActionLogStyle());
+		_actionLogPanel.OffsetLeft = -370f;
+		_actionLogPanel.OffsetTop = 20f;
+		_actionLogPanel.OffsetRight = -20f;
+		_actionLogPanel.OffsetBottom = 270f;
+		_actionLogPanel.AddThemeStyleboxOverride("panel", CreateLogPanelStyle());
 		_uiRoot.AddChild(_actionLogPanel);
 
 		MarginContainer margin = new MarginContainer();
@@ -752,7 +770,7 @@ public partial class MissionUI : CanvasLayer
 			Text = "ACTION LOG",
 			HorizontalAlignment = HorizontalAlignment.Center
 		};
-		title.AddThemeFontSizeOverride("font_size", 18);
+		title.AddThemeFontSizeOverride("font_size", 16);
 		content.AddChild(title);
 
 		_actionLogText = new RichTextLabel
@@ -779,6 +797,7 @@ public partial class MissionUI : CanvasLayer
 			Visible = false,
 			Size = new Vector2(260f, 170f)
 		};
+		_hoverSummaryPanel.AddThemeStyleboxOverride("panel", CreateHudPanelStyle(0.88f, true));
 		_uiRoot.AddChild(_hoverSummaryPanel);
 
 		MarginContainer margin = new MarginContainer();
@@ -813,20 +832,7 @@ public partial class MissionUI : CanvasLayer
 		_storyEventPanel.OffsetBottom = 420f;
 		_uiRoot.AddChild(_storyEventPanel);
 
-		StyleBoxFlat panelStyle = new StyleBoxFlat
-		{
-			BgColor = new Color(0.01f, 0.02f, 0.04f, 0.97f),
-			BorderColor = new Color(0.32f, 0.9f, 1f, 0.85f),
-			BorderWidthLeft = 2,
-			BorderWidthTop = 2,
-			BorderWidthRight = 2,
-			BorderWidthBottom = 2,
-			CornerRadiusTopLeft = 10,
-			CornerRadiusTopRight = 10,
-			CornerRadiusBottomLeft = 10,
-			CornerRadiusBottomRight = 10
-		};
-		_storyEventPanel.AddThemeStyleboxOverride("panel", panelStyle);
+		_storyEventPanel.AddThemeStyleboxOverride("panel", CreateHudPanelStyle(0.94f, true));
 
 		MarginContainer margin = new MarginContainer();
 		margin.AddThemeConstantOverride("margin_left", 18);
@@ -894,20 +900,7 @@ public partial class MissionUI : CanvasLayer
 		_confirmationPromptPanel.OffsetBottom = 140f;
 		_uiRoot.AddChild(_confirmationPromptPanel);
 
-		StyleBoxFlat panelStyle = new StyleBoxFlat
-		{
-			BgColor = new Color(0.01f, 0.02f, 0.04f, 0.98f),
-			BorderColor = new Color(0.32f, 0.9f, 1f, 0.85f),
-			BorderWidthLeft = 2,
-			BorderWidthTop = 2,
-			BorderWidthRight = 2,
-			BorderWidthBottom = 2,
-			CornerRadiusTopLeft = 10,
-			CornerRadiusTopRight = 10,
-			CornerRadiusBottomLeft = 10,
-			CornerRadiusBottomRight = 10
-		};
-		_confirmationPromptPanel.AddThemeStyleboxOverride("panel", panelStyle);
+		_confirmationPromptPanel.AddThemeStyleboxOverride("panel", CreateHudPanelStyle(0.94f, true));
 
 		MarginContainer margin = new MarginContainer();
 		margin.AddThemeConstantOverride("margin_left", 18);
@@ -1079,13 +1072,14 @@ public partial class MissionUI : CanvasLayer
 		content.AddChild(_gameOverReturnButton);
 	}
 
-	private PanelContainer BuildCombatInfoPanel(Vector2 position, out TextureRect iconRect, out Label infoLabel, Vector2? sizeOverride = null, Vector2? iconSizeOverride = null)
+	private PanelContainer BuildCombatInfoPanel(Vector2 position, out TextureRect iconRect, out Label headerLabel, out Label infoLabel, Vector2? sizeOverride = null, Vector2? iconSizeOverride = null)
 	{
 		PanelContainer panel = new PanelContainer
 		{
 			Position = position,
 			Size = sizeOverride ?? new Vector2(392f, 262f)
 		};
+		panel.AddThemeStyleboxOverride("panel", CreateHudPanelStyle());
 
 		MarginContainer margin = new MarginContainer();
 		margin.AddThemeConstantOverride("margin_left", 14);
@@ -1095,9 +1089,16 @@ public partial class MissionUI : CanvasLayer
 		panel.AddChild(margin);
 
 		VBoxContainer content = new VBoxContainer();
-		content.AddThemeConstantOverride("separation", 10);
+		content.AddThemeConstantOverride("separation", 8);
 		content.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
 		margin.AddChild(content);
+
+		headerLabel = new Label
+		{
+			HorizontalAlignment = HorizontalAlignment.Center
+		};
+		headerLabel.AddThemeFontSizeOverride("font_size", 17);
+		content.AddChild(headerLabel);
 
 		iconRect = new TextureRect
 		{
@@ -1112,13 +1113,14 @@ public partial class MissionUI : CanvasLayer
 			AutowrapMode = TextServer.AutowrapMode.Off,
 			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
 		};
+		infoLabel.AddThemeFontSizeOverride("font_size", 15);
 		content.AddChild(infoLabel);
 		return panel;
 	}
 
-	private void UpdateCombatInfoPanel(MissionCombatantSummary summary, PanelContainer panel, TextureRect iconRect, Label infoLabel, string emptyTitle)
+	private void UpdateCombatInfoPanel(MissionCombatantSummary summary, PanelContainer panel, TextureRect iconRect, Label headerLabel, Label infoLabel, string emptyTitle)
 	{
-		if (panel == null || iconRect == null || infoLabel == null)
+		if (panel == null || iconRect == null || headerLabel == null || infoLabel == null)
 		{
 			return;
 		}
@@ -1131,6 +1133,7 @@ public partial class MissionUI : CanvasLayer
 
 		panel.Visible = true;
 		iconRect.Texture = summary.Icon;
+		headerLabel.Text = $"== {summary.DisplayName.ToUpperInvariant()} ==";
 		infoLabel.Text = $"{emptyTitle}: {summary.DisplayName}\nWEAPON: {summary.WeaponName}\nSHIELD: {summary.ShieldName}\nHP: {summary.CurrentHP}/{summary.MaxHP}\nSHIELDS: {summary.CurrentShields}/{summary.MaxShields}\nAP: {summary.CurrentAP}/{summary.MaxAP}\nRANGE: {summary.AttackRange} | DMG: {summary.AttackMinDamage}-{summary.AttackMaxDamage}";
 	}
 
@@ -1167,6 +1170,23 @@ public partial class MissionUI : CanvasLayer
 	private static StyleBoxEmpty CreateTransparentPanelStyle()
 	{
 		return new StyleBoxEmpty();
+	}
+
+	private void ApplyBattlemapLabelStyling()
+	{
+		if (TitleLabel != null)
+		{
+			TitleLabel.AddThemeFontSizeOverride("font_size", 28);
+			TitleLabel.AddThemeColorOverride("font_color", new Color(0.96f, 0.97f, 1f, 0.98f));
+			TitleLabel.HorizontalAlignment = HorizontalAlignment.Center;
+		}
+
+		if (ObjectiveLabel != null)
+		{
+			ObjectiveLabel.AddThemeFontSizeOverride("font_size", 16);
+			ObjectiveLabel.AddThemeColorOverride("font_color", new Color(0.92f, 0.94f, 0.98f, 0.96f));
+			ObjectiveLabel.HorizontalAlignment = HorizontalAlignment.Center;
+		}
 	}
 
 	private void ConfirmMissionSavePrompt()
@@ -1207,18 +1227,34 @@ public partial class MissionUI : CanvasLayer
 
 	private static StyleBoxFlat CreateActionLogStyle()
 	{
+		return CreateHudPanelStyle(0.86f, true);
+	}
+
+	private static StyleBoxFlat CreateLogPanelStyle()
+	{
+		return CreateHudPanelStyle(0.78f, false);
+	}
+
+	private static StyleBoxFlat CreateHudPanelStyle(float alphaOverride = -1f, bool useAccentBorder = false)
+	{
+		Color background = HudPanelBackground;
+		if (alphaOverride >= 0f)
+		{
+			background.A = alphaOverride;
+		}
+
 		return new StyleBoxFlat
 		{
-			BgColor = new Color(0.03f, 0.04f, 0.06f, 0.84f),
-			BorderColor = new Color(0.24f, 0.64f, 0.78f, 0.9f),
-			BorderWidthLeft = 2,
-			BorderWidthTop = 2,
-			BorderWidthRight = 2,
-			BorderWidthBottom = 2,
-			CornerRadiusTopLeft = 8,
-			CornerRadiusTopRight = 8,
-			CornerRadiusBottomRight = 8,
-			CornerRadiusBottomLeft = 8
+			BgColor = background,
+			BorderColor = useAccentBorder ? HudAccentBorder : HudPanelBorder,
+			BorderWidthLeft = 1,
+			BorderWidthTop = 1,
+			BorderWidthRight = 1,
+			BorderWidthBottom = 1,
+			CornerRadiusTopLeft = 2,
+			CornerRadiusTopRight = 2,
+			CornerRadiusBottomRight = 2,
+			CornerRadiusBottomLeft = 2
 		};
 	}
 }
