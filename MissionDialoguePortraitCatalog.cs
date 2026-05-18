@@ -17,6 +17,7 @@ public sealed class MissionDialoguePortraitDefinition
 
 public static class MissionDialoguePortraitCatalog
 {
+	private const string PropDefinitionsDirectory = "res://Data/Missions/Props/Definitions";
 	private static readonly string[] SearchRoots =
 	{
 		"res://Assets/Officers",
@@ -77,9 +78,44 @@ public static class MissionDialoguePortraitCatalog
 			}
 		}
 
+		foreach (MissionDialoguePortraitDefinition propPortrait in BuildPropPortraitDefinitions())
+		{
+			definitions.Add(propPortrait);
+		}
+
 		return definitions
 			.OrderBy(def => string.IsNullOrEmpty(def.TexturePath) ? string.Empty : def.DisplayName)
 			.ToList();
+	}
+
+	private static IEnumerable<MissionDialoguePortraitDefinition> BuildPropPortraitDefinitions()
+	{
+		if (!DirAccess.DirExistsAbsolute(ProjectSettings.GlobalizePath(PropDefinitionsDirectory)))
+		{
+			yield break;
+		}
+
+		foreach (string fileName in DirAccess.GetFilesAt(PropDefinitionsDirectory)
+			.Where(file => file.EndsWith(".tres") || file.EndsWith(".res"))
+			.OrderBy(file => file))
+		{
+			string resourcePath = $"{PropDefinitionsDirectory}/{fileName}";
+			if (!ResourceLoader.Exists(resourcePath))
+			{
+				continue;
+			}
+
+			PropDefinition definition = GD.Load<PropDefinition>(resourcePath);
+			if (definition == null || string.IsNullOrWhiteSpace(definition.SpriteTexturePath))
+			{
+				continue;
+			}
+
+			string displayName = string.IsNullOrWhiteSpace(definition.DisplayName)
+				? HumanizeName(Path.GetFileNameWithoutExtension(fileName))
+				: definition.DisplayName.Trim();
+			yield return new MissionDialoguePortraitDefinition($"Prop: {displayName}", definition.SpriteTexturePath);
+		}
 	}
 
 	private static string HumanizeName(string rawName)

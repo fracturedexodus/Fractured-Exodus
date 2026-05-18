@@ -25,6 +25,9 @@ public partial class MissionRoomBuilder : Node
 		public string TriggerMode { get; init; } = "none";
 		public bool OneShot { get; init; }
 		public string Notes { get; init; } = string.Empty;
+		public float RotationDegrees { get; init; }
+		public bool FlipH { get; init; }
+		public bool FlipV { get; init; }
 		public Vector2I Cell { get; init; } = Vector2I.Zero;
 	}
 
@@ -597,6 +600,8 @@ public partial class MissionRoomBuilder : Node
 			float offsetX = tileDict.TryGetValue("offset_x", out Variant offsetXVariant) ? offsetXVariant.AsSingle() : 0f;
 			float offsetY = tileDict.TryGetValue("offset_y", out Variant offsetYVariant) ? offsetYVariant.AsSingle() : 0f;
 			float rotationDegrees = tileDict.TryGetValue("rotation_degrees", out Variant rotationVariant) ? rotationVariant.AsSingle() : 0f;
+			bool flipH = tileDict.TryGetValue("flip_h", out Variant flipHVariant) && flipHVariant.AsBool();
+			bool flipV = tileDict.TryGetValue("flip_v", out Variant flipVVariant) && flipVVariant.AsBool();
 			string logicRole = tileDict.TryGetValue("logic_role", out Variant logicRoleVariant) ? logicRoleVariant.AsString() : string.Empty;
 			string logicLabel = tileDict.TryGetValue("logic_label", out Variant logicLabelVariant) ? logicLabelVariant.AsString() : string.Empty;
 			string logicTargetId = tileDict.TryGetValue("logic_target_id", out Variant logicTargetVariant) ? logicTargetVariant.AsString() : string.Empty;
@@ -640,6 +645,9 @@ public partial class MissionRoomBuilder : Node
 					TriggerMode = string.IsNullOrEmpty(logicTriggerMode) ? GetDefaultTriggerMode(markerId) : logicTriggerMode,
 					OneShot = logicOnce || markerId.StartsWith("trigger_"),
 					Notes = logicNotes,
+					RotationDegrees = rotationDegrees,
+					FlipH = flipH,
+					FlipV = flipV,
 					Cell = new Vector2I(column, row)
 				});
 				continue;
@@ -660,6 +668,9 @@ public partial class MissionRoomBuilder : Node
 					TriggerMode = string.IsNullOrEmpty(logicTriggerMode) ? "interact" : logicTriggerMode,
 					OneShot = logicOnce,
 					Notes = logicNotes,
+					RotationDegrees = rotationDegrees,
+					FlipH = flipH,
+					FlipV = flipV,
 					Cell = new Vector2I(column, row)
 				});
 				placedAnyTile = true;
@@ -693,7 +704,7 @@ public partial class MissionRoomBuilder : Node
 			}
 			else
 			{
-				Sprite2D sprite = CreateSprite(definition, column, row, $"{definition.Category}_{column}_{row}_{definition.Id}", extraOffset, rotationDegrees);
+				Sprite2D sprite = CreateSprite(definition, column, row, $"{definition.Category}_{column}_{row}_{definition.Id}", extraOffset, rotationDegrees, flipH, flipV);
 				sprite.SetMeta("logic_role", logicRole);
 				sprite.SetMeta("logic_label", logicLabel);
 				sprite.SetMeta("logic_target_id", logicTargetId);
@@ -724,6 +735,9 @@ public partial class MissionRoomBuilder : Node
 					TriggerMode = string.IsNullOrEmpty(logicTriggerMode) ? "none" : logicTriggerMode,
 					OneShot = logicOnce,
 					Notes = logicNotes,
+					RotationDegrees = rotationDegrees,
+					FlipH = flipH,
+					FlipV = flipV,
 					Cell = cell
 				});
 			}
@@ -977,7 +991,7 @@ public partial class MissionRoomBuilder : Node
 		return string.IsNullOrEmpty(fileName) ? "Prop" : fileName.Replace('_', ' ');
 	}
 
-	private Sprite2D CreateSprite(MissionTileDefinition definition, int column, int row, string name, Vector2 extraOffset, float rotationDegrees)
+	private Sprite2D CreateSprite(MissionTileDefinition definition, int column, int row, string name, Vector2 extraOffset, float rotationDegrees, bool flipH = false, bool flipV = false)
 	{
 		bool usesAtlasRegion = string.IsNullOrEmpty(definition.TexturePath) && definition.Category != MissionTileCategory.Floor;
 		string orientationSuffix = GetOcclusionOrientationSuffix(definition);
@@ -989,7 +1003,9 @@ public partial class MissionRoomBuilder : Node
 			RegionRect = definition.Region,
 			Position = GetCellWorldPosition(column, row, definition.Offset + extraOffset),
 			Scale = definition.Scale,
-			RotationDegrees = rotationDegrees
+			RotationDegrees = rotationDegrees,
+			FlipH = flipH,
+			FlipV = flipV
 		};
 		sprite.ZAsRelative = false;
 		sprite.ZIndex = GetCanvasSortOrderForBuildCell(new Vector2I(column, row), GetSortBiasForDefinition(definition));
@@ -999,6 +1015,8 @@ public partial class MissionRoomBuilder : Node
 		sprite.SetMeta("offset_x", extraOffset.X);
 		sprite.SetMeta("offset_y", extraOffset.Y);
 		sprite.SetMeta("rotation_degrees", rotationDegrees);
+		sprite.SetMeta("flip_h", flipH);
+		sprite.SetMeta("flip_v", flipV);
 		sprite.SetMeta("orientation_suffix", orientationSuffix);
 		return sprite;
 	}

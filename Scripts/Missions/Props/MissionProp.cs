@@ -9,6 +9,9 @@ public partial class MissionProp : Area2D, IInteractable
 	[Export] public PropDefinition Definition { get; set; }
 	[Export] public string PropInstanceId { get; set; } = string.Empty;
 	[Export] public NodePath VisualSpritePath { get; set; } = new NodePath("Sprite2D");
+	[Export] public float PlacementRotationDegrees { get; set; }
+	[Export] public bool PlacementFlipH { get; set; }
+	[Export] public bool PlacementFlipV { get; set; }
 
 	public bool IsConsumed { get; private set; }
 
@@ -216,6 +219,9 @@ public partial class MissionProp : Area2D, IInteractable
 		Texture2D texture = GD.Load<Texture2D>(Definition.SpriteTexturePath);
 		_visualSprite.Texture = texture;
 		_visualSprite.Scale = PropVisualSizing.GetScale(texture, Definition.VisualScaleMultiplier);
+		_visualSprite.FlipH = PlacementFlipH;
+		_visualSprite.FlipV = PlacementFlipV;
+		RotationDegrees = PlacementRotationDegrees;
 	}
 
 	private void ApplyDefinitionDefaults(PropInteractionResult result, PropInteractionContext context)

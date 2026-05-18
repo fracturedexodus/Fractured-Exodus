@@ -6254,6 +6254,9 @@ public partial class MissionMap : Node2D
 			prop.Name = $"{definition.PropId}_{placement.Cell.X}_{placement.Cell.Y}";
 			prop.PropInstanceId = BuildPropInstanceId(placement, definition);
 			prop.Position = _roomBuilder.GetCellWorldPosition(placement.Cell.X, placement.Cell.Y);
+			prop.PlacementRotationDegrees = placement.RotationDegrees;
+			prop.PlacementFlipH = placement.FlipH;
+			prop.PlacementFlipV = placement.FlipV;
 			runtimePropLayer.AddChild(prop);
 			_missionPropsByCell[placement.Cell] = prop;
 			_propPlacementsByInstanceId[prop.PropInstanceId] = placement;
