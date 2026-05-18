@@ -255,6 +255,11 @@ public partial class GlobalData : Node
 		return _saveGameService.GetAvailableSaves();
 	}
 
+	public bool DeleteSaveGame(string slotId)
+	{
+		return _saveGameService.DeleteSlot(slotId);
+	}
+
 	public MissionRuntimeState GetCurrentMissionState()
 	{
 		return new MissionRuntimeState

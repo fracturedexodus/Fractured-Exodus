@@ -88,6 +88,11 @@ public partial class BattleMap : Node2D
 	private Label _loadSaveDetailsLabel;
 	private Label _loadSaveStatusLabel;
 	private Button _loadSelectedSaveButton;
+	private Button _deleteSelectedSaveButton;
+	private CenterContainer _deleteSaveConfirmWrapper;
+	private Label _deleteSaveConfirmLabel;
+	private string _pendingDeleteSaveSlotId = string.Empty;
+	private string _pendingDeleteSaveDisplayName = string.Empty;
 	private readonly List<SaveGameSlotInfo> _availableSaveGames = new List<SaveGameSlotInfo>();
 	private CenterContainer _missionPromptWrapper;
 	private Label _missionPromptTitle;
@@ -617,9 +622,15 @@ public partial class BattleMap : Node2D
 
 		buttonRow.AddChild(BuildPauseMenuButton("BACK", ShowPauseMenu, 180f));
 
+		_deleteSelectedSaveButton = BuildPauseMenuButton("DELETE", PromptDeleteSelectedPauseSave, 180f);
+		_deleteSelectedSaveButton.Disabled = true;
+		buttonRow.AddChild(_deleteSelectedSaveButton);
+
 		_loadSelectedSaveButton = BuildPauseMenuButton("LOAD SELECTED", LoadSelectedPauseSave, 220f);
 		_loadSelectedSaveButton.Disabled = true;
 		buttonRow.AddChild(_loadSelectedSaveButton);
+
+		BuildDeleteSaveConfirmationUI(loadLayer);
 	}
 
 	private void ShowSavePrompt()
@@ -646,6 +657,7 @@ public partial class BattleMap : Node2D
 
 	private void ShowPauseMenu()
 	{
+		HideDeleteSaveConfirmation();
 		if (_pauseMenuWrapper == null)
 		{
 			return;
@@ -660,6 +672,7 @@ public partial class BattleMap : Node2D
 
 	private void HidePauseMenus()
 	{
+		HideDeleteSaveConfirmation();
 		if (_pauseMenuWrapper != null)
 		{
 			_pauseMenuWrapper.Visible = false;
@@ -673,6 +686,12 @@ public partial class BattleMap : Node2D
 
 	private void TogglePauseMenu()
 	{
+		if (_deleteSaveConfirmWrapper?.Visible == true)
+		{
+			HideDeleteSaveConfirmation();
+			return;
+		}
+
 		if (_loadMenuWrapper?.Visible == true)
 		{
 			ShowPauseMenu();
@@ -712,21 +731,11 @@ public partial class BattleMap : Node2D
 		_loadSaveDetailsLabel.Text = string.Empty;
 		_loadSaveStatusLabel.Text = string.Empty;
 		_loadSelectedSaveButton.Disabled = _availableSaveGames.Count == 0;
+		_deleteSelectedSaveButton.Disabled = _availableSaveGames.Count == 0;
 
 		for (int i = 0; i < _availableSaveGames.Count; i++)
 		{
-			SaveGameSlotInfo save = _availableSaveGames[i];
-			string label = save.DisplayName;
-			if (save.IsAutoSave)
-			{
-				label += " [AUTOSAVE]";
-			}
-			else if (save.IsLegacySave)
-			{
-				label += " [QUICKSAVE]";
-			}
-
-			_loadSaveList.AddItem(label);
+			_loadSaveList.AddItem(BuildSaveListLabel(_availableSaveGames[i]));
 		}
 
 		_pauseMenuWrapper.Visible = false;
@@ -748,6 +757,7 @@ public partial class BattleMap : Node2D
 		{
 			_loadSaveDetailsLabel.Text = string.Empty;
 			_loadSelectedSaveButton.Disabled = true;
+			_deleteSelectedSaveButton.Disabled = true;
 			return;
 		}
 
@@ -759,6 +769,7 @@ public partial class BattleMap : Node2D
 				: "Location: Unknown";
 		_loadSaveDetailsLabel.Text = $"{locationText}\nTurn: {save.CurrentTurn}\nSaved: {FormatSaveTimestamp(save.SavedAtUtc)}";
 		_loadSelectedSaveButton.Disabled = false;
+		_deleteSelectedSaveButton.Disabled = false;
 	}
 
 	private void LoadSelectedPauseSave()
@@ -798,6 +809,110 @@ public partial class BattleMap : Node2D
 		}
 
 		GetTree().ChangeSceneToFile(scenePath);
+	}
+
+	private void BuildDeleteSaveConfirmationUI(CanvasLayer loadLayer)
+	{
+		_deleteSaveConfirmWrapper = new CenterContainer();
+		_deleteSaveConfirmWrapper.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+		_deleteSaveConfirmWrapper.MouseFilter = Control.MouseFilterEnum.Stop;
+		_deleteSaveConfirmWrapper.Visible = false;
+		loadLayer.AddChild(_deleteSaveConfirmWrapper);
+
+		PanelContainer confirmPanel = new PanelContainer
+		{
+			CustomMinimumSize = new Vector2(520f, 220f)
+		};
+		confirmPanel.AddThemeStyleboxOverride("panel", CreateOverlayPanelStyle());
+		_deleteSaveConfirmWrapper.AddChild(confirmPanel);
+
+		VBoxContainer content = new VBoxContainer();
+		content.AddThemeConstantOverride("separation", 14);
+		confirmPanel.AddChild(content);
+
+		Label title = new Label
+		{
+			Text = "DELETE SAVE",
+			HorizontalAlignment = HorizontalAlignment.Center
+		};
+		title.AddThemeFontSizeOverride("font_size", 24);
+		content.AddChild(title);
+
+		_deleteSaveConfirmLabel = new Label
+		{
+			AutowrapMode = TextServer.AutowrapMode.WordSmart,
+			HorizontalAlignment = HorizontalAlignment.Center
+		};
+		content.AddChild(_deleteSaveConfirmLabel);
+
+		HBoxContainer buttonRow = new HBoxContainer
+		{
+			Alignment = BoxContainer.AlignmentMode.Center
+		};
+		buttonRow.AddThemeConstantOverride("separation", 12);
+		content.AddChild(buttonRow);
+
+		buttonRow.AddChild(BuildPauseMenuButton("CANCEL", HideDeleteSaveConfirmation, 180f));
+		buttonRow.AddChild(BuildPauseMenuButton("DELETE SAVE", ConfirmDeleteSelectedPauseSave, 200f));
+	}
+
+	private void PromptDeleteSelectedPauseSave()
+	{
+		if (_loadSaveList == null || _deleteSaveConfirmWrapper == null || _deleteSaveConfirmLabel == null)
+		{
+			return;
+		}
+
+		int[] selectedItems = _loadSaveList.GetSelectedItems();
+		if (selectedItems.Length == 0)
+		{
+			_loadSaveStatusLabel.Text = "Select a save first.";
+			return;
+		}
+
+		int selectedIndex = selectedItems[0];
+		if (selectedIndex < 0 || selectedIndex >= _availableSaveGames.Count)
+		{
+			_loadSaveStatusLabel.Text = "That save could not be found.";
+			return;
+		}
+
+		SaveGameSlotInfo selectedSave = _availableSaveGames[selectedIndex];
+		_pendingDeleteSaveSlotId = selectedSave.SlotId;
+		_pendingDeleteSaveDisplayName = BuildSaveListLabel(selectedSave);
+		_deleteSaveConfirmLabel.Text = $"Delete {_pendingDeleteSaveDisplayName}?\nThis cannot be undone.";
+		_deleteSaveConfirmWrapper.Visible = true;
+	}
+
+	private void HideDeleteSaveConfirmation()
+	{
+		_pendingDeleteSaveSlotId = string.Empty;
+		_pendingDeleteSaveDisplayName = string.Empty;
+		if (_deleteSaveConfirmWrapper != null)
+		{
+			_deleteSaveConfirmWrapper.Visible = false;
+		}
+	}
+
+	private void ConfirmDeleteSelectedPauseSave()
+	{
+		if (_globalData == null || string.IsNullOrWhiteSpace(_pendingDeleteSaveSlotId))
+		{
+			HideDeleteSaveConfirmation();
+			return;
+		}
+
+		string deletedSaveName = _pendingDeleteSaveDisplayName;
+		bool deleted = _globalData.DeleteSaveGame(_pendingDeleteSaveSlotId);
+		HideDeleteSaveConfirmation();
+		if (!deleted)
+		{
+			_loadSaveStatusLabel.Text = "Unable to delete that save.";
+			return;
+		}
+
+		ShowLoadGameMenu();
+		_loadSaveStatusLabel.Text = $"Deleted {deletedSaveName}.";
 	}
 
 	private void ConfirmManualSavePrompt()
@@ -1671,6 +1786,23 @@ public partial class BattleMap : Node2D
 		if (_strandedMenuWrapper != null && _strandedMenuWrapper.Visible) return;
 		if (_shopMenuWrapper != null && _shopMenuWrapper.Visible) return; 
 		if (_equipMenuWrapper != null && _equipMenuWrapper.Visible) return; // Prevent movement while equipping
+
+		if (@event is InputEventKey saveKeyEvent && saveKeyEvent.Pressed && !saveKeyEvent.Echo)
+		{
+			if (saveKeyEvent.Keycode == Key.F5)
+			{
+				QuickSaveCampaign();
+				GetViewport().SetInputAsHandled();
+				return;
+			}
+
+			if (saveKeyEvent.Keycode == Key.F6)
+			{
+				QuickLoadCampaign();
+				GetViewport().SetInputAsHandled();
+				return;
+			}
+		}
 
 		if (IsTargetingLongRange)
 		{
@@ -2675,6 +2807,10 @@ public partial class BattleMap : Node2D
 		{
 			_globalData.SaveGame(true, "res://exploration_battle.tscn");
 		}
+		else if (string.IsNullOrWhiteSpace(saveName))
+		{
+			_globalData.SaveGame(false, "res://exploration_battle.tscn");
+		}
 		else
 		{
 			_globalData.SaveNamedGame(saveName, "res://exploration_battle.tscn");
@@ -2686,8 +2822,56 @@ public partial class BattleMap : Node2D
 			{
 				UI.CombatLogPanel.Visible = true;
 			}
-			LogCombatMessage($"\n[color=green]--- GAME SAVED: {saveName.ToUpperInvariant()} ---[/color]");
+			string saveLabel = string.IsNullOrWhiteSpace(saveName) ? "QUICKSAVE" : saveName.ToUpperInvariant();
+			LogCombatMessage($"\n[color=green]--- GAME SAVED: {saveLabel} ---[/color]");
 		}
+	}
+
+	private void QuickSaveCampaign()
+	{
+		SaveCampaign(autoSave: false);
+	}
+
+	private void QuickLoadCampaign()
+	{
+		if (_globalData == null)
+		{
+			return;
+		}
+
+		SaveGameSlotInfo quicksave = _globalData
+			.GetAvailableSaveGames()
+			.FirstOrDefault(save => save != null && save.IsLegacySave);
+		if (quicksave == null)
+		{
+			if (UI?.CombatLogPanel != null)
+			{
+				UI.CombatLogPanel.Visible = true;
+			}
+			LogCombatMessage("\n[color=yellow]--- NO QUICKSAVE FOUND ---[/color]");
+			return;
+		}
+
+		if (!_globalData.LoadGame(quicksave.SlotId))
+		{
+			if (UI?.CombatLogPanel != null)
+			{
+				UI.CombatLogPanel.Visible = true;
+			}
+			LogCombatMessage("\n[color=red]--- QUICKLOAD FAILED ---[/color]");
+			return;
+		}
+
+		HidePauseMenus();
+		string scenePath = ResolveLoadedScenePath(_globalData, quicksave);
+		SceneTransition transitioner = GetNodeOrNull<SceneTransition>("/root/SceneTransition");
+		if (transitioner != null)
+		{
+			transitioner.ChangeScene(scenePath);
+			return;
+		}
+
+		GetTree().ChangeSceneToFile(scenePath);
 	}
 
 	private void OnMainMenuPressed() 
@@ -2769,6 +2953,26 @@ public partial class BattleMap : Node2D
 		}
 
 		return "Unknown";
+	}
+
+	private static string BuildSaveListLabel(SaveGameSlotInfo save)
+	{
+		if (save == null)
+		{
+			return string.Empty;
+		}
+
+		string label = save.DisplayName;
+		if (save.IsAutoSave)
+		{
+			label += " [AUTOSAVE]";
+		}
+		else if (save.IsLegacySave)
+		{
+			label += " [QUICKSAVE]";
+		}
+
+		return label;
 	}
 
 	internal void MoveShip(Vector2I fromHex, Vector2I toHex, int cost)

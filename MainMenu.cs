@@ -10,6 +10,11 @@ public partial class MainMenu : Control
 	private Label _saveDetailsLabel;
 	private Label _loadStatusLabel;
 	private Button _loadSelectedButton;
+	private Button _deleteSelectedButton;
+	private CenterContainer _deleteConfirmWrapper;
+	private Label _deleteConfirmLabel;
+	private string _pendingDeleteSlotId = string.Empty;
+	private string _pendingDeleteDisplayName = string.Empty;
 	private readonly List<SaveGameSlotInfo> _availableSaves = new List<SaveGameSlotInfo>();
 
 	public override void _Ready()
@@ -165,6 +170,15 @@ public partial class MainMenu : Control
 		cancelButton.Pressed += HideLoadOverlay;
 		buttonRow.AddChild(cancelButton);
 
+		_deleteSelectedButton = new Button
+		{
+			Text = "DELETE",
+			CustomMinimumSize = new Vector2(180f, 46f),
+			Disabled = true
+		};
+		_deleteSelectedButton.Pressed += PromptDeleteSelectedSave;
+		buttonRow.AddChild(_deleteSelectedButton);
+
 		_loadSelectedButton = new Button
 		{
 			Text = "LOAD SELECTED",
@@ -173,6 +187,8 @@ public partial class MainMenu : Control
 		};
 		_loadSelectedButton.Pressed += LoadSelectedSave;
 		buttonRow.AddChild(_loadSelectedButton);
+
+		BuildDeleteConfirmationOverlay(overlay);
 	}
 
 	private void RefreshLoadOverlay()
@@ -186,27 +202,21 @@ public partial class MainMenu : Control
 		_loadStatusLabel.Text = string.Empty;
 		_saveDetailsLabel.Text = string.Empty;
 		_loadSelectedButton.Disabled = _availableSaves.Count == 0;
+		_deleteSelectedButton.Disabled = _availableSaves.Count == 0;
 
 		for (int i = 0; i < _availableSaves.Count; i++)
 		{
-			SaveGameSlotInfo save = _availableSaves[i];
-			string label = save.DisplayName;
-			if (save.IsAutoSave)
-			{
-				label += " [AUTOSAVE]";
-			}
-			else if (save.IsLegacySave)
-			{
-				label += " [QUICKSAVE]";
-			}
-
-			_saveList.AddItem(label);
+			_saveList.AddItem(BuildSaveListLabel(_availableSaves[i]));
 		}
 
 		if (_availableSaves.Count > 0)
 		{
 			_saveList.Select(0);
 			UpdateSaveDetails(0);
+		}
+		else
+		{
+			_loadStatusLabel.Text = "No save files found.";
 		}
 	}
 
@@ -227,6 +237,7 @@ public partial class MainMenu : Control
 		{
 			_saveDetailsLabel.Text = string.Empty;
 			_loadSelectedButton.Disabled = true;
+			_deleteSelectedButton.Disabled = true;
 			return;
 		}
 
@@ -239,6 +250,7 @@ public partial class MainMenu : Control
 
 		_saveDetailsLabel.Text = $"{locationText}\nTurn: {save.CurrentTurn}\nSaved: {FormatSaveTimestamp(save.SavedAtUtc)}";
 		_loadSelectedButton.Disabled = false;
+		_deleteSelectedButton.Disabled = false;
 	}
 
 	private void LoadSelectedSave()
@@ -283,10 +295,149 @@ public partial class MainMenu : Control
 
 	private void HideLoadOverlay()
 	{
+		HideDeleteConfirmation();
 		if (_loadOverlay != null)
 		{
 			_loadOverlay.Visible = false;
 		}
+	}
+
+	private void BuildDeleteConfirmationOverlay(Control overlay)
+	{
+		_deleteConfirmWrapper = new CenterContainer
+		{
+			Visible = false
+		};
+		_deleteConfirmWrapper.SetAnchorsPreset(LayoutPreset.FullRect);
+		overlay.AddChild(_deleteConfirmWrapper);
+
+		PanelContainer panel = new PanelContainer
+		{
+			CustomMinimumSize = new Vector2(520f, 220f)
+		};
+		StyleBoxFlat panelStyle = new StyleBoxFlat
+		{
+			BgColor = new Color(0.05f, 0.07f, 0.10f, 0.98f),
+			BorderColor = new Color(1f, 0.40f, 0.40f, 0.90f),
+			BorderWidthLeft = 2,
+			BorderWidthTop = 2,
+			BorderWidthRight = 2,
+			BorderWidthBottom = 2,
+			ContentMarginLeft = 20,
+			ContentMarginTop = 18,
+			ContentMarginRight = 20,
+			ContentMarginBottom = 18,
+			CornerRadiusTopLeft = 8,
+			CornerRadiusTopRight = 8,
+			CornerRadiusBottomLeft = 8,
+			CornerRadiusBottomRight = 8
+		};
+		panel.AddThemeStyleboxOverride("panel", panelStyle);
+		_deleteConfirmWrapper.AddChild(panel);
+
+		VBoxContainer content = new VBoxContainer();
+		content.AddThemeConstantOverride("separation", 14);
+		panel.AddChild(content);
+
+		Label title = new Label
+		{
+			Text = "DELETE SAVE",
+			HorizontalAlignment = HorizontalAlignment.Center
+		};
+		title.AddThemeFontSizeOverride("font_size", 24);
+		content.AddChild(title);
+
+		_deleteConfirmLabel = new Label
+		{
+			AutowrapMode = TextServer.AutowrapMode.WordSmart,
+			HorizontalAlignment = HorizontalAlignment.Center
+		};
+		content.AddChild(_deleteConfirmLabel);
+
+		HBoxContainer buttonRow = new HBoxContainer
+		{
+			Alignment = BoxContainer.AlignmentMode.Center
+		};
+		buttonRow.AddThemeConstantOverride("separation", 12);
+		content.AddChild(buttonRow);
+
+		Button cancelButton = new Button
+		{
+			Text = "CANCEL",
+			CustomMinimumSize = new Vector2(180f, 46f)
+		};
+		cancelButton.Pressed += HideDeleteConfirmation;
+		buttonRow.AddChild(cancelButton);
+
+		Button deleteButton = new Button
+		{
+			Text = "DELETE SAVE",
+			CustomMinimumSize = new Vector2(200f, 46f)
+		};
+		deleteButton.Pressed += ConfirmDeleteSelectedSave;
+		buttonRow.AddChild(deleteButton);
+	}
+
+	private void PromptDeleteSelectedSave()
+	{
+		if (_saveList == null || _deleteConfirmWrapper == null || _deleteConfirmLabel == null)
+		{
+			return;
+		}
+
+		int[] selectedItems = _saveList.GetSelectedItems();
+		if (selectedItems.Length == 0)
+		{
+			_loadStatusLabel.Text = "Select a save first.";
+			return;
+		}
+
+		int selectedIndex = selectedItems[0];
+		if (selectedIndex < 0 || selectedIndex >= _availableSaves.Count)
+		{
+			_loadStatusLabel.Text = "That save could not be found.";
+			return;
+		}
+
+		SaveGameSlotInfo selectedSave = _availableSaves[selectedIndex];
+		_pendingDeleteSlotId = selectedSave.SlotId;
+		_pendingDeleteDisplayName = BuildSaveListLabel(selectedSave);
+		_deleteConfirmLabel.Text = $"Delete {_pendingDeleteDisplayName}?\nThis cannot be undone.";
+		_deleteConfirmWrapper.Visible = true;
+	}
+
+	private void HideDeleteConfirmation()
+	{
+		_pendingDeleteSlotId = string.Empty;
+		_pendingDeleteDisplayName = string.Empty;
+		if (_deleteConfirmWrapper != null)
+		{
+			_deleteConfirmWrapper.Visible = false;
+		}
+	}
+
+	private void ConfirmDeleteSelectedSave()
+	{
+		GlobalData globalData = GetNodeOrNull<GlobalData>("/root/GlobalData");
+		if (globalData == null || string.IsNullOrWhiteSpace(_pendingDeleteSlotId))
+		{
+			HideDeleteConfirmation();
+			return;
+		}
+
+		string deletedSaveName = _pendingDeleteDisplayName;
+		bool deleted = globalData.DeleteSaveGame(_pendingDeleteSlotId);
+		HideDeleteConfirmation();
+		if (!deleted)
+		{
+			_loadStatusLabel.Text = "Unable to delete that save.";
+			return;
+		}
+
+		_availableSaves.Clear();
+		_availableSaves.AddRange(globalData.GetAvailableSaveGames());
+		RefreshLoadOverlay();
+		_loadStatusLabel.Text = $"Deleted {deletedSaveName}.";
 	}
 
 	private void ShowNoSaveFeedback()
@@ -343,5 +494,25 @@ public partial class MainMenu : Control
 		}
 
 		return "Unknown";
+	}
+
+	private static string BuildSaveListLabel(SaveGameSlotInfo save)
+	{
+		if (save == null)
+		{
+			return string.Empty;
+		}
+
+		string label = save.DisplayName;
+		if (save.IsAutoSave)
+		{
+			label += " [AUTOSAVE]";
+		}
+		else if (save.IsLegacySave)
+		{
+			label += " [QUICKSAVE]";
+		}
+
+		return label;
 	}
 }

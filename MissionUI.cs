@@ -32,6 +32,7 @@ public partial class MissionUI : CanvasLayer
 	private static readonly Color HudPanelBackground = new Color(0.04f, 0.05f, 0.08f, 0.74f);
 	private static readonly Color HudPanelBorder = new Color(0.22f, 0.28f, 0.36f, 0.62f);
 	private static readonly Color HudAccentBorder = new Color(0.24f, 0.64f, 0.78f, 0.82f);
+	private const string ActionLogReadyHeader = "[color=gray]--- ACTION LOG READY ---[/color]";
 
 	private const float ExplorationSelectionSingleWidth = 372f;
 	private const float ExplorationSelectionDoubleWidth = 732f;
@@ -155,7 +156,6 @@ public partial class MissionUI : CanvasLayer
 		BuildExtractionPrompt();
 		BuildCombatHud();
 		BuildExplorationSelectionHud();
-		BuildCombatLog();
 		BuildActionLog();
 		BuildHoverSummary();
 		BuildStoryEventPanel();
@@ -246,7 +246,7 @@ public partial class MissionUI : CanvasLayer
 
 		if (_combatLogPanel != null)
 		{
-			_combatLogPanel.Visible = visible;
+			_combatLogPanel.Visible = false;
 		}
 
 		if (_explorationSelectionPanel != null && visible)
@@ -409,7 +409,10 @@ public partial class MissionUI : CanvasLayer
 			_actionLogEntries.RemoveAt(0);
 		}
 
-		_actionLogText.Text = string.Join("\n\n", _actionLogEntries);
+		string body = string.Join("\n\n", _actionLogEntries);
+		_actionLogText.Text = string.IsNullOrWhiteSpace(body)
+			? ActionLogReadyHeader
+			: $"{ActionLogReadyHeader}\n\n{body}";
 		CallDeferred(nameof(ScrollActionLogToBottom));
 	}
 
@@ -427,7 +430,7 @@ public partial class MissionUI : CanvasLayer
 		_actionLogEntries.Clear();
 		if (_actionLogText != null)
 		{
-			_actionLogText.Text = string.Empty;
+			_actionLogText.Text = ActionLogReadyHeader;
 			CallDeferred(nameof(ScrollActionLogToBottom));
 		}
 	}
@@ -751,27 +754,15 @@ public partial class MissionUI : CanvasLayer
 		_actionLogPanel.OffsetTop = 20f;
 		_actionLogPanel.OffsetRight = -20f;
 		_actionLogPanel.OffsetBottom = 270f;
-		_actionLogPanel.AddThemeStyleboxOverride("panel", CreateLogPanelStyle());
+		_actionLogPanel.AddThemeStyleboxOverride("panel", CreateBattlemapActionLogStyle());
 		_uiRoot.AddChild(_actionLogPanel);
 
 		MarginContainer margin = new MarginContainer();
-		margin.AddThemeConstantOverride("margin_left", 14);
-		margin.AddThemeConstantOverride("margin_top", 12);
-		margin.AddThemeConstantOverride("margin_right", 14);
-		margin.AddThemeConstantOverride("margin_bottom", 12);
+		margin.AddThemeConstantOverride("margin_left", 10);
+		margin.AddThemeConstantOverride("margin_top", 8);
+		margin.AddThemeConstantOverride("margin_right", 10);
+		margin.AddThemeConstantOverride("margin_bottom", 10);
 		_actionLogPanel.AddChild(margin);
-
-		VBoxContainer content = new VBoxContainer();
-		content.AddThemeConstantOverride("separation", 8);
-		margin.AddChild(content);
-
-		Label title = new Label
-		{
-			Text = "ACTION LOG",
-			HorizontalAlignment = HorizontalAlignment.Center
-		};
-		title.AddThemeFontSizeOverride("font_size", 16);
-		content.AddChild(title);
 
 		_actionLogText = new RichTextLabel
 		{
@@ -779,10 +770,11 @@ public partial class MissionUI : CanvasLayer
 			ScrollActive = true,
 			ScrollFollowing = true,
 			SelectionEnabled = false,
-			CustomMinimumSize = new Vector2(0f, 220f),
-			BbcodeEnabled = false
+			CustomMinimumSize = new Vector2(320f, 220f),
+			BbcodeEnabled = true
 		};
-		content.AddChild(_actionLogText);
+		margin.AddChild(_actionLogText);
+		_actionLogText.Text = ActionLogReadyHeader;
 	}
 
 	private void BuildHoverSummary()
@@ -1233,6 +1225,22 @@ public partial class MissionUI : CanvasLayer
 	private static StyleBoxFlat CreateLogPanelStyle()
 	{
 		return CreateHudPanelStyle(0.78f, false);
+	}
+
+	private static StyleBoxFlat CreateBattlemapActionLogStyle()
+	{
+		return new StyleBoxFlat
+		{
+			BgColor = new Color(0f, 0f, 0f, 0.36f),
+			BorderWidthLeft = 0,
+			BorderWidthTop = 0,
+			BorderWidthRight = 0,
+			BorderWidthBottom = 0,
+			CornerRadiusTopLeft = 0,
+			CornerRadiusTopRight = 0,
+			CornerRadiusBottomRight = 0,
+			CornerRadiusBottomLeft = 0
+		};
 	}
 
 	private static StyleBoxFlat CreateHudPanelStyle(float alphaOverride = -1f, bool useAccentBorder = false)

@@ -118,6 +118,23 @@ public class SaveGameService
 			.ToList();
 	}
 
+	public bool DeleteSlot(string slotId)
+	{
+		if (string.IsNullOrWhiteSpace(slotId))
+		{
+			return false;
+		}
+
+		SaveGameSlotInfo match = GetAvailableSaves().FirstOrDefault(save => string.Equals(save.SlotId, slotId, StringComparison.OrdinalIgnoreCase));
+		if (match == null || string.IsNullOrWhiteSpace(match.FilePath))
+		{
+			return false;
+		}
+
+		DeleteIfExists(match.FilePath);
+		return !FileAccess.FileExists(match.FilePath);
+	}
+
 	public void DeleteSave()
 	{
 		DeleteIfExists(_manualSavePath);
@@ -142,7 +159,7 @@ public class SaveGameService
 	{
 		if (FileAccess.FileExists(path))
 		{
-			DirAccess.RemoveAbsolute(path);
+			DirAccess.RemoveAbsolute(ProjectSettings.GlobalizePath(path));
 		}
 	}
 
