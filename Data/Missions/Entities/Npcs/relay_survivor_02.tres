@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="MissionNpcDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://Scripts/Missions/Entities/MissionNpcDefinition.cs" id="1_mission_npc_definition"]
+
+[resource]
+script = ExtResource("1_mission_npc_definition")
+NpcId = "relay_survivor_02"
+DisplayName = "Harlan Vey"
+Description = "A half-frozen relay survivor leaning on instinct and adrenaline to keep pace with the away team."
+PortraitPath = "res://Assets/Officers/SorenVale.png"
+SpriteTexturePath = "res://Assets/Missions/Characters/Operative01/operative_ne.png"
+VisualScaleMultiplier = 0.11
+AccentColor = Color(0.709804, 0.862745, 0.941176, 1)
+ShowNameLabel = true
+IsHostile = false
+InteractionRange = 1
+WeaponName = "No Weapon"
+MaxHP = 8
+MaxShields = 0
+MaxActions = 2
+AttackRange = 1
+AttackDamage = 1
+InitiativeBonus = -10
+SuccessMessage = "He keeps moving under escort."
+Notes = "Escort survivor for Black Site Relay."

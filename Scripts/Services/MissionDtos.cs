@@ -26,6 +26,8 @@ public class MissionOutcome
 	public string OutcomeID { get; set; } = string.Empty;
 	public bool IsSuccess { get; set; } = true;
 	public MissionReward Reward { get; set; } = new MissionReward();
+	public int PopulationSaved { get; set; }
 	public Dictionary<string, int> ApprovalChanges { get; set; } = new Dictionary<string, int>();
 	public List<string> FlagsToSet { get; set; } = new List<string>();
+	public List<string> FallenOfficerShipNames { get; set; } = new List<string>();
 }

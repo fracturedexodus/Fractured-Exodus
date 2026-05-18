@@ -213,8 +213,30 @@ public partial class MissionManager : Node
 		}
 
 		new CampaignRewardService(_globalData).ApplyReward(outcome.Reward);
+		if (outcome.PopulationSaved > 0)
+		{
+			float existingPopulation = _globalData.FleetResources.ContainsKey(GameConstants.ResourceKeys.Population)
+				? _globalData.FleetResources[GameConstants.ResourceKeys.Population].AsSingle()
+				: 0f;
+			_globalData.FleetResources[GameConstants.ResourceKeys.Population] = existingPopulation + outcome.PopulationSaved;
+		}
 
 		_officerService?.ApplyDirectApprovalChanges(outcome.ApprovalChanges);
+
+		foreach (string shipName in outcome.FallenOfficerShipNames ?? new List<string>())
+		{
+			if (string.IsNullOrWhiteSpace(shipName))
+			{
+				continue;
+			}
+
+			_globalData.ShipOfficers?.Remove(shipName);
+			if (_globalData.PendingOfficerReplacementShipNames != null
+				&& !_globalData.PendingOfficerReplacementShipNames.Contains(shipName))
+			{
+				_globalData.PendingOfficerReplacementShipNames.Add(shipName);
+			}
+		}
 
 		foreach (string flag in outcome.FlagsToSet ?? new List<string>())
 		{

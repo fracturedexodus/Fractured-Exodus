@@ -24,6 +24,7 @@ public static class GameConstants
 		public const string RawMaterials = "Raw Materials";
 		public const string EnergyCores = "Energy Cores";
 		public const string AncientTech = "Ancient Tech";
+		public const string Population = "Population";
 	}
 
 	public static class ItemPrefixes

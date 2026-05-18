@@ -176,7 +176,8 @@ public partial class GlobalData : Node
 	{
 		{ GameConstants.ResourceKeys.RawMaterials, 350.0f },
 		{ GameConstants.ResourceKeys.EnergyCores, 5.0f },
-		{ GameConstants.ResourceKeys.AncientTech, 0.0f }
+		{ GameConstants.ResourceKeys.AncientTech, 0.0f },
+		{ GameConstants.ResourceKeys.Population, 0.0f }
 	};
 	
 	// --- NEW: INVENTORY MEMORY ---
@@ -189,6 +190,7 @@ public partial class GlobalData : Node
 	public Dictionary<string, ShipLoadout> FleetLoadouts { get; set; } = new Dictionary<string, ShipLoadout>();
 	public Dictionary<string, OfficerState> ShipOfficers { get; set; } = new Dictionary<string, OfficerState>();
 	public List<string> PendingDowntimeEvents { get; set; } = new List<string>();
+	public List<string> PendingOfficerReplacementShipNames { get; set; } = new List<string>();
 	public string SaveDisplayName { get; set; } = string.Empty;
 	public string SavedAtUtc { get; set; } = string.Empty;
 	public string LastSavedScenePath { get; set; } = string.Empty;
@@ -317,14 +319,15 @@ public partial class GlobalData : Node
 		SelectedBasePlanetHexCoords = Vector2.Zero; SelectedPlayerFleet.Clear(); SelectedFleetCapacity = 0;
 		ExploredSystems.Clear(); CurrentSectorStars.Clear();
 		CurrentTurn = 1; InCombat = false; CurrentQueueIndex = 0; JustJumped = false; 
-		SavedFleetState.Clear(); UnequippedInventory.Clear(); FleetCargoItemIDs.Clear(); UnlockedCodexEntryIDs.Clear(); FleetLoadouts.Clear(); ShipOfficers.Clear(); PendingDowntimeEvents.Clear();
+		SavedFleetState.Clear(); UnequippedInventory.Clear(); FleetCargoItemIDs.Clear(); UnlockedCodexEntryIDs.Clear(); FleetLoadouts.Clear(); ShipOfficers.Clear(); PendingDowntimeEvents.Clear(); PendingOfficerReplacementShipNames.Clear();
 		SaveDisplayName = string.Empty; SavedAtUtc = string.Empty; LastSavedScenePath = string.Empty;
 		ClearCurrentMissionState(); CompletedMissionIDs.Clear(); MissionOutcomes.Clear(); StoryFlags.Clear();
 		
 		FleetResources = new Godot.Collections.Dictionary<string, Variant> {
 			{ GameConstants.ResourceKeys.RawMaterials, 350.0f },
 			{ GameConstants.ResourceKeys.EnergyCores, 5.0f },
-			{ GameConstants.ResourceKeys.AncientTech, 0.0f }
+			{ GameConstants.ResourceKeys.AncientTech, 0.0f },
+			{ GameConstants.ResourceKeys.Population, 0.0f }
 		};
 
 		_saveGameService.DeleteSave();

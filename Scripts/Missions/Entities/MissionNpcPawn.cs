@@ -16,6 +16,7 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 	[Export] public float MoveSpeed { get; set; } = 200f;
 
 	public string NpcId { get; private set; } = string.Empty;
+	public string DefinitionResourcePath { get; private set; } = string.Empty;
 	public string DisplayName { get; private set; } = string.Empty;
 	public string PortraitPath { get; private set; } = string.Empty;
 	public string DialogueId { get; private set; } = string.Empty;
@@ -44,6 +45,7 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 	public float WeaponStatusEffectChance { get; private set; }
 	public string ActiveStatusEffectId { get; private set; } = string.Empty;
 	public bool IsDead { get; private set; }
+	public bool IsExtracted { get; private set; }
 	public bool IsMoving => _isMoving;
 
 	private MissionNpcDefinition _definition;
@@ -117,6 +119,7 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 		}
 
 		_definition = definition;
+		DefinitionResourcePath = definition.ResourcePath ?? string.Empty;
 		NpcId = definition.NpcId;
 		DisplayName = string.IsNullOrWhiteSpace(definition.DisplayName) ? definition.NpcId : definition.DisplayName;
 		PortraitPath = definition.PortraitPath ?? string.Empty;
@@ -191,13 +194,14 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 		_isMoving = false;
 	}
 
-	public void ApplySavedRuntimeState(int currentHp, int currentShields, int currentActions, string activeStatusEffectId, bool isDead, bool isConsumed)
+	public void ApplySavedRuntimeState(int currentHp, int currentShields, int currentActions, string activeStatusEffectId, bool isDead, bool isConsumed, bool isExtracted)
 	{
 		CurrentHP = Mathf.Clamp(currentHp, 0, MaxHP);
 		CurrentShields = Mathf.Clamp(currentShields, 0, MaxShields);
 		CurrentActions = Mathf.Clamp(currentActions, 0, MaxActions);
 		ActiveStatusEffectId = activeStatusEffectId ?? string.Empty;
 		IsConsumed = isConsumed;
+		IsExtracted = isExtracted;
 		IsDead = isDead || CurrentHP <= 0;
 		_pathPoints.Clear();
 		_pathCells.Clear();
@@ -215,10 +219,14 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 			Modulate = Colors.White;
 		}
 
-		if (IsDead)
+		if (IsDead || IsExtracted)
 		{
 			Visible = false;
 			SetProcess(false);
+			if (_nameLabel != null)
+			{
+				_nameLabel.Visible = false;
+			}
 			return;
 		}
 
@@ -249,10 +257,10 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 
 	public void SetFogVisibility(bool isVisible)
 	{
-		Visible = !IsDead && isVisible;
+		Visible = !IsDead && !IsExtracted && isVisible;
 		if (_nameLabel != null && _definition != null)
 		{
-			_nameLabel.Visible = !IsDead && isVisible && _definition.ShowNameLabel;
+			_nameLabel.Visible = !IsDead && !IsExtracted && isVisible && _definition.ShowNameLabel;
 		}
 	}
 
@@ -270,23 +278,23 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 
 		if (_visualSprite != null)
 		{
-			_visualSprite.Visible = !occluded && hasVisualSprite;
+			_visualSprite.Visible = !occluded && !IsExtracted && hasVisualSprite;
 		}
 
 		if (_shadow != null)
 		{
-			_shadow.Visible = !occluded;
+			_shadow.Visible = !occluded && !IsExtracted;
 		}
 
 		if (_nameLabel != null && _definition != null)
 		{
-			_nameLabel.Visible = !occluded && !IsDead && _definition.ShowNameLabel;
+			_nameLabel.Visible = !occluded && !IsDead && !IsExtracted && _definition.ShowNameLabel;
 		}
 	}
 
 	public void BeginTurn()
 	{
-		if (IsDead)
+		if (IsDead || IsExtracted)
 		{
 			return;
 		}
@@ -308,12 +316,12 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 
 	public bool CanSpendActions(int amount)
 	{
-		return !IsDead && amount > 0 && CurrentActions >= amount;
+		return !IsDead && !IsExtracted && amount > 0 && CurrentActions >= amount;
 	}
 
 	public void SpendActions(int amount)
 	{
-		if (amount <= 0 || IsDead)
+		if (amount <= 0 || IsDead || IsExtracted)
 		{
 			return;
 		}
@@ -324,7 +332,7 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 
 	public CombatDamageResult ApplyDamage(int damage, int bonusShieldDamage = 0, int directHealthDamage = 0)
 	{
-		if ((damage <= 0 && bonusShieldDamage <= 0 && directHealthDamage <= 0) || IsDead)
+		if ((damage <= 0 && bonusShieldDamage <= 0 && directHealthDamage <= 0) || IsDead || IsExtracted)
 		{
 			return new CombatDamageResult
 			{
@@ -380,7 +388,7 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 
 	public bool TryApplyStatusEffect(string statusEffectId)
 	{
-		if (IsDead || string.IsNullOrWhiteSpace(statusEffectId))
+		if (IsDead || IsExtracted || string.IsNullOrWhiteSpace(statusEffectId))
 		{
 			return false;
 		}
@@ -393,6 +401,26 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 	public bool CanInteract(PropInteractionContext context)
 	{
 		return string.IsNullOrEmpty(GetBlockedReason(context));
+	}
+
+	public void SetExtracted()
+	{
+		if (IsDead || IsExtracted)
+		{
+			return;
+		}
+
+		IsExtracted = true;
+		_pathPoints.Clear();
+		_pathCells.Clear();
+		_isMoving = false;
+		Visible = false;
+		SetProcess(false);
+		if (_nameLabel != null)
+		{
+			_nameLabel.Visible = false;
+		}
+		EmitSignal(SignalName.CombatStateChanged, this);
 	}
 
 	public PropInteractionResult Interact(PropInteractionContext context)
@@ -448,6 +476,11 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 		if (_definition == null)
 		{
 			return "No NPC definition assigned.";
+		}
+
+		if (IsExtracted)
+		{
+			return $"{DisplayName} has already been evacuated.";
 		}
 
 		if (IsHostile)

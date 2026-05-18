@@ -107,6 +107,11 @@ public partial class BattleMap : Node2D
 	private readonly Dictionary<string, CheckBox> _missionOfficerCheckboxes = new Dictionary<string, CheckBox>();
 	private int _pendingMissionRecommendedOfficerCount = 1;
 	private bool _isUpdatingMissionOfficerSelection;
+	private CenterContainer _replacementPromptWrapper;
+	private Label _replacementPromptTitleLabel;
+	private RichTextLabel _replacementPromptBodyLabel;
+	private Label _replacementPromptStatusLabel;
+	private string _activeReplacementShipName = string.Empty;
 	private FleetInventoryService _inventoryService;
 	private OfficerService _officerService;
 	private ShipContextService _shipContextService;
@@ -235,6 +240,7 @@ public partial class BattleMap : Node2D
 		BuildPauseMenuUI();
 		BuildLoadGameMenuUI();
 		BuildMissionPromptUI();
+		BuildOfficerReplacementPromptUI();
 		BuildOfficerPanel();
 		
 		_btnTrade = new Button();
@@ -376,6 +382,8 @@ public partial class BattleMap : Node2D
 
 			UpdateResourceUI();
 		}
+
+		CallDeferred(nameof(ShowPendingOfficerReplacementPromptIfNeeded));
 	}
 
 	internal bool IsHexWalkable(Vector2I hex)
@@ -406,8 +414,11 @@ public partial class BattleMap : Node2D
 		float raw = _globalData.FleetResources[GameConstants.ResourceKeys.RawMaterials].AsSingle();
 		float energy = _globalData.FleetResources[GameConstants.ResourceKeys.EnergyCores].AsSingle();
 		float tech = _globalData.FleetResources[GameConstants.ResourceKeys.AncientTech].AsSingle();
+		float population = _globalData.FleetResources.ContainsKey(GameConstants.ResourceKeys.Population)
+			? _globalData.FleetResources[GameConstants.ResourceKeys.Population].AsSingle()
+			: 0f;
 
-		UI.InventoryDisplay.Text = $"{GameConstants.ResourceKeys.RawMaterials}: {raw:0.##}\n{GameConstants.ResourceKeys.EnergyCores}: {energy:0.##}\n{GameConstants.ResourceKeys.AncientTech}: {tech:0.##}";
+		UI.InventoryDisplay.Text = $"{GameConstants.ResourceKeys.RawMaterials}: {raw:0.##}\n{GameConstants.ResourceKeys.EnergyCores}: {energy:0.##}\n{GameConstants.ResourceKeys.AncientTech}: {tech:0.##}\n{GameConstants.ResourceKeys.Population}: {population:0}";
 	}
 
 	private void ConnectUIButtons()
@@ -1030,6 +1041,61 @@ public partial class BattleMap : Node2D
 		declineButton.CustomMinimumSize = new Vector2(160, 42);
 		declineButton.Pressed += HideMissionPrompt;
 		buttonRow.AddChild(declineButton);
+	}
+
+	private void BuildOfficerReplacementPromptUI()
+	{
+		CanvasLayer replacementLayer = new CanvasLayer { Layer = 190 };
+		AddChild(replacementLayer);
+
+		_replacementPromptWrapper = new CenterContainer();
+		_replacementPromptWrapper.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+		_replacementPromptWrapper.MouseFilter = Control.MouseFilterEnum.Stop;
+		_replacementPromptWrapper.Visible = false;
+		replacementLayer.AddChild(_replacementPromptWrapper);
+
+		PanelContainer panel = new PanelContainer();
+		panel.CustomMinimumSize = new Vector2(620f, 320f);
+		panel.AddThemeStyleboxOverride("panel", CreateOverlayPanelStyle());
+		_replacementPromptWrapper.AddChild(panel);
+
+		VBoxContainer content = new VBoxContainer();
+		content.AddThemeConstantOverride("separation", 14);
+		panel.AddChild(content);
+
+		_replacementPromptTitleLabel = new Label
+		{
+			Text = "OFFICER DOWN",
+			HorizontalAlignment = HorizontalAlignment.Center
+		};
+		_replacementPromptTitleLabel.AddThemeColorOverride("font_color", new Color(0.88f, 0.98f, 1f));
+		_replacementPromptTitleLabel.AddThemeFontSizeOverride("font_size", 26);
+		content.AddChild(_replacementPromptTitleLabel);
+
+		_replacementPromptBodyLabel = new RichTextLabel
+		{
+			CustomMinimumSize = new Vector2(0f, 150f),
+			BbcodeEnabled = true,
+			ScrollActive = false,
+			FitContent = true
+		};
+		content.AddChild(_replacementPromptBodyLabel);
+
+		_replacementPromptStatusLabel = new Label
+		{
+			HorizontalAlignment = HorizontalAlignment.Center,
+			AutowrapMode = TextServer.AutowrapMode.WordSmart
+		};
+		_replacementPromptStatusLabel.AddThemeColorOverride("font_color", new Color(0.78f, 0.88f, 0.98f));
+		content.AddChild(_replacementPromptStatusLabel);
+
+		HBoxContainer buttonRow = new HBoxContainer();
+		buttonRow.Alignment = BoxContainer.AlignmentMode.Center;
+		buttonRow.AddThemeConstantOverride("separation", 18);
+		content.AddChild(buttonRow);
+
+		buttonRow.AddChild(BuildPauseMenuButton("RECRUIT RANDOM OFFICER", RecruitReplacementOfficer, 260f));
+		buttonRow.AddChild(BuildPauseMenuButton("DECIDE LATER", HideOfficerReplacementPrompt, 180f));
 	}
 
 	private void PopulateMissionOfficerSelection(MissionInteractionContext missionContext)
@@ -1773,6 +1839,16 @@ public partial class BattleMap : Node2D
 
 	public override void _Input(InputEvent @event)
 	{
+		if (_replacementPromptWrapper != null && _replacementPromptWrapper.Visible)
+		{
+			if (@event is InputEventKey blockedKey && blockedKey.Pressed && !blockedKey.Echo && blockedKey.Keycode == Key.Escape)
+			{
+				HideOfficerReplacementPrompt();
+				GetViewport().SetInputAsHandled();
+			}
+			return;
+		}
+
 		if (@event is InputEventKey escapeEvent && escapeEvent.Pressed && !escapeEvent.Echo && escapeEvent.Keycode == Key.Escape)
 		{
 			TogglePauseMenu();
@@ -1783,6 +1859,7 @@ public partial class BattleMap : Node2D
 		if (_pauseMenuWrapper != null && _pauseMenuWrapper.Visible) return;
 		if (_loadMenuWrapper != null && _loadMenuWrapper.Visible) return;
 		if (_savePromptWrapper != null && _savePromptWrapper.Visible) return;
+		if (_replacementPromptWrapper != null && _replacementPromptWrapper.Visible) return;
 		if (_strandedMenuWrapper != null && _strandedMenuWrapper.Visible) return;
 		if (_shopMenuWrapper != null && _shopMenuWrapper.Visible) return; 
 		if (_equipMenuWrapper != null && _equipMenuWrapper.Visible) return; // Prevent movement while equipping
@@ -2885,6 +2962,85 @@ public partial class BattleMap : Node2D
 	{
 		HidePauseMenus();
 		OnMainMenuPressed();
+	}
+
+	private void ShowPendingOfficerReplacementPromptIfNeeded()
+	{
+		if (_replacementPromptWrapper == null
+			|| _globalData?.PendingOfficerReplacementShipNames == null
+			|| _globalData.PendingOfficerReplacementShipNames.Count == 0)
+		{
+			return;
+		}
+
+		string shipName = _globalData.PendingOfficerReplacementShipNames
+			.FirstOrDefault(candidate => !string.IsNullOrWhiteSpace(candidate) && (_officerService?.GetOfficerForShip(candidate) == null));
+		if (string.IsNullOrWhiteSpace(shipName))
+		{
+			_globalData.PendingOfficerReplacementShipNames.RemoveAll(candidate => string.IsNullOrWhiteSpace(candidate) || _officerService?.GetOfficerForShip(candidate) != null);
+			return;
+		}
+
+		_activeReplacementShipName = shipName;
+		float population = _globalData.FleetResources.ContainsKey(GameConstants.ResourceKeys.Population)
+			? _globalData.FleetResources[GameConstants.ResourceKeys.Population].AsSingle()
+			: 0f;
+		_replacementPromptTitleLabel.Text = "OFFICER DOWN";
+		_replacementPromptBodyLabel.Text =
+			$"[center]{shipName} returned from the relay mission without an assigned officer.[/center]\n\n" +
+			$"[center]Rescued population available: [color=cyan]{Mathf.FloorToInt(population)}[/color][/center]\n\n" +
+			"[center]Recruit a random new officer from the civilians your fleet has saved, or wait until later.[/center]";
+		_replacementPromptStatusLabel.Text = population > 0f
+			? string.Empty
+			: "No saved population is currently available for officer replacement.";
+		_replacementPromptWrapper.Visible = true;
+	}
+
+	private void HideOfficerReplacementPrompt()
+	{
+		if (_replacementPromptWrapper != null)
+		{
+			_replacementPromptWrapper.Visible = false;
+		}
+	}
+
+	private void RecruitReplacementOfficer()
+	{
+		if (_globalData == null || string.IsNullOrWhiteSpace(_activeReplacementShipName))
+		{
+			return;
+		}
+
+		float population = _globalData.FleetResources.ContainsKey(GameConstants.ResourceKeys.Population)
+			? _globalData.FleetResources[GameConstants.ResourceKeys.Population].AsSingle()
+			: 0f;
+		if (population < 1f)
+		{
+			if (_replacementPromptStatusLabel != null)
+			{
+				_replacementPromptStatusLabel.Text = "No saved population is available for recruitment yet.";
+			}
+			return;
+		}
+
+		OfficerState replacementOfficer = _officerService?.CreateRandomPopulationOfficer(_activeReplacementShipName);
+		if (replacementOfficer == null)
+		{
+			if (_replacementPromptStatusLabel != null)
+			{
+				_replacementPromptStatusLabel.Text = "Unable to assemble a replacement officer right now.";
+			}
+			return;
+		}
+
+		_officerService.AssignOfficerToShip(_activeReplacementShipName, replacementOfficer);
+		_globalData.FleetResources[GameConstants.ResourceKeys.Population] = Mathf.Max(0f, population - 1f);
+		_globalData.PendingOfficerReplacementShipNames.Remove(_activeReplacementShipName);
+		LogCombatMessage($"[color=cyan]{replacementOfficer.DisplayName} joins {_activeReplacementShipName} as a replacement officer.[/color]");
+		UpdateResourceUI();
+		HideOfficerReplacementPrompt();
+		_activeReplacementShipName = string.Empty;
+		ShowPendingOfficerReplacementPromptIfNeeded();
 	}
 
 	private Button BuildPauseMenuButton(string text, Action onPressed, float width = 260f)

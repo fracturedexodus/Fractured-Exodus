@@ -1,4 +1,5 @@
 using Godot;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -60,6 +61,8 @@ public class OfficerService
 	public static readonly string[] Specialties = { "Tactical Command", "Shield Tuning", "Salvage Efficiency", "Medical Triage", "Missile Control", "Engine Routing", "Morale Support" };
 	public static readonly string[] Flaws = { "Reckless", "Rigid", "Secretive", "Vengeful", "Fearful of AI" };
 	public static readonly string[] BiographySeeds = { "Refugee Convoy Veteran", "Former Colony Administrator", "Ex-Custodian Technician", "Salvage Freebooter", "Medical Responder", "Faithful Pilgrim", "Black Market Defector" };
+	private static readonly string[] PopulationFirstNames = { "Ari", "Cass", "Doran", "Edda", "Ilan", "Juno", "Kael", "Lysa", "Marek", "Nia", "Orin", "Talia" };
+	private static readonly string[] PopulationLastNames = { "Arden", "Bex", "Corven", "Dray", "Fenn", "Hale", "Kestrel", "Morrow", "Quill", "Rook", "Sable", "Vale" };
 
 	public OfficerService(GlobalData globalData)
 	{
@@ -158,6 +161,38 @@ public class OfficerService
 
 		OfficerMissionLoadoutService.EnsureOfficerLoadout(customOfficer);
 		return customOfficer;
+	}
+
+	public OfficerState CreateRandomPopulationOfficer(string shipName)
+	{
+		RandomNumberGenerator rng = new RandomNumberGenerator();
+		rng.Randomize();
+
+		List<string> portraitOptions = GetPortraitOptions();
+		string portraitPath = portraitOptions.Count > 0
+			? portraitOptions[rng.RandiRange(0, portraitOptions.Count - 1)]
+			: GetPresetTemplateForShip(shipName)?.PortraitPath ?? string.Empty;
+		string archetype = Archetypes[rng.RandiRange(0, Archetypes.Length - 1)];
+		string ideology = Ideologies[rng.RandiRange(0, Ideologies.Length - 1)];
+		string specialty = Specialties[rng.RandiRange(0, Specialties.Length - 1)];
+		string flaw = Flaws[rng.RandiRange(0, Flaws.Length - 1)];
+		string biographySeed = BiographySeeds[rng.RandiRange(0, BiographySeeds.Length - 1)];
+		string displayName = $"{PopulationFirstNames[rng.RandiRange(0, PopulationFirstNames.Length - 1)]} {PopulationLastNames[rng.RandiRange(0, PopulationLastNames.Length - 1)]}";
+
+		OfficerState officer = CreateCustomOfficer(new CustomOfficerRequest
+		{
+			ShipName = shipName,
+			DisplayName = displayName,
+			PortraitPath = portraitPath,
+			Archetype = archetype,
+			Ideology = ideology,
+			Specialty = specialty,
+			Flaw = flaw,
+			BiographySeed = biographySeed
+		});
+
+		officer.OfficerID = $"population_{Sanitize(shipName)}_{Guid.NewGuid():N}";
+		return officer;
 	}
 
 	public void AssignOfficerToShip(string shipName, OfficerState officer)

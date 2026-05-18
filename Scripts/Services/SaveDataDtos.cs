@@ -83,6 +83,7 @@ public class ShipStateSaveData
 public class MissionActorSaveData
 {
 	public string ActorId { get; set; } = string.Empty;
+	public string DefinitionPath { get; set; } = string.Empty;
 	public Vector2ISaveData Cell { get; set; } = new Vector2ISaveData();
 	public int CurrentHP { get; set; }
 	public int CurrentShields { get; set; }
@@ -90,19 +91,22 @@ public class MissionActorSaveData
 	public string ActiveStatusEffectId { get; set; } = string.Empty;
 	public bool IsDead { get; set; }
 	public bool IsConsumed { get; set; }
+	public bool IsExtracted { get; set; }
 
 	public Godot.Collections.Dictionary<string, Variant> ToVariantDictionary()
 	{
 		return new Godot.Collections.Dictionary<string, Variant>
 		{
 			{ "ActorId", ActorId },
+			{ "DefinitionPath", DefinitionPath },
 			{ "Cell", Cell.ToVariantDictionary() },
 			{ "CurrentHP", CurrentHP },
 			{ "CurrentShields", CurrentShields },
 			{ "CurrentActions", CurrentActions },
 			{ "ActiveStatusEffectId", ActiveStatusEffectId },
 			{ "IsDead", IsDead },
-			{ "IsConsumed", IsConsumed }
+			{ "IsConsumed", IsConsumed },
+			{ "IsExtracted", IsExtracted }
 		};
 	}
 
@@ -111,6 +115,7 @@ public class MissionActorSaveData
 		return new MissionActorSaveData
 		{
 			ActorId = dict.ContainsKey("ActorId") ? (string)dict["ActorId"] : string.Empty,
+			DefinitionPath = dict.ContainsKey("DefinitionPath") ? (string)dict["DefinitionPath"] : string.Empty,
 			Cell = dict.ContainsKey("Cell")
 				? Vector2ISaveData.FromVariantDictionary((Godot.Collections.Dictionary)dict["Cell"])
 				: new Vector2ISaveData(),
@@ -119,7 +124,8 @@ public class MissionActorSaveData
 			CurrentActions = dict.ContainsKey("CurrentActions") ? (int)dict["CurrentActions"] : 0,
 			ActiveStatusEffectId = dict.ContainsKey("ActiveStatusEffectId") ? (string)dict["ActiveStatusEffectId"] : string.Empty,
 			IsDead = dict.ContainsKey("IsDead") && (bool)dict["IsDead"],
-			IsConsumed = dict.ContainsKey("IsConsumed") && (bool)dict["IsConsumed"]
+			IsConsumed = dict.ContainsKey("IsConsumed") && (bool)dict["IsConsumed"],
+			IsExtracted = dict.ContainsKey("IsExtracted") && (bool)dict["IsExtracted"]
 		};
 	}
 }
@@ -774,6 +780,7 @@ public class CampaignSaveData
 	public int SelectedFleetCapacity { get; set; }
 	public Dictionary<string, OfficerStateSaveData> ShipOfficers { get; set; } = new Dictionary<string, OfficerStateSaveData>();
 	public List<string> PendingDowntimeEvents { get; set; } = new List<string>();
+	public List<string> PendingOfficerReplacementShipNames { get; set; } = new List<string>();
 	public string CurrentMissionID { get; set; } = string.Empty;
 	public string CurrentMissionTitle { get; set; } = string.Empty;
 	public string CurrentMissionScenePath { get; set; } = string.Empty;
@@ -815,6 +822,7 @@ public class CampaignSaveData
 			SelectedFleetCapacity = globalData.SelectedFleetCapacity,
 			ShipOfficers = (globalData.ShipOfficers ?? new Dictionary<string, OfficerState>()).ToDictionary(kvp => kvp.Key, kvp => OfficerStateSaveData.FromRuntime(kvp.Value)),
 			PendingDowntimeEvents = (globalData.PendingDowntimeEvents ?? new List<string>()).ToList(),
+			PendingOfficerReplacementShipNames = (globalData.PendingOfficerReplacementShipNames ?? new List<string>()).ToList(),
 			CurrentMissionID = globalData.CurrentMissionID,
 			CurrentMissionTitle = globalData.CurrentMissionTitle,
 			CurrentMissionScenePath = globalData.CurrentMissionScenePath,
@@ -861,6 +869,7 @@ public class CampaignSaveData
 		globalData.SelectedFleetCapacity = SelectedFleetCapacity;
 		globalData.ShipOfficers = ShipOfficers.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.ToRuntime());
 		globalData.PendingDowntimeEvents = PendingDowntimeEvents.ToList();
+		globalData.PendingOfficerReplacementShipNames = PendingOfficerReplacementShipNames.ToList();
 		globalData.CurrentMissionID = CurrentMissionID;
 		globalData.CurrentMissionTitle = CurrentMissionTitle;
 		globalData.CurrentMissionScenePath = CurrentMissionScenePath;
@@ -933,6 +942,7 @@ public class CampaignSaveData
 			{ "SelectedFleetCapacity", SelectedFleetCapacity },
 			{ "ShipOfficers", officerDict },
 			{ "PendingDowntimeEvents", ToVariantArray(PendingDowntimeEvents) },
+			{ "PendingOfficerReplacementShipNames", ToVariantArray(PendingOfficerReplacementShipNames) },
 			{ "CurrentMissionID", CurrentMissionID },
 			{ "CurrentMissionTitle", CurrentMissionTitle },
 			{ "CurrentMissionScenePath", CurrentMissionScenePath },
@@ -976,6 +986,7 @@ public class CampaignSaveData
 			SelectedFleetCapacity = dict.ContainsKey("SelectedFleetCapacity") ? (int)dict["SelectedFleetCapacity"] : 0,
 			ShipOfficers = FromOfficerDictionary(dict.ContainsKey("ShipOfficers") ? (Godot.Collections.Dictionary)dict["ShipOfficers"] : new Godot.Collections.Dictionary()),
 			PendingDowntimeEvents = FromStringArray(dict.ContainsKey("PendingDowntimeEvents") ? (Godot.Collections.Array)dict["PendingDowntimeEvents"] : new Godot.Collections.Array()),
+			PendingOfficerReplacementShipNames = FromStringArray(dict.ContainsKey("PendingOfficerReplacementShipNames") ? (Godot.Collections.Array)dict["PendingOfficerReplacementShipNames"] : new Godot.Collections.Array()),
 			CurrentMissionID = dict.ContainsKey("CurrentMissionID") ? (string)dict["CurrentMissionID"] : string.Empty,
 			CurrentMissionTitle = dict.ContainsKey("CurrentMissionTitle") ? (string)dict["CurrentMissionTitle"] : string.Empty,
 			CurrentMissionScenePath = dict.ContainsKey("CurrentMissionScenePath") ? (string)dict["CurrentMissionScenePath"] : string.Empty,
@@ -1054,6 +1065,7 @@ public class CampaignSaveData
 		if (!resources.ContainsKey(GameConstants.ResourceKeys.RawMaterials)) resources[GameConstants.ResourceKeys.RawMaterials] = 350.0f;
 		if (!resources.ContainsKey(GameConstants.ResourceKeys.EnergyCores)) resources[GameConstants.ResourceKeys.EnergyCores] = 5.0f;
 		if (!resources.ContainsKey(GameConstants.ResourceKeys.AncientTech)) resources[GameConstants.ResourceKeys.AncientTech] = 0.0f;
+		if (!resources.ContainsKey(GameConstants.ResourceKeys.Population)) resources[GameConstants.ResourceKeys.Population] = 0.0f;
 		return resources;
 	}
 
