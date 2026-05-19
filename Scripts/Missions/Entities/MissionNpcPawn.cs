@@ -5,6 +5,7 @@ using System.Linq;
 public partial class MissionNpcPawn : Node2D, IInteractable
 {
 	private const int NameLabelZIndex = 220;
+	private static readonly Vector2 SelectionRingOffset = new Vector2(0f, 10f);
 	[Signal] public delegate void EnteredCellEventHandler(MissionNpcPawn pawn, Vector2I cell);
 	[Signal] public delegate void ReachedCellEventHandler(MissionNpcPawn pawn, Vector2I cell);
 	[Signal] public delegate void CombatStateChangedEventHandler(MissionNpcPawn pawn);
@@ -49,6 +50,7 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 	public bool IsMoving => _isMoving;
 
 	private MissionNpcDefinition _definition;
+	private Polygon2D _selectionRing;
 	private Sprite2D _visualSprite;
 	private Sprite2D _coverGhostSprite;
 	private Label _nameLabel;
@@ -56,12 +58,23 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 	private Vector2 _targetPosition;
 	private Vector2I _targetCell = Vector2I.Zero;
 	private bool _isMoving;
+	private bool _isSelected;
 	private Vector2I _pendingDestinationCell = Vector2I.Zero;
 	private readonly Queue<Vector2> _pathPoints = new Queue<Vector2>();
 	private readonly Queue<Vector2I> _pathCells = new Queue<Vector2I>();
 
 	public override void _Ready()
 	{
+		_selectionRing = new Polygon2D
+		{
+			Visible = false,
+			Color = new Color(0.52f, 1f, 0.82f, 0.28f),
+			Polygon = BuildDiamond(14f, 8f),
+			Position = SelectionRingOffset
+		};
+		_selectionRing.ZAsRelative = true;
+		_selectionRing.ZIndex = -1;
+		AddChild(_selectionRing);
 		_visualSprite = GetNodeOrNull<Sprite2D>(VisualSpritePath);
 		_nameLabel = GetNodeOrNull<Label>(NameLabelPath);
 		if (_nameLabel != null)
@@ -80,6 +93,15 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 		};
 		AddChild(_coverGhostSprite);
 		_targetPosition = GlobalPosition;
+	}
+
+	public void SetSelected(bool isSelected)
+	{
+		_isSelected = isSelected;
+		if (_selectionRing != null)
+		{
+			_selectionRing.Visible = isSelected;
+		}
 	}
 
 	public override void _Process(double delta)
@@ -279,6 +301,11 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 		if (_visualSprite != null)
 		{
 			_visualSprite.Visible = !occluded && !IsExtracted && hasVisualSprite;
+		}
+
+		if (_selectionRing != null)
+		{
+			_selectionRing.Visible = !occluded && !IsDead && !IsExtracted && _isSelected;
 		}
 
 		if (_shadow != null)
@@ -544,5 +571,16 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 			CurrentShields = MaxShields;
 			ShieldRechargePerTurn = Mathf.Max(0, shield.RechargePerTurn);
 		}
+	}
+
+	private static Vector2[] BuildDiamond(float halfWidth, float halfHeight)
+	{
+		return new[]
+		{
+			new Vector2(0f, -halfHeight),
+			new Vector2(halfWidth, 0f),
+			new Vector2(0f, halfHeight),
+			new Vector2(-halfWidth, 0f)
+		};
 	}
 }

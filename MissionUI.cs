@@ -179,7 +179,7 @@ public partial class MissionUI : CanvasLayer
 			return;
 		}
 
-		SelectedOfficerLabel.Text = $"ACTIVE OFFICER: {officerName}\nSHIP: {shipName}\nSPECIALTY: {specialty}";
+		SelectedOfficerLabel.Text = $"ACTIVE UNIT: {officerName}\nGROUP: {shipName}\nROLE: {specialty}";
 	}
 
 	public void ShowExtractionPrompt(string title, string body, IReadOnlyList<MissionExtractionOption> options)
@@ -318,7 +318,7 @@ public partial class MissionUI : CanvasLayer
 
 	public void SetPlayerCombatInfo(MissionCombatantSummary summary)
 	{
-		UpdateCombatInfoPanel(summary, _playerCombatInfoPanel, _playerCombatIcon, _playerCombatHeaderLabel, _playerCombatInfoLabel, "OFFICER");
+		UpdateCombatInfoPanel(summary, _playerCombatInfoPanel, _playerCombatIcon, _playerCombatHeaderLabel, _playerCombatInfoLabel, "UNIT");
 	}
 
 	public void SetEnemyCombatInfo(MissionCombatantSummary summary)
@@ -347,14 +347,14 @@ public partial class MissionUI : CanvasLayer
 			_explorationPrimaryIcon,
 			_explorationPrimaryHeaderLabel,
 			_explorationPrimaryInfoLabel,
-			"OFFICER");
+			"UNIT");
 		UpdateCombatInfoPanel(
 			summaries.Count > 1 ? summaries[1] : null,
 			_explorationSecondaryInfoPanel,
 			_explorationSecondaryIcon,
 			_explorationSecondaryHeaderLabel,
 			_explorationSecondaryInfoLabel,
-			"OFFICER");
+			"UNIT");
 	}
 
 	public void SetCombatEndTurnEnabled(bool enabled, bool visible = true)

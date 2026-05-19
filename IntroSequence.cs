@@ -7,11 +7,13 @@ public partial class IntroSequence : Control
 	private const string LogoPath = "res://Assets/Branding/LarsMoonGamingLogo.png";
 	private const string VideoPath = "res://Assets/Intro/gameintro.ogv";
 	private const double LogoHoldSeconds = 5.0;
+	private const double LastFrameHoldSeconds = 5.0;
 	private const float CrossfadeSeconds = 1.0f;
 
 	private TextureRect _logoRect;
+	private TextureRect _frozenFrameRect;
 	private VideoStreamPlayer _videoPlayer;
-	private bool _videoStarted;
+	private bool _videoFinished;
 	private bool _leavingScene;
 
 	public override void _Ready()
@@ -19,13 +21,15 @@ public partial class IntroSequence : Control
 		SetAnchorsPreset(LayoutPreset.FullRect);
 		BuildBackground();
 		BuildVideoPlayer();
+		BuildFrozenFrame();
 		BuildLogo();
 		_ = RunIntroSequenceAsync();
 	}
 
 	public override void _UnhandledInput(InputEvent @event)
 	{
-		if (_leavingScene || !_videoStarted)
+		bool canSkipIntro = _videoFinished || (_videoPlayer?.Visible ?? false);
+		if (_leavingScene || !canSkipIntro)
 		{
 			return;
 		}
@@ -82,6 +86,19 @@ public partial class IntroSequence : Control
 		AddChild(_videoPlayer);
 	}
 
+	private void BuildFrozenFrame()
+	{
+		_frozenFrameRect = new TextureRect
+		{
+			Visible = false,
+			ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+			StretchMode = TextureRect.StretchModeEnum.KeepAspectCovered,
+			MouseFilter = MouseFilterEnum.Ignore
+		};
+		_frozenFrameRect.SetAnchorsPreset(LayoutPreset.FullRect);
+		AddChild(_frozenFrameRect);
+	}
+
 	private void BuildLogo()
 	{
 		_logoRect = new TextureRect
@@ -111,7 +128,6 @@ public partial class IntroSequence : Control
 			return;
 		}
 
-		_videoStarted = true;
 		_videoPlayer.Visible = true;
 		_videoPlayer.Play();
 
@@ -125,6 +141,37 @@ public partial class IntroSequence : Control
 
 	private void OnVideoFinished()
 	{
+		if (_leavingScene || _videoFinished)
+		{
+			return;
+		}
+
+		_videoFinished = true;
+		FreezeLastFrame();
+		_ = HoldLastFrameAsync();
+	}
+
+	private void FreezeLastFrame()
+	{
+		Texture2D lastFrame = _videoPlayer.GetVideoTexture();
+		if (lastFrame != null)
+		{
+			_frozenFrameRect.Texture = lastFrame;
+			_frozenFrameRect.Visible = true;
+			_videoPlayer.Visible = false;
+		}
+
+		_videoPlayer.Stop();
+	}
+
+	private async Task HoldLastFrameAsync()
+	{
+		await ToSignal(GetTree().CreateTimer(LastFrameHoldSeconds), SceneTreeTimer.SignalName.Timeout);
+		if (_leavingScene)
+		{
+			return;
+		}
+
 		GoToMainMenu();
 	}
 
