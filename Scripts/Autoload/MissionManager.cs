@@ -221,6 +221,26 @@ public partial class MissionManager : Node
 			_globalData.FleetResources[GameConstants.ResourceKeys.Population] = existingPopulation + outcome.PopulationSaved;
 		}
 
+		if (_globalData.RescuedRemnants == null)
+		{
+			_globalData.RescuedRemnants = new List<RemnantRecord>();
+		}
+
+		foreach (RemnantRecord remnant in outcome.RescuedRemnants ?? new List<RemnantRecord>())
+		{
+			if (remnant == null || string.IsNullOrWhiteSpace(remnant.RecordId))
+			{
+				continue;
+			}
+
+			if (_globalData.RescuedRemnants.Any(existing => existing != null && existing.RecordId == remnant.RecordId))
+			{
+				continue;
+			}
+
+			_globalData.RescuedRemnants.Add(remnant.Clone());
+		}
+
 		_officerService?.ApplyDirectApprovalChanges(outcome.ApprovalChanges);
 
 		foreach (string shipName in outcome.FallenOfficerShipNames ?? new List<string>())

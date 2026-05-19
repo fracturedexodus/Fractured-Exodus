@@ -92,6 +92,10 @@ public partial class Codex : Control
 		btnMissionIntel.Pressed += LoadMissionIntel;
 		_mainMenuContainer.AddChild(btnMissionIntel);
 
+		Button btnRemnants = CreateMenuButton("REMNANT REGISTRY");
+		btnRemnants.Pressed += LoadRemnantRegistry;
+		_mainMenuContainer.AddChild(btnRemnants);
+
 		// --- NEW: VISITED SYSTEMS BUTTON ---
 		Button btnVisited = CreateMenuButton("VISITED SYSTEMS");
 		btnVisited.Pressed += ShowVisitedSystems;
@@ -375,6 +379,36 @@ public partial class Codex : Control
 		}
 	}
 
+	private void LoadRemnantRegistry()
+	{
+		_mainMenuContainer.Visible = false;
+		_listContainer.Visible = true;
+		foreach (Node child in _itemList.GetChildren()) child.QueueFree();
+
+		List<RemnantRecord> remnants = (_globalData?.RescuedRemnants ?? new List<RemnantRecord>())
+			.Where(record => record != null)
+			.OrderBy(record => record.RescuedOnTurn)
+			.ThenBy(record => record.DisplayName)
+			.ToList();
+
+		if (remnants.Count == 0)
+		{
+			Label noneLabel = new Label();
+			noneLabel.Text = "No rescued remnants archived yet.\nBring survivors home from away missions to unlock their records.";
+			noneLabel.HorizontalAlignment = HorizontalAlignment.Center;
+			noneLabel.AddThemeColorOverride("font_color", new Color(1f, 0.4f, 0.4f));
+			_itemList.AddChild(noneLabel);
+			return;
+		}
+
+		foreach (RemnantRecord remnant in remnants)
+		{
+			Button button = CreateMenuButton(remnant.DisplayName.ToUpperInvariant());
+			button.Pressed += () => ShowRemnantDetails(remnant);
+			_itemList.AddChild(button);
+		}
+	}
+
 	// ==========================================
 	// DETAIL RENDERING
 	// ==========================================
@@ -527,6 +561,35 @@ public partial class Codex : Control
 			$"[center][color=#7cffc6]--- {entry.Category.ToUpper()} ---[/color][/center]\n\n" +
 			$"[b]SUMMARY:[/b] {entry.Summary}\n\n" +
 			$"{entry.DetailText}";
+	}
+
+	private void ShowRemnantDetails(RemnantRecord remnant)
+	{
+		if (remnant == null)
+		{
+			return;
+		}
+
+		_detailTitle.Text = remnant.DisplayName.ToUpperInvariant();
+		_detailImage.Texture = !string.IsNullOrWhiteSpace(remnant.PortraitPath) && ResourceLoader.Exists(remnant.PortraitPath)
+			? GD.Load<Texture2D>(remnant.PortraitPath)
+			: ResourceLoader.Exists("res://Assets/Missions/Cutscenes/survivors.png")
+				? GD.Load<Texture2D>("res://Assets/Missions/Cutscenes/survivors.png")
+				: null;
+		_detailBlueprintImage.Texture = null;
+		_detailBlueprintImage.Visible = false;
+
+		string missionTitle = string.IsNullOrWhiteSpace(remnant.MissionTitle) ? "Unknown Recovery" : remnant.MissionTitle;
+		string description = string.IsNullOrWhiteSpace(remnant.Description) ? "No additional field profile was recorded." : remnant.Description;
+		string notesBlock = string.IsNullOrWhiteSpace(remnant.Notes)
+			? string.Empty
+			: $"\n\n[b]FIELD NOTES:[/b] {remnant.Notes}";
+		_detailText.Text =
+			$"[center][color=#7cffc6]--- {CampaignText.RemnantsLabel.ToUpperInvariant()} REGISTRY ---[/color][/center]\n\n" +
+			$"[b]RECOVERED FROM:[/b] {missionTitle}\n" +
+			$"[b]RESCUED ON TURN:[/b] {Mathf.Max(1, remnant.RescuedOnTurn)}\n\n" +
+			$"[b]PROFILE:[/b] {description}" +
+			notesBlock;
 	}
 
 	private void ReturnToGame()

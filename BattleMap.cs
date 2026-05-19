@@ -418,7 +418,7 @@ public partial class BattleMap : Node2D
 			? _globalData.FleetResources[GameConstants.ResourceKeys.Population].AsSingle()
 			: 0f;
 
-		UI.InventoryDisplay.Text = $"{GameConstants.ResourceKeys.RawMaterials}: {raw:0.##}\n{GameConstants.ResourceKeys.EnergyCores}: {energy:0.##}\n{GameConstants.ResourceKeys.AncientTech}: {tech:0.##}\n{GameConstants.ResourceKeys.Population}: {population:0}";
+		UI.InventoryDisplay.Text = $"{GameConstants.ResourceKeys.RawMaterials}: {raw:0.##}\n{GameConstants.ResourceKeys.EnergyCores}: {energy:0.##}\n{GameConstants.ResourceKeys.AncientTech}: {tech:0.##}\n{CampaignText.RemnantsLabel}: {population:0}";
 	}
 
 	private void ConnectUIButtons()
@@ -2988,11 +2988,11 @@ public partial class BattleMap : Node2D
 		_replacementPromptTitleLabel.Text = "OFFICER DOWN";
 		_replacementPromptBodyLabel.Text =
 			$"[center]{shipName} returned from the relay mission without an assigned officer.[/center]\n\n" +
-			$"[center]Rescued population available: [color=cyan]{Mathf.FloorToInt(population)}[/color][/center]\n\n" +
+			$"[center]Rescued {CampaignText.RemnantsLabel.ToLowerInvariant()} available: [color=cyan]{Mathf.FloorToInt(population)}[/color][/center]\n\n" +
 			"[center]Recruit a random new officer from the civilians your fleet has saved, or wait until later.[/center]";
 		_replacementPromptStatusLabel.Text = population > 0f
 			? string.Empty
-			: "No saved population is currently available for officer replacement.";
+			: $"No saved {CampaignText.RemnantsLabel.ToLowerInvariant()} are currently available for officer replacement.";
 		_replacementPromptWrapper.Visible = true;
 	}
 
@@ -3018,7 +3018,7 @@ public partial class BattleMap : Node2D
 		{
 			if (_replacementPromptStatusLabel != null)
 			{
-				_replacementPromptStatusLabel.Text = "No saved population is available for recruitment yet.";
+				_replacementPromptStatusLabel.Text = $"No saved {CampaignText.RemnantsLabel.ToLowerInvariant()} are available for recruitment yet.";
 			}
 			return;
 		}

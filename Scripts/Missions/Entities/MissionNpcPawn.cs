@@ -19,6 +19,8 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 	public string NpcId { get; private set; } = string.Empty;
 	public string DefinitionResourcePath { get; private set; } = string.Empty;
 	public string DisplayName { get; private set; } = string.Empty;
+	public string Description { get; private set; } = string.Empty;
+	public string Notes { get; private set; } = string.Empty;
 	public string PortraitPath { get; private set; } = string.Empty;
 	public string DialogueId { get; private set; } = string.Empty;
 	public int InteractionRange { get; private set; } = 1;
@@ -144,6 +146,8 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 		DefinitionResourcePath = definition.ResourcePath ?? string.Empty;
 		NpcId = definition.NpcId;
 		DisplayName = string.IsNullOrWhiteSpace(definition.DisplayName) ? definition.NpcId : definition.DisplayName;
+		Description = definition.Description ?? string.Empty;
+		Notes = definition.Notes ?? string.Empty;
 		PortraitPath = definition.PortraitPath ?? string.Empty;
 		DialogueId = definition.DefaultDialogueId ?? string.Empty;
 		InteractionRange = Mathf.Max(1, definition.InteractionRange);

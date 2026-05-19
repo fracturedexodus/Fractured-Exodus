@@ -212,6 +212,8 @@ public class MissionRuntimeSaveData
 	public string FocusedEnemyId { get; set; } = string.Empty;
 	public int SelectedOfficerIndex { get; set; }
 	public List<string> SelectedOfficerIds { get; set; } = new List<string>();
+	public string SelectedEscortSurvivorPrimaryId { get; set; } = string.Empty;
+	public List<string> SelectedEscortSurvivorIds { get; set; } = new List<string>();
 	public List<string> ConsumedTriggerKeys { get; set; } = new List<string>();
 	public List<string> EngagedEnemyIds { get; set; } = new List<string>();
 	public List<Vector2ISaveData> ExploredCells { get; set; } = new List<Vector2ISaveData>();
@@ -233,6 +235,8 @@ public class MissionRuntimeSaveData
 			{ "FocusedEnemyId", FocusedEnemyId },
 			{ "SelectedOfficerIndex", SelectedOfficerIndex },
 			{ "SelectedOfficerIds", CampaignSaveData.ToVariantArray(SelectedOfficerIds) },
+			{ "SelectedEscortSurvivorPrimaryId", SelectedEscortSurvivorPrimaryId },
+			{ "SelectedEscortSurvivorIds", CampaignSaveData.ToVariantArray(SelectedEscortSurvivorIds) },
 			{ "ConsumedTriggerKeys", CampaignSaveData.ToVariantArray(ConsumedTriggerKeys) },
 			{ "EngagedEnemyIds", CampaignSaveData.ToVariantArray(EngagedEnemyIds) },
 			{ "ExploredCells", CampaignSaveData.ToVariantArray(ExploredCells.Select(cell => cell.ToVariantDictionary())) },
@@ -256,6 +260,8 @@ public class MissionRuntimeSaveData
 			FocusedEnemyId = dict.ContainsKey("FocusedEnemyId") ? (string)dict["FocusedEnemyId"] : string.Empty,
 			SelectedOfficerIndex = dict.ContainsKey("SelectedOfficerIndex") ? (int)dict["SelectedOfficerIndex"] : 0,
 			SelectedOfficerIds = CampaignSaveData.FromStringArray(dict.ContainsKey("SelectedOfficerIds") ? (Godot.Collections.Array)dict["SelectedOfficerIds"] : new Godot.Collections.Array()),
+			SelectedEscortSurvivorPrimaryId = dict.ContainsKey("SelectedEscortSurvivorPrimaryId") ? (string)dict["SelectedEscortSurvivorPrimaryId"] : string.Empty,
+			SelectedEscortSurvivorIds = CampaignSaveData.FromStringArray(dict.ContainsKey("SelectedEscortSurvivorIds") ? (Godot.Collections.Array)dict["SelectedEscortSurvivorIds"] : new Godot.Collections.Array()),
 			ConsumedTriggerKeys = CampaignSaveData.FromStringArray(dict.ContainsKey("ConsumedTriggerKeys") ? (Godot.Collections.Array)dict["ConsumedTriggerKeys"] : new Godot.Collections.Array()),
 			EngagedEnemyIds = CampaignSaveData.FromStringArray(dict.ContainsKey("EngagedEnemyIds") ? (Godot.Collections.Array)dict["EngagedEnemyIds"] : new Godot.Collections.Array()),
 			ExploredCells = CampaignSaveData.FromVariantObjectList(dict.ContainsKey("ExploredCells") ? (Godot.Collections.Array)dict["ExploredCells"] : new Godot.Collections.Array(), Vector2ISaveData.FromVariantDictionary),
@@ -775,6 +781,7 @@ public class CampaignSaveData
 	public List<string> UnequippedInventory { get; set; } = new List<string>();
 	public List<string> FleetCargoItemIDs { get; set; } = new List<string>();
 	public List<string> UnlockedCodexEntryIDs { get; set; } = new List<string>();
+	public List<RemnantRecord> RescuedRemnants { get; set; } = new List<RemnantRecord>();
 	public Dictionary<string, FleetLoadoutSaveData> FleetLoadouts { get; set; } = new Dictionary<string, FleetLoadoutSaveData>();
 	public List<string> SelectedPlayerFleet { get; set; } = new List<string>();
 	public int SelectedFleetCapacity { get; set; }
@@ -817,6 +824,7 @@ public class CampaignSaveData
 			UnequippedInventory = (globalData.UnequippedInventory ?? new List<string>()).ToList(),
 			FleetCargoItemIDs = (globalData.FleetCargoItemIDs ?? new List<string>()).ToList(),
 			UnlockedCodexEntryIDs = (globalData.UnlockedCodexEntryIDs ?? new List<string>()).ToList(),
+			RescuedRemnants = (globalData.RescuedRemnants ?? new List<RemnantRecord>()).Select(record => record?.Clone()).Where(record => record != null).ToList(),
 			FleetLoadouts = (globalData.FleetLoadouts ?? new Dictionary<string, ShipLoadout>()).ToDictionary(kvp => kvp.Key, kvp => FleetLoadoutSaveData.FromRuntime(kvp.Value)),
 			SelectedPlayerFleet = (globalData.SelectedPlayerFleet ?? new List<string>()).ToList(),
 			SelectedFleetCapacity = globalData.SelectedFleetCapacity,
@@ -864,6 +872,7 @@ public class CampaignSaveData
 		globalData.UnequippedInventory = UnequippedInventory.ToList();
 		globalData.FleetCargoItemIDs = FleetCargoItemIDs.ToList();
 		globalData.UnlockedCodexEntryIDs = UnlockedCodexEntryIDs.ToList();
+		globalData.RescuedRemnants = (RescuedRemnants ?? new List<RemnantRecord>()).Select(record => record?.Clone()).Where(record => record != null).ToList();
 		globalData.FleetLoadouts = FleetLoadouts.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.ToRuntime());
 		globalData.SelectedPlayerFleet = SelectedPlayerFleet.ToList();
 		globalData.SelectedFleetCapacity = SelectedFleetCapacity;
@@ -937,6 +946,7 @@ public class CampaignSaveData
 			{ "UnequippedInventory", ToVariantArray(UnequippedInventory) },
 			{ "FleetCargoItemIDs", ToVariantArray(FleetCargoItemIDs) },
 			{ "UnlockedCodexEntryIDs", ToVariantArray(UnlockedCodexEntryIDs) },
+			{ "RescuedRemnants", ToVariantArray((RescuedRemnants ?? new List<RemnantRecord>()).Where(record => record != null).Select(record => record.ToVariantDictionary())) },
 			{ "FleetLoadouts", loadoutDict },
 			{ "SelectedPlayerFleet", ToVariantArray(SelectedPlayerFleet) },
 			{ "SelectedFleetCapacity", SelectedFleetCapacity },
@@ -981,6 +991,7 @@ public class CampaignSaveData
 			UnequippedInventory = FromStringArray(dict.ContainsKey("UnequippedInventory") ? (Godot.Collections.Array)dict["UnequippedInventory"] : new Godot.Collections.Array()),
 			FleetCargoItemIDs = FromStringArray(dict.ContainsKey("FleetCargoItemIDs") ? (Godot.Collections.Array)dict["FleetCargoItemIDs"] : new Godot.Collections.Array()),
 			UnlockedCodexEntryIDs = FromStringArray(dict.ContainsKey("UnlockedCodexEntryIDs") ? (Godot.Collections.Array)dict["UnlockedCodexEntryIDs"] : new Godot.Collections.Array()),
+			RescuedRemnants = FromVariantObjectList(dict.ContainsKey("RescuedRemnants") ? (Godot.Collections.Array)dict["RescuedRemnants"] : new Godot.Collections.Array(), RemnantRecord.FromVariantDictionary),
 			FleetLoadouts = FromLoadoutDictionary(dict.ContainsKey("FleetLoadouts") ? (Godot.Collections.Dictionary)dict["FleetLoadouts"] : new Godot.Collections.Dictionary()),
 			SelectedPlayerFleet = FromStringArray(dict.ContainsKey("SelectedPlayerFleet") ? (Godot.Collections.Array)dict["SelectedPlayerFleet"] : new Godot.Collections.Array()),
 			SelectedFleetCapacity = dict.ContainsKey("SelectedFleetCapacity") ? (int)dict["SelectedFleetCapacity"] : 0,

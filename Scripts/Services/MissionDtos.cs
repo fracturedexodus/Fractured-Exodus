@@ -27,6 +27,7 @@ public class MissionOutcome
 	public bool IsSuccess { get; set; } = true;
 	public MissionReward Reward { get; set; } = new MissionReward();
 	public int PopulationSaved { get; set; }
+	public List<RemnantRecord> RescuedRemnants { get; set; } = new List<RemnantRecord>();
 	public Dictionary<string, int> ApprovalChanges { get; set; } = new Dictionary<string, int>();
 	public List<string> FlagsToSet { get; set; } = new List<string>();
 	public List<string> FallenOfficerShipNames { get; set; } = new List<string>();

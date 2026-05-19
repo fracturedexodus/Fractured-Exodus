@@ -104,6 +104,7 @@ public partial class MissionMap : Node2D
 	private readonly List<Line2D> _movementGridOutlines = new List<Line2D>();
 	private readonly List<Polygon2D> _ambientFloorPolygons = new List<Polygon2D>();
 	private readonly HashSet<string> _selectedOfficerIds = new HashSet<string>();
+	private readonly HashSet<string> _selectedEscortSurvivorIds = new HashSet<string>();
 	private string _selectedEscortSurvivorId = string.Empty;
 	private int _selectedOfficerIndex;
 	private bool _isPanning;
@@ -2265,6 +2266,8 @@ public partial class MissionMap : Node2D
 			FocusedEnemyId = _focusedEnemy?.NpcId ?? string.Empty,
 			SelectedOfficerIndex = _selectedOfficerIndex,
 			SelectedOfficerIds = _selectedOfficerIds.ToList(),
+			SelectedEscortSurvivorPrimaryId = _selectedEscortSurvivorId,
+			SelectedEscortSurvivorIds = _selectedEscortSurvivorIds.ToList(),
 			ConsumedTriggerKeys = _consumedTriggerKeys.ToList(),
 			EngagedEnemyIds = _engagedEnemyIds.ToList(),
 			ExploredCells = _exploredCells.Select(Vector2ISaveData.FromVector2I).ToList(),
@@ -2538,6 +2541,7 @@ public partial class MissionMap : Node2D
 	{
 		_selectedOfficerIndex = Mathf.Clamp(saveState.SelectedOfficerIndex, 0, Mathf.Max(0, _officerPawns.Count - 1));
 		_selectedOfficerIds.Clear();
+		_selectedEscortSurvivorIds.Clear();
 		foreach (string officerId in saveState.SelectedOfficerIds ?? new List<string>())
 		{
 			if (!string.IsNullOrWhiteSpace(officerId)
@@ -2547,17 +2551,20 @@ public partial class MissionMap : Node2D
 			}
 		}
 
-		OfficerPawn indexedOfficer = GetSelectedOfficer();
-		if (_selectedOfficerIds.Count == 0)
+		foreach (string survivorId in saveState.SelectedEscortSurvivorIds ?? new List<string>())
 		{
-			OfficerPawn fallbackOfficer = indexedOfficer ?? _officerPawns.FirstOrDefault(pawn => pawn != null && !pawn.IsDead);
-			if (fallbackOfficer != null)
+			if (!string.IsNullOrWhiteSpace(survivorId)
+				&& GetAliveEscortSurvivors().Any(survivor => survivor != null && survivor.NpcId == survivorId))
 			{
-				_selectedOfficerIndex = _officerPawns.IndexOf(fallbackOfficer);
-				_selectedOfficerIds.Add(fallbackOfficer.OfficerID);
+				_selectedEscortSurvivorIds.Add(survivorId);
 			}
 		}
 
+		_selectedEscortSurvivorId = !string.IsNullOrWhiteSpace(saveState.SelectedEscortSurvivorPrimaryId)
+			&& _selectedEscortSurvivorIds.Contains(saveState.SelectedEscortSurvivorPrimaryId)
+			? saveState.SelectedEscortSurvivorPrimaryId
+			: string.Empty;
+		NormalizeFriendlySelectionState();
 		UpdateOfficerSelectionVisuals();
 	}
 
@@ -2666,48 +2673,127 @@ public partial class MissionMap : Node2D
 		}
 
 		OfficerPawn selectedOfficer = _officerPawns[_selectedOfficerIndex];
-		_selectedOfficerIds.Clear();
-		_selectedEscortSurvivorId = string.Empty;
-		if (selectedOfficer != null && !selectedOfficer.IsDead && !string.IsNullOrWhiteSpace(selectedOfficer.OfficerID))
+		if (selectedOfficer == null || selectedOfficer.IsDead || string.IsNullOrWhiteSpace(selectedOfficer.OfficerID))
 		{
-			_selectedOfficerIds.Add(selectedOfficer.OfficerID);
+			return;
 		}
 
-		UpdateOfficerSelectionVisuals();
-		UpdateSelectedOfficerDisplay();
-		RefreshCombatHud();
+		SetSelectedFriendlyUnits(new[] { selectedOfficer }, null, selectedOfficer);
 	}
 
 	private void SetSelectedOfficers(IEnumerable<OfficerPawn> officers, OfficerPawn primaryOfficer = null)
+	{
+		SetSelectedFriendlyUnits(officers, null, primaryOfficer);
+	}
+
+	private void SetSelectedFriendlyUnits(IEnumerable<OfficerPawn> officers, IEnumerable<MissionNpcPawn> survivors, object primaryUnit = null)
 	{
 		List<OfficerPawn> selectedOfficers = officers?
 			.Where(officer => officer != null && !officer.IsDead && !string.IsNullOrWhiteSpace(officer.OfficerID))
 			.Distinct()
 			.ToList() ?? new List<OfficerPawn>();
-		if (selectedOfficers.Count == 0)
+		List<MissionNpcPawn> selectedSurvivors = survivors?
+			.Where(survivor => IsActiveEscortSurvivor(survivor) && !string.IsNullOrWhiteSpace(survivor.NpcId))
+			.Distinct()
+			.ToList() ?? new List<MissionNpcPawn>();
+		if (selectedOfficers.Count == 0 && selectedSurvivors.Count == 0)
 		{
 			return;
 		}
 
 		_selectedOfficerIds.Clear();
-		_selectedEscortSurvivorId = string.Empty;
+		_selectedEscortSurvivorIds.Clear();
 		foreach (OfficerPawn officer in selectedOfficers)
 		{
 			_selectedOfficerIds.Add(officer.OfficerID);
 		}
 
-		OfficerPawn resolvedPrimary = primaryOfficer != null && _selectedOfficerIds.Contains(primaryOfficer.OfficerID)
-			? primaryOfficer
-			: selectedOfficers[0];
-		int primaryIndex = _officerPawns.IndexOf(resolvedPrimary);
-		if (primaryIndex >= 0)
+		foreach (MissionNpcPawn survivor in selectedSurvivors)
 		{
-			_selectedOfficerIndex = primaryIndex;
+			_selectedEscortSurvivorIds.Add(survivor.NpcId);
 		}
 
+		_selectedEscortSurvivorId = string.Empty;
+		switch (primaryUnit)
+		{
+			case OfficerPawn primaryOfficer when _selectedOfficerIds.Contains(primaryOfficer.OfficerID):
+			{
+				int primaryIndex = _officerPawns.IndexOf(primaryOfficer);
+				if (primaryIndex >= 0)
+				{
+					_selectedOfficerIndex = primaryIndex;
+				}
+
+				break;
+			}
+			case MissionNpcPawn primarySurvivor when _selectedEscortSurvivorIds.Contains(primarySurvivor.NpcId):
+				_selectedEscortSurvivorId = primarySurvivor.NpcId;
+				break;
+		}
+
+		NormalizeFriendlySelectionState();
 		UpdateOfficerSelectionVisuals();
 		UpdateSelectedOfficerDisplay();
 		RefreshCombatHud();
+	}
+
+	private void NormalizeFriendlySelectionState()
+	{
+		_selectedOfficerIds.RemoveWhere(officerId => string.IsNullOrWhiteSpace(officerId)
+			|| !_officerPawns.Any(pawn => pawn != null && !pawn.IsDead && pawn.OfficerID == officerId));
+		_selectedEscortSurvivorIds.RemoveWhere(survivorId => string.IsNullOrWhiteSpace(survivorId)
+			|| !GetAliveEscortSurvivors().Any(survivor => survivor != null && survivor.NpcId == survivorId));
+
+		if (!string.IsNullOrWhiteSpace(_selectedEscortSurvivorId) && !_selectedEscortSurvivorIds.Contains(_selectedEscortSurvivorId))
+		{
+			_selectedEscortSurvivorId = string.Empty;
+		}
+
+		OfficerPawn indexedOfficer = GetSelectedOfficer();
+		if (_selectedOfficerIds.Count == 0 && _selectedEscortSurvivorIds.Count == 0)
+		{
+			OfficerPawn fallbackOfficer = indexedOfficer ?? _officerPawns.FirstOrDefault(pawn => pawn != null && !pawn.IsDead);
+			if (fallbackOfficer != null)
+			{
+				_selectedOfficerIndex = _officerPawns.IndexOf(fallbackOfficer);
+				_selectedOfficerIds.Add(fallbackOfficer.OfficerID);
+				return;
+			}
+
+			MissionNpcPawn fallbackSurvivor = GetAliveEscortSurvivors().FirstOrDefault();
+			if (fallbackSurvivor != null)
+			{
+				_selectedEscortSurvivorIds.Add(fallbackSurvivor.NpcId);
+				_selectedEscortSurvivorId = fallbackSurvivor.NpcId;
+			}
+
+			return;
+		}
+
+		if (!string.IsNullOrWhiteSpace(_selectedEscortSurvivorId))
+		{
+			return;
+		}
+
+		OfficerPawn selectedOfficer = indexedOfficer;
+		if (selectedOfficer != null && _selectedOfficerIds.Contains(selectedOfficer.OfficerID))
+		{
+			return;
+		}
+
+		OfficerPawn firstSelectedOfficer = _officerPawns.FirstOrDefault(pawn => pawn != null && !pawn.IsDead && _selectedOfficerIds.Contains(pawn.OfficerID));
+		if (firstSelectedOfficer != null)
+		{
+			_selectedOfficerIndex = _officerPawns.IndexOf(firstSelectedOfficer);
+			return;
+		}
+
+		MissionNpcPawn firstSelectedSurvivor = GetAliveEscortSurvivors()
+			.FirstOrDefault(survivor => !string.IsNullOrWhiteSpace(survivor.NpcId) && _selectedEscortSurvivorIds.Contains(survivor.NpcId));
+		if (firstSelectedSurvivor != null)
+		{
+			_selectedEscortSurvivorId = firstSelectedSurvivor.NpcId;
+		}
 	}
 
 	private void UpdateOfficerSelectionVisuals()
@@ -2718,7 +2804,8 @@ public partial class MissionMap : Node2D
 			if (officer != null)
 			{
 				bool isSelected = !officer.IsDead
-					&& (!string.IsNullOrWhiteSpace(officer.OfficerID) && _selectedOfficerIds.Contains(officer.OfficerID));
+					&& !string.IsNullOrWhiteSpace(officer.OfficerID)
+					&& _selectedOfficerIds.Contains(officer.OfficerID);
 				officer.SetSelected(isSelected);
 			}
 		}
@@ -2727,7 +2814,7 @@ public partial class MissionMap : Node2D
 		{
 			bool isSelected = IsActiveEscortSurvivor(npc)
 				&& !string.IsNullOrWhiteSpace(npc.NpcId)
-				&& npc.NpcId == _selectedEscortSurvivorId;
+				&& _selectedEscortSurvivorIds.Contains(npc.NpcId);
 			npc.SetSelected(isSelected);
 		}
 	}
@@ -2758,11 +2845,6 @@ public partial class MissionMap : Node2D
 
 	private List<OfficerPawn> GetSelectedOfficers()
 	{
-		if (GetSelectedEscortSurvivor() != null)
-		{
-			return new List<OfficerPawn>();
-		}
-
 		List<OfficerPawn> selected = _officerPawns
 			.Where(pawn => pawn != null && !pawn.IsDead && !string.IsNullOrWhiteSpace(pawn.OfficerID) && _selectedOfficerIds.Contains(pawn.OfficerID))
 			.ToList();
@@ -2772,7 +2854,12 @@ public partial class MissionMap : Node2D
 		}
 
 		OfficerPawn activeOfficer = GetSelectedOfficer();
-		return activeOfficer != null ? new List<OfficerPawn> { activeOfficer } : new List<OfficerPawn>();
+		if (activeOfficer == null || _selectedEscortSurvivorIds.Count > 0)
+		{
+			return new List<OfficerPawn>();
+		}
+
+		return new List<OfficerPawn> { activeOfficer };
 	}
 
 	private void SelectEscortSurvivor(MissionNpcPawn survivor)
@@ -2782,11 +2869,7 @@ public partial class MissionMap : Node2D
 			return;
 		}
 
-		_selectedOfficerIds.Clear();
-		_selectedEscortSurvivorId = survivor.NpcId;
-		UpdateOfficerSelectionVisuals();
-		UpdateSelectedOfficerDisplay();
-		RefreshCombatHud();
+		SetSelectedFriendlyUnits(null, new[] { survivor }, survivor);
 	}
 
 	private MissionNpcPawn GetSelectedEscortSurvivor()
@@ -2797,26 +2880,67 @@ public partial class MissionMap : Node2D
 		}
 
 		MissionNpcPawn survivor = _missionNpcs.FirstOrDefault(candidate => candidate != null && candidate.NpcId == _selectedEscortSurvivorId);
-		if (IsActiveEscortSurvivor(survivor))
-		{
-			return survivor;
-		}
-
-		return null;
+		return IsActiveEscortSurvivor(survivor) ? survivor : null;
 	}
 
-	private List<MissionCombatantSummary> GetSelectedFriendlySummaries()
+	private List<MissionNpcPawn> GetSelectedEscortSurvivors()
+	{
+		List<MissionNpcPawn> selected = GetAliveEscortSurvivors()
+			.Where(survivor => !string.IsNullOrWhiteSpace(survivor.NpcId) && _selectedEscortSurvivorIds.Contains(survivor.NpcId))
+			.ToList();
+		if (selected.Count > 0)
+		{
+			return selected;
+		}
+
+		MissionNpcPawn primarySurvivor = GetSelectedEscortSurvivor();
+		return primarySurvivor != null ? new List<MissionNpcPawn> { primarySurvivor } : new List<MissionNpcPawn>();
+	}
+
+	private object GetPrimarySelectedFriendlyUnit()
 	{
 		MissionNpcPawn selectedSurvivor = GetSelectedEscortSurvivor();
 		if (selectedSurvivor != null)
 		{
-			MissionCombatantSummary summary = BuildEnemySummary(selectedSurvivor);
-			return summary != null ? new List<MissionCombatantSummary> { summary } : new List<MissionCombatantSummary>();
+			return selectedSurvivor;
 		}
 
-		return GetSelectedOfficers()
-			.Take(2)
-			.Select(BuildOfficerSummary)
+		return GetSelectedOfficer();
+	}
+
+	private List<object> GetSelectedFriendlyUnits()
+	{
+		List<object> selectedUnits = GetControllableUnitsForSelection()
+			.Where(unit => unit switch
+			{
+				OfficerPawn officer => !string.IsNullOrWhiteSpace(officer.OfficerID) && _selectedOfficerIds.Contains(officer.OfficerID),
+				MissionNpcPawn survivor => !string.IsNullOrWhiteSpace(survivor.NpcId) && _selectedEscortSurvivorIds.Contains(survivor.NpcId),
+				_ => false
+			})
+			.ToList();
+		object primaryUnit = GetPrimarySelectedFriendlyUnit();
+		if (primaryUnit != null && selectedUnits.Remove(primaryUnit))
+		{
+			selectedUnits.Insert(0, primaryUnit);
+		}
+
+		if (selectedUnits.Count > 0)
+		{
+			return selectedUnits;
+		}
+
+		return primaryUnit != null ? new List<object> { primaryUnit } : new List<object>();
+	}
+
+	private List<MissionCombatantSummary> GetSelectedFriendlySummaries()
+	{
+		return GetSelectedFriendlyUnits()
+			.Select(unit => unit switch
+			{
+				OfficerPawn officer => BuildOfficerSummary(officer),
+				MissionNpcPawn survivor => BuildEnemySummary(survivor),
+				_ => null
+			})
 			.Where(summary => summary != null)
 			.ToList();
 	}
@@ -2831,14 +2955,8 @@ public partial class MissionMap : Node2D
 
 	private int GetCurrentSelectionIndex(List<object> units)
 	{
-		MissionNpcPawn selectedSurvivor = GetSelectedEscortSurvivor();
-		if (selectedSurvivor != null)
-		{
-			return units.IndexOf(selectedSurvivor);
-		}
-
-		OfficerPawn selectedOfficer = GetSelectedOfficer();
-		return selectedOfficer != null ? units.IndexOf(selectedOfficer) : -1;
+		object selectedUnit = GetPrimarySelectedFriendlyUnit();
+		return selectedUnit != null ? units.IndexOf(selectedUnit) : -1;
 	}
 
 	private void SelectFriendlyUnit(object unit)
@@ -2868,33 +2986,45 @@ public partial class MissionMap : Node2D
 			return;
 		}
 
-		MissionNpcPawn selectedSurvivor = GetSelectedEscortSurvivor();
-		if (selectedSurvivor != null)
-		{
-			_missionUi.SetExplorationSelectionInfo(GetSelectedFriendlySummaries(), !_combatActive && !_missionGameOver);
-			_missionUi.SetSelectedOfficer(selectedSurvivor.DisplayName, "ESCORT SURVIVOR", "MOVE TO EVAC");
-			return;
-		}
-
-		OfficerPawn activeOfficer = GetSelectedOfficer();
-		if (activeOfficer == null)
+		List<object> selectedUnits = GetSelectedFriendlyUnits();
+		_missionUi.SetExplorationSelectionInfo(GetSelectedFriendlySummaries(), !_combatActive && !_missionGameOver);
+		if (selectedUnits.Count == 0)
 		{
 			_missionUi.SetExplorationSelectionInfo(Array.Empty<MissionCombatantSummary>(), false);
 			return;
 		}
 
-		List<OfficerPawn> selectedOfficers = GetSelectedOfficers();
-		_missionUi.SetExplorationSelectionInfo(GetSelectedFriendlySummaries(), !_combatActive && !_missionGameOver);
-		if (selectedOfficers.Count > 1)
+		object primaryUnit = selectedUnits[0];
+		if (selectedUnits.Count > 1)
 		{
-			_missionUi.SetSelectedOfficer(
-				$"{activeOfficer.OfficerName} (+{selectedOfficers.Count - 1})",
-				$"{selectedOfficers.Count} OFFICERS SELECTED",
-				activeOfficer.Specialty);
-			return;
+			switch (primaryUnit)
+			{
+				case OfficerPawn officer:
+					_missionUi.SetSelectedOfficer(
+						$"{officer.OfficerName} (+{selectedUnits.Count - 1})",
+						$"{selectedUnits.Count} UNITS SELECTED",
+						officer.Specialty);
+					return;
+				case MissionNpcPawn survivor:
+					_missionUi.SetSelectedOfficer(
+						$"{survivor.DisplayName} (+{selectedUnits.Count - 1})",
+						$"{selectedUnits.Count} UNITS SELECTED",
+						"GUIDE TO EVAC");
+					return;
+			}
 		}
 
-		_missionUi.SetSelectedOfficer(activeOfficer.OfficerName, activeOfficer.ShipName, activeOfficer.Specialty);
+		switch (primaryUnit)
+		{
+			case MissionNpcPawn survivor:
+				_missionUi.SetSelectedOfficer(survivor.DisplayName, $"ESCORT {CampaignText.RemnantsLabel.ToUpperInvariant()}", "GUIDE TO EVAC");
+				return;
+			case OfficerPawn officer:
+				_missionUi.SetSelectedOfficer(officer.OfficerName, officer.ShipName, officer.Specialty);
+				return;
+		}
+
+		_missionUi.SetExplorationSelectionInfo(Array.Empty<MissionCombatantSummary>(), false);
 	}
 
 	private MissionOutcome BuildOutcome(string outcomeId)
@@ -2964,6 +3094,7 @@ public partial class MissionMap : Node2D
 			outcome.Reward.RawMaterials = 70;
 			outcome.Reward.EnergyCores = 1;
 			outcome.PopulationSaved = GetExtractedEscortSurvivorCount();
+			outcome.RescuedRemnants = BuildRescuedRemnantRecords();
 			outcome.FlagsToSet.Add("relay_survivors_saved");
 			outcome.Reward.CodexEntryIds.Add("relay_survivor_registry");
 
@@ -2999,6 +3130,33 @@ public partial class MissionMap : Node2D
 		}
 
 		return outcome;
+	}
+
+	private List<RemnantRecord> BuildRescuedRemnantRecords()
+	{
+		string missionId = GetActiveMissionId();
+		string missionTitle = !string.IsNullOrWhiteSpace(_missionTemplate?.Title)
+			? _missionTemplate.Title
+			: _missionState?.MissionTitle ?? missionId;
+		return _missionNpcs
+			.Where(npc => npc != null
+				&& IsEscortSurvivor(npc)
+				&& !string.IsNullOrWhiteSpace(npc.NpcId)
+				&& _extractedSurvivorIds.Contains(npc.NpcId))
+			.OrderBy(npc => npc.DisplayName)
+			.Select(npc => new RemnantRecord
+			{
+				RecordId = $"{missionId}:{npc.NpcId}",
+				DisplayName = npc.DisplayName,
+				Description = string.IsNullOrWhiteSpace(npc.Description) ? "Recovered civilian from a completed away mission." : npc.Description,
+				Notes = npc.Notes,
+				MissionId = missionId,
+				MissionTitle = missionTitle,
+				RescuedOnTurn = Mathf.Max(1, _globalData?.CurrentTurn ?? 1),
+				PortraitPath = npc.PortraitPath,
+				DefinitionPath = npc.DefinitionResourcePath
+			})
+			.ToList();
 	}
 
 	private string GetActiveMissionId()
@@ -3043,7 +3201,7 @@ public partial class MissionMap : Node2D
 			: _missionTemplate.PromptText;
 		if (GetAliveEscortSurvivors().Any())
 		{
-			prompt += " Rescued survivors can be selected and moved toward evac just like the away team.";
+			prompt += $" Rescued {CampaignText.RemnantsLabel.ToLowerInvariant()} can be selected and moved toward evac just like the away team.";
 		}
 
 		return prompt;
@@ -3189,33 +3347,23 @@ public partial class MissionMap : Node2D
 		}
 
 		Vector2 viewportSize = GetViewportRect().Size;
-		MissionNpcPawn selectedSurvivor = GetSelectedEscortSurvivor();
-		if (selectedSurvivor != null && selectedSurvivor.IsMoving)
-		{
-			Vector2 screenPosition = GetViewport().GetCanvasTransform() * selectedSurvivor.GlobalPosition;
-			bool survivorReachedScreenEdge = screenPosition.X <= CameraKeyboardFollowEdgeMargin
-				|| screenPosition.X >= viewportSize.X - CameraKeyboardFollowEdgeMargin
-				|| screenPosition.Y <= CameraKeyboardFollowEdgeMargin
-				|| screenPosition.Y >= viewportSize.Y - CameraKeyboardFollowEdgeMargin;
-			if (survivorReachedScreenEdge)
+		List<Node2D> movingSelectedUnits = GetSelectedFriendlyUnits()
+			.Select(unit => unit as Node2D)
+			.Where(unit => unit != null && unit switch
 			{
-				_camera.Position = selectedSurvivor.GlobalPosition;
-			}
-
-			return;
-		}
-
-		List<OfficerPawn> movingSelectedOfficers = GetSelectedOfficers()
-			.Where(officer => officer != null && officer.IsMoving)
+				OfficerPawn officer => officer.IsMoving,
+				MissionNpcPawn survivor => survivor.IsMoving,
+				_ => false
+			})
 			.ToList();
-		if (movingSelectedOfficers.Count == 0)
+		if (movingSelectedUnits.Count == 0)
 		{
 			return;
 		}
 
-		bool reachedScreenEdge = movingSelectedOfficers.Any(officer =>
+		bool reachedScreenEdge = movingSelectedUnits.Any(unit =>
 		{
-			Vector2 screenPosition = GetViewport().GetCanvasTransform() * officer.GlobalPosition;
+			Vector2 screenPosition = GetViewport().GetCanvasTransform() * unit.GlobalPosition;
 			return screenPosition.X <= CameraKeyboardFollowEdgeMargin
 				|| screenPosition.X >= viewportSize.X - CameraKeyboardFollowEdgeMargin
 				|| screenPosition.Y <= CameraKeyboardFollowEdgeMargin
@@ -3227,12 +3375,12 @@ public partial class MissionMap : Node2D
 		}
 
 		Vector2 focusPosition = Vector2.Zero;
-		foreach (OfficerPawn officer in movingSelectedOfficers)
+		foreach (Node2D unit in movingSelectedUnits)
 		{
-			focusPosition += officer.GlobalPosition;
+			focusPosition += unit.GlobalPosition;
 		}
 
-		_camera.Position = focusPosition / movingSelectedOfficers.Count;
+		_camera.Position = focusPosition / movingSelectedUnits.Count;
 	}
 
 	private void UpdateSelectionDrag()
@@ -3258,7 +3406,7 @@ public partial class MissionMap : Node2D
 
 		if (!_combatActive && selectionRect.Area >= 100f)
 		{
-			SelectOfficersInRect(selectionRect);
+			SelectControllableUnitsInRect(selectionRect);
 			return;
 		}
 
@@ -3277,16 +3425,22 @@ public partial class MissionMap : Node2D
 			return;
 		}
 
-		MissionNpcPawn activeSurvivor = GetSelectedEscortSurvivor();
-		if (activeSurvivor != null)
+		List<object> selectedUnits = GetSelectedFriendlyUnits();
+		if (!_combatActive && selectedUnits.Count > 1 && TryMoveSelectedFriendlyGroup())
 		{
-			TryMoveSelectedEscortSurvivor();
 			return;
 		}
 
 		OfficerPawn activeOfficer = GetSelectedOfficer();
-		if (activeOfficer == null)
+		MissionNpcPawn activeSurvivor = GetSelectedEscortSurvivor();
+		if (activeOfficer == null && activeSurvivor == null)
 		{
+			return;
+		}
+
+		if (activeSurvivor != null)
+		{
+			TryMoveSelectedEscortSurvivor();
 			return;
 		}
 
@@ -3300,19 +3454,10 @@ public partial class MissionMap : Node2D
 			return;
 		}
 
-		if (!_combatActive)
-		{
-			List<OfficerPawn> selectedOfficers = GetSelectedOfficers();
-			if (selectedOfficers.Count > 1 && TryMoveSelectedOfficerGroup())
-			{
-				return;
-			}
-		}
-
 		TryMoveSelectedOfficer();
 	}
 
-	private void SelectOfficersInRect(Rect2 selectionRect)
+	private void SelectControllableUnitsInRect(Rect2 selectionRect)
 	{
 		if (_combatActive)
 		{
@@ -3322,12 +3467,16 @@ public partial class MissionMap : Node2D
 		List<OfficerPawn> officersInRect = _officerPawns
 			.Where(officer => officer != null && !officer.IsDead && selectionRect.HasPoint(officer.GlobalPosition))
 			.ToList();
-		if (officersInRect.Count == 0)
+		List<MissionNpcPawn> survivorsInRect = GetAliveEscortSurvivors()
+			.Where(survivor => selectionRect.HasPoint(survivor.GlobalPosition))
+			.ToList();
+		if (officersInRect.Count == 0 && survivorsInRect.Count == 0)
 		{
 			return;
 		}
 
-		SetSelectedOfficers(officersInRect, officersInRect[0]);
+		object primaryUnit = officersInRect.Cast<object>().Concat(survivorsInRect).FirstOrDefault();
+		SetSelectedFriendlyUnits(officersInRect, survivorsInRect, primaryUnit);
 	}
 
 	private bool TryHandleOfficerMoveKey(Key keycode)
@@ -3346,14 +3495,14 @@ public partial class MissionMap : Node2D
 			return false;
 		}
 
+		if (!_combatActive && GetSelectedFriendlyUnits().Count > 1)
+		{
+			return TryMoveSelectedFriendlyGroupByDirection(direction);
+		}
+
 		if (GetSelectedEscortSurvivor() != null)
 		{
 			return TryMoveSelectedEscortSurvivorByDirection(direction);
-		}
-
-		if (!_combatActive && AreAllLivingOfficersSelected())
-		{
-			return TryMoveSelectedOfficerGroupByDirection(direction);
 		}
 
 		return TryMoveSelectedOfficerByDirection(direction);
@@ -3370,8 +3519,8 @@ public partial class MissionMap : Node2D
 			return;
 		}
 
-		OfficerPawn activeOfficer = GetSelectedOfficer();
-		if (activeOfficer == null || activeOfficer.IsMoving)
+		object primaryUnit = GetPrimarySelectedFriendlyUnit();
+		if (primaryUnit == null)
 		{
 			return;
 		}
@@ -3382,13 +3531,21 @@ public partial class MissionMap : Node2D
 			return;
 		}
 
-		if (!_combatActive && AreAllLivingOfficersSelected())
+		if (!_combatActive && GetSelectedFriendlyUnits().Count > 1)
 		{
-			TryMoveSelectedOfficerGroupByDirection(direction);
+			TryMoveSelectedFriendlyGroupByDirection(direction);
 			return;
 		}
 
-		TryMoveSelectedOfficerByDirection(direction);
+		switch (primaryUnit)
+		{
+			case MissionNpcPawn survivor when !survivor.IsMoving:
+				TryMoveSelectedEscortSurvivorByDirection(direction);
+				break;
+			case OfficerPawn officer when !officer.IsMoving:
+				TryMoveSelectedOfficerByDirection(direction);
+				break;
+		}
 	}
 
 	private Vector2I GetHeldOfficerMoveDirection()
@@ -3442,43 +3599,48 @@ public partial class MissionMap : Node2D
 		TryMoveEscortSurvivorToCell(survivor, targetCell);
 	}
 
-	private bool TryMoveSelectedOfficerGroup()
+	private bool TryMoveSelectedFriendlyGroup()
 	{
 		if (_roomBuilder == null || _isoWorld == null)
 		{
 			return false;
 		}
 
-		List<OfficerPawn> selectedOfficers = GetSelectedOfficers()
-			.Where(officer => officer != null && !officer.IsMoving)
+		List<object> selectedUnits = GetSelectedFriendlyUnits()
+			.Where(unit => !IsFriendlyUnitMoving(unit))
 			.ToList();
-		if (selectedOfficers.Count <= 1)
+		if (selectedUnits.Count <= 1)
 		{
 			return false;
 		}
 
 		Vector2I targetCell = ResolveMovementTargetCell(_roomBuilder.GetNearestMovementCell(_isoWorld.ToLocal(GetGlobalMousePosition())));
-		List<Vector2I> candidateCells = GetGroupDestinationCandidates(targetCell, selectedOfficers.Count * 6);
+		List<Vector2I> candidateCells = GetGroupDestinationCandidates(targetCell, selectedUnits.Count * 6);
 		if (candidateCells.Count == 0)
 		{
 			return false;
 		}
 
-		HashSet<string> selectedOfficerIds = selectedOfficers
+		HashSet<string> selectedOfficerIds = GetSelectedOfficers()
 			.Where(officer => !string.IsNullOrWhiteSpace(officer.OfficerID))
 			.Select(officer => officer.OfficerID)
 			.ToHashSet();
+		HashSet<string> selectedSurvivorIds = GetSelectedEscortSurvivors()
+			.Where(survivor => !string.IsNullOrWhiteSpace(survivor.NpcId))
+			.Select(survivor => survivor.NpcId)
+			.ToHashSet();
 		HashSet<Vector2I> reservedDestinations = new HashSet<Vector2I>();
-		bool movedAnyOfficer = false;
+		bool movedAnyUnit = false;
 
-		foreach (OfficerPawn officer in OrderOfficersForGroupMove(selectedOfficers, targetCell))
+		foreach (object unit in OrderFriendlyUnitsForGroupMove(selectedUnits, targetCell))
 		{
+			Vector2I unitCell = GetFriendlyUnitCurrentCell(unit);
 			Vector2I? destination = candidateCells
 				.Where(candidate => !reservedDestinations.Contains(candidate))
-				.Where(candidate => !IsCellOccupiedByLivingActor(candidate, officer, null, selectedOfficerIds))
-				.Where(candidate => TryGetTraversableMovementPath(officer.CurrentCell, candidate, officer, null, selectedOfficerIds, out List<Vector2I> _))
+				.Where(candidate => !IsCellOccupiedByLivingActor(candidate, unit as OfficerPawn, unit as MissionNpcPawn, selectedOfficerIds, selectedSurvivorIds))
+				.Where(candidate => TryGetFriendlyUnitMovementPath(unit, candidate, selectedOfficerIds, selectedSurvivorIds, out List<Vector2I> _))
 				.OrderBy(candidate => GetMovementStepDistance(candidate, targetCell))
-				.ThenBy(candidate => GetMovementStepDistance(officer.CurrentCell, candidate))
+				.ThenBy(candidate => GetMovementStepDistance(unitCell, candidate))
 				.Cast<Vector2I?>()
 				.FirstOrDefault();
 			if (!destination.HasValue)
@@ -3486,44 +3648,49 @@ public partial class MissionMap : Node2D
 				continue;
 			}
 
-			if (TryMoveOfficerToCell(officer, destination.Value, selectedOfficerIds))
+			if (TryMoveFriendlyUnitToCell(unit, destination.Value, selectedOfficerIds, selectedSurvivorIds))
 			{
 				reservedDestinations.Add(destination.Value);
-				movedAnyOfficer = true;
+				movedAnyUnit = true;
 			}
 		}
 
-		return movedAnyOfficer;
+		return movedAnyUnit;
 	}
 
-	private bool TryMoveSelectedOfficerGroupByDirection(Vector2I direction)
+	private bool TryMoveSelectedFriendlyGroupByDirection(Vector2I direction)
 	{
 		if (_combatActive || _roomBuilder == null)
 		{
 			return false;
 		}
 
-		List<OfficerPawn> selectedOfficers = GetSelectedOfficers()
-			.Where(officer => officer != null && !officer.IsMoving)
+		List<object> selectedUnits = GetSelectedFriendlyUnits()
+			.Where(unit => !IsFriendlyUnitMoving(unit))
 			.ToList();
-		if (selectedOfficers.Count <= 1)
+		if (selectedUnits.Count <= 1)
 		{
 			return false;
 		}
 
-		HashSet<string> selectedOfficerIds = selectedOfficers
+		HashSet<string> selectedOfficerIds = GetSelectedOfficers()
 			.Where(officer => !string.IsNullOrWhiteSpace(officer.OfficerID))
 			.Select(officer => officer.OfficerID)
 			.ToHashSet();
-		HashSet<Vector2I> movingOrigins = selectedOfficers
-			.Select(officer => officer.CurrentCell)
+		HashSet<string> selectedSurvivorIds = GetSelectedEscortSurvivors()
+			.Where(survivor => !string.IsNullOrWhiteSpace(survivor.NpcId))
+			.Select(survivor => survivor.NpcId)
+			.ToHashSet();
+		HashSet<Vector2I> movingOrigins = selectedUnits
+			.Select(GetFriendlyUnitCurrentCell)
 			.ToHashSet();
 		HashSet<Vector2I> reservedDestinations = new HashSet<Vector2I>();
-		List<(OfficerPawn Officer, Vector2I Destination)> movePlans = new List<(OfficerPawn, Vector2I)>();
+		List<(object Unit, Vector2I Origin, Vector2I Destination)> movePlans = new List<(object, Vector2I, Vector2I)>();
 
-		foreach (OfficerPawn officer in OrderOfficersForDirectionalGroupMove(selectedOfficers, direction))
+		foreach (object unit in OrderFriendlyUnitsForDirectionalGroupMove(selectedUnits, direction))
 		{
-			Vector2I destination = ResolveMovementTargetCell(officer.CurrentCell + direction);
+			Vector2I origin = GetFriendlyUnitCurrentCell(unit);
+			Vector2I destination = ResolveMovementTargetCell(origin + direction);
 			if (!_roomBuilder.IsWalkableMovementCell(destination))
 			{
 				continue;
@@ -3534,80 +3701,122 @@ public partial class MissionMap : Node2D
 				continue;
 			}
 
-			if (IsCellOccupiedByLivingActor(destination, officer, null, selectedOfficerIds)
-				|| (IsCellOccupiedBySelectedOfficerNotMoving(destination, movingOrigins, movePlans)))
+			if (IsCellOccupiedByLivingActor(destination, unit as OfficerPawn, unit as MissionNpcPawn, selectedOfficerIds, selectedSurvivorIds)
+				|| IsCellOccupiedBySelectedUnitNotMoving(destination, movingOrigins, movePlans))
 			{
 				continue;
 			}
 
-			if (!TryGetTraversableMovementPath(officer.CurrentCell, destination, officer, null, selectedOfficerIds, out List<Vector2I> pathCells) || pathCells.Count <= 1)
+			if (!TryGetFriendlyUnitMovementPath(unit, destination, selectedOfficerIds, selectedSurvivorIds, out List<Vector2I> pathCells)
+				|| pathCells.Count <= 1)
 			{
 				continue;
 			}
 
-			movePlans.Add((officer, destination));
+			movePlans.Add((unit, origin, destination));
 			reservedDestinations.Add(destination);
 		}
 
-		bool movedAnyOfficer = false;
-		foreach ((OfficerPawn officer, Vector2I destination) in movePlans)
+		bool movedAnyUnit = false;
+		foreach ((object unit, Vector2I _, Vector2I destination) in movePlans)
 		{
-			if (TryMoveOfficerToCell(officer, destination, selectedOfficerIds))
+			if (TryMoveFriendlyUnitToCell(unit, destination, selectedOfficerIds, selectedSurvivorIds))
 			{
-				movedAnyOfficer = true;
+				movedAnyUnit = true;
 			}
 		}
 
-		return movedAnyOfficer;
+		return movedAnyUnit;
 	}
 
-	private List<OfficerPawn> OrderOfficersForGroupMove(List<OfficerPawn> officers, Vector2I targetCell)
+	private bool IsFriendlyUnitMoving(object unit)
 	{
-		OfficerPawn primaryOfficer = GetSelectedOfficer();
-		return officers
-			.OrderByDescending(officer => officer == primaryOfficer)
-			.ThenBy(officer => GetMovementStepDistance(officer.CurrentCell, targetCell))
-			.ToList();
-	}
-
-	private List<OfficerPawn> OrderOfficersForDirectionalGroupMove(List<OfficerPawn> officers, Vector2I direction)
-	{
-		return direction switch
+		return unit switch
 		{
-			var d when d == new Vector2I(1, 0) => officers.OrderByDescending(officer => officer.CurrentCell.X).ThenBy(officer => officer.CurrentCell.Y).ToList(),
-			var d when d == new Vector2I(-1, 0) => officers.OrderBy(officer => officer.CurrentCell.X).ThenBy(officer => officer.CurrentCell.Y).ToList(),
-			var d when d == new Vector2I(0, 1) => officers.OrderByDescending(officer => officer.CurrentCell.Y).ThenBy(officer => officer.CurrentCell.X).ToList(),
-			var d when d == new Vector2I(0, -1) => officers.OrderBy(officer => officer.CurrentCell.Y).ThenBy(officer => officer.CurrentCell.X).ToList(),
-			_ => officers
+			OfficerPawn officer => officer.IsMoving,
+			MissionNpcPawn survivor => survivor.IsMoving,
+			_ => false
 		};
 	}
 
-	private bool AreAllLivingOfficersSelected()
+	private Vector2I GetFriendlyUnitCurrentCell(object unit)
 	{
-		List<OfficerPawn> livingOfficers = GetAliveOfficers().ToList();
-		if (livingOfficers.Count <= 1)
+		return unit switch
 		{
-			return false;
-		}
-
-		HashSet<string> livingOfficerIds = livingOfficers
-			.Where(officer => !string.IsNullOrWhiteSpace(officer.OfficerID))
-			.Select(officer => officer.OfficerID)
-			.ToHashSet();
-		return livingOfficerIds.Count > 1 && livingOfficerIds.SetEquals(_selectedOfficerIds);
+			OfficerPawn officer => officer.CurrentCell,
+			MissionNpcPawn survivor => survivor.CurrentCell,
+			_ => Vector2I.Zero
+		};
 	}
 
-	private static bool IsCellOccupiedBySelectedOfficerNotMoving(
+	private bool TryGetFriendlyUnitMovementPath(
+		object unit,
+		Vector2I destination,
+		IReadOnlyCollection<string> ignoredOfficerIds,
+		IReadOnlyCollection<string> ignoredSurvivorIds,
+		out List<Vector2I> pathCells)
+	{
+		switch (unit)
+		{
+			case OfficerPawn officer:
+				return TryGetTraversableMovementPath(officer.CurrentCell, destination, officer, null, ignoredOfficerIds, ignoredSurvivorIds, out pathCells);
+			case MissionNpcPawn survivor:
+				return TryGetTraversableMovementPath(survivor.CurrentCell, destination, null, survivor, ignoredOfficerIds, ignoredSurvivorIds, out pathCells);
+			default:
+				pathCells = new List<Vector2I>();
+				return false;
+		}
+	}
+
+	private bool TryMoveFriendlyUnitToCell(
+		object unit,
+		Vector2I destination,
+		IReadOnlyCollection<string> ignoredOfficerIds,
+		IReadOnlyCollection<string> ignoredSurvivorIds)
+	{
+		switch (unit)
+		{
+			case OfficerPawn officer:
+				return TryMoveOfficerToCell(officer, destination, ignoredOfficerIds, true, ignoredSurvivorIds);
+			case MissionNpcPawn survivor:
+				return TryMoveEscortSurvivorToCell(survivor, destination, false, ignoredOfficerIds, ignoredSurvivorIds);
+			default:
+				return false;
+		}
+	}
+
+	private List<object> OrderFriendlyUnitsForGroupMove(List<object> units, Vector2I targetCell)
+	{
+		object primaryUnit = GetPrimarySelectedFriendlyUnit();
+		return units
+			.OrderByDescending(unit => unit == primaryUnit)
+			.ThenBy(unit => GetMovementStepDistance(GetFriendlyUnitCurrentCell(unit), targetCell))
+			.ToList();
+	}
+
+	private List<object> OrderFriendlyUnitsForDirectionalGroupMove(List<object> units, Vector2I direction)
+	{
+		return direction switch
+		{
+			var d when d == new Vector2I(1, 0) => units.OrderByDescending(unit => GetFriendlyUnitCurrentCell(unit).X).ThenBy(unit => GetFriendlyUnitCurrentCell(unit).Y).ToList(),
+			var d when d == new Vector2I(-1, 0) => units.OrderBy(unit => GetFriendlyUnitCurrentCell(unit).X).ThenBy(unit => GetFriendlyUnitCurrentCell(unit).Y).ToList(),
+			var d when d == new Vector2I(0, 1) => units.OrderByDescending(unit => GetFriendlyUnitCurrentCell(unit).Y).ThenBy(unit => GetFriendlyUnitCurrentCell(unit).X).ToList(),
+			var d when d == new Vector2I(0, -1) => units.OrderBy(unit => GetFriendlyUnitCurrentCell(unit).Y).ThenBy(unit => GetFriendlyUnitCurrentCell(unit).X).ToList(),
+			_ => units
+		};
+	}
+
+	private static bool IsCellOccupiedBySelectedUnitNotMoving(
 		Vector2I cell,
 		HashSet<Vector2I> movingOrigins,
-		List<(OfficerPawn Officer, Vector2I Destination)> movePlans)
+		List<(object Unit, Vector2I Origin, Vector2I Destination)> movePlans)
 	{
 		if (!movingOrigins.Contains(cell))
 		{
 			return false;
 		}
 
-		return movePlans.All(plan => plan.Officer.CurrentCell != cell);
+		return movePlans.All(plan => plan.Origin != cell);
 	}
 
 	private List<Vector2I> GetGroupDestinationCandidates(Vector2I targetCell, int maxCandidates)
@@ -3706,7 +3915,7 @@ public partial class MissionMap : Node2D
 		return TryMoveOfficerToCell(officer, targetCell, ignoredOfficerIds, true);
 	}
 
-	private bool TryMoveOfficerToCell(OfficerPawn officer, Vector2I targetCell, IReadOnlyCollection<string> ignoredOfficerIds, bool allowPropRedirect)
+	private bool TryMoveOfficerToCell(OfficerPawn officer, Vector2I targetCell, IReadOnlyCollection<string> ignoredOfficerIds, bool allowPropRedirect, IReadOnlyCollection<string> ignoredSurvivorIds = null)
 	{
 		if (officer == null || _roomBuilder == null || _isoWorld == null)
 		{
@@ -3727,12 +3936,12 @@ public partial class MissionMap : Node2D
 			return false;
 		}
 
-		if (IsCellOccupiedByLivingActor(targetCell, officer, null, ignoredOfficerIds))
+		if (IsCellOccupiedByLivingActor(targetCell, officer, null, ignoredOfficerIds, ignoredSurvivorIds))
 		{
 			return false;
 		}
 
-		if (!TryGetTraversableMovementPath(officer.CurrentCell, targetCell, officer, null, ignoredOfficerIds, out List<Vector2I> pathCells))
+		if (!TryGetTraversableMovementPath(officer.CurrentCell, targetCell, officer, null, ignoredOfficerIds, ignoredSurvivorIds, out List<Vector2I> pathCells))
 		{
 			return false;
 		}
@@ -3744,7 +3953,7 @@ public partial class MissionMap : Node2D
 
 		List<Vector2I> steppedCells = pathCells
 			.Skip(1)
-			.TakeWhile(cell => !IsCellOccupiedByLivingActor(cell, officer, null, ignoredOfficerIds) && !IsMovementCellBlockedByProp(cell))
+			.TakeWhile(cell => !IsCellOccupiedByLivingActor(cell, officer, null, ignoredOfficerIds, ignoredSurvivorIds) && !IsMovementCellBlockedByProp(cell))
 			.ToList();
 		if (steppedCells.Count == 0)
 		{
@@ -3788,7 +3997,12 @@ public partial class MissionMap : Node2D
 		return TryMoveEscortSurvivorToCell(survivor, targetCell, _combatActive);
 	}
 
-	private bool TryMoveEscortSurvivorToCell(MissionNpcPawn survivor, Vector2I targetCell, bool useCombatActions)
+	private bool TryMoveEscortSurvivorToCell(
+		MissionNpcPawn survivor,
+		Vector2I targetCell,
+		bool useCombatActions,
+		IReadOnlyCollection<string> ignoredOfficerIds = null,
+		IReadOnlyCollection<string> ignoredSurvivorIds = null)
 	{
 		if (!IsActiveEscortSurvivor(survivor) || _roomBuilder == null || _isoWorld == null)
 		{
@@ -3806,12 +4020,12 @@ public partial class MissionMap : Node2D
 		}
 
 		targetCell = ResolveMovementTargetCell(targetCell);
-		if (IsMovementCellBlockedByProp(targetCell) || IsCellOccupiedByLivingActor(targetCell, null, survivor))
+		if (IsMovementCellBlockedByProp(targetCell) || IsCellOccupiedByLivingActor(targetCell, null, survivor, ignoredOfficerIds, ignoredSurvivorIds))
 		{
 			return false;
 		}
 
-		if (!TryGetTraversableMovementPath(survivor.CurrentCell, targetCell, null, survivor, null, out List<Vector2I> pathCells))
+		if (!TryGetTraversableMovementPath(survivor.CurrentCell, targetCell, null, survivor, ignoredOfficerIds, ignoredSurvivorIds, out List<Vector2I> pathCells))
 		{
 			return false;
 		}
@@ -3823,7 +4037,7 @@ public partial class MissionMap : Node2D
 
 		List<Vector2I> steppedCells = pathCells
 			.Skip(1)
-			.TakeWhile(cell => !IsCellOccupiedByLivingActor(cell, null, survivor) && !IsMovementCellBlockedByProp(cell))
+			.TakeWhile(cell => !IsCellOccupiedByLivingActor(cell, null, survivor, ignoredOfficerIds, ignoredSurvivorIds) && !IsMovementCellBlockedByProp(cell))
 			.ToList();
 		if (steppedCells.Count == 0)
 		{
@@ -4879,7 +5093,8 @@ public partial class MissionMap : Node2D
 		Vector2I cell,
 		OfficerPawn ignoreOfficer = null,
 		MissionNpcPawn ignoreEnemy = null,
-		IReadOnlyCollection<string> ignoredOfficerIds = null)
+		IReadOnlyCollection<string> ignoredOfficerIds = null,
+		IReadOnlyCollection<string> ignoredSurvivorIds = null)
 	{
 		foreach (OfficerPawn pawn in _officerPawns)
 		{
@@ -4902,6 +5117,11 @@ public partial class MissionMap : Node2D
 		foreach (MissionNpcPawn npc in _missionNpcs)
 		{
 			if (npc == null || npc == ignoreEnemy || npc.IsDead || npc.IsExtracted)
+			{
+				continue;
+			}
+
+			if (ignoredSurvivorIds != null && !string.IsNullOrWhiteSpace(npc.NpcId) && ignoredSurvivorIds.Contains(npc.NpcId))
 			{
 				continue;
 			}
@@ -5229,19 +5449,14 @@ public partial class MissionMap : Node2D
 
 		_extractedSurvivorIds.Add(survivor.NpcId);
 		survivor.SetExtracted();
+		_selectedEscortSurvivorIds.Remove(survivor.NpcId);
 		if (survivor.NpcId == _selectedEscortSurvivorId)
 		{
 			_selectedEscortSurvivorId = string.Empty;
-			if (_officerPawns.Count > 0)
-			{
-				SelectOfficer(_selectedOfficerIndex);
-			}
-			else
-			{
-				UpdateOfficerSelectionVisuals();
-				UpdateSelectedOfficerDisplay();
-			}
 		}
+		NormalizeFriendlySelectionState();
+		UpdateOfficerSelectionVisuals();
+		UpdateSelectedOfficerDisplay();
 		AppendActionLog($"{survivor.DisplayName} reaches the evac zone and is brought aboard the fleet.");
 		ReindexMissionNpcCells();
 		UpdateFogOfWar();
@@ -6239,6 +6454,18 @@ public partial class MissionMap : Node2D
 		IReadOnlyCollection<string> ignoredOfficerIds,
 		out List<Vector2I> path)
 	{
+		return TryGetTraversableMovementPath(startCell, targetCell, ignoreOfficer, ignoreEnemy, ignoredOfficerIds, null, out path);
+	}
+
+	private bool TryGetTraversableMovementPath(
+		Vector2I startCell,
+		Vector2I targetCell,
+		OfficerPawn ignoreOfficer,
+		MissionNpcPawn ignoreEnemy,
+		IReadOnlyCollection<string> ignoredOfficerIds,
+		IReadOnlyCollection<string> ignoredSurvivorIds,
+		out List<Vector2I> path)
+	{
 		path = new List<Vector2I>();
 		if (_roomBuilder == null)
 		{
@@ -6287,7 +6514,7 @@ public partial class MissionMap : Node2D
 					continue;
 				}
 
-				if (next != targetCell && IsCellOccupiedByLivingActor(next, ignoreOfficer, ignoreEnemy, ignoredOfficerIds))
+				if (next != targetCell && IsCellOccupiedByLivingActor(next, ignoreOfficer, ignoreEnemy, ignoredOfficerIds, ignoredSurvivorIds))
 				{
 					continue;
 				}
@@ -6464,19 +6691,17 @@ public partial class MissionMap : Node2D
 			_engagedEnemyIds.Remove(pawn.NpcId);
 		}
 
-		if (pawn != null && pawn.NpcId == _selectedEscortSurvivorId)
+		if (pawn != null && !string.IsNullOrWhiteSpace(pawn.NpcId))
 		{
-			_selectedEscortSurvivorId = string.Empty;
-			if (_officerPawns.Count > 0)
+			_selectedEscortSurvivorIds.Remove(pawn.NpcId);
+			if (pawn.NpcId == _selectedEscortSurvivorId)
 			{
-				SelectOfficer(_selectedOfficerIndex);
-			}
-			else
-			{
-				UpdateOfficerSelectionVisuals();
-				UpdateSelectedOfficerDisplay();
+				_selectedEscortSurvivorId = string.Empty;
 			}
 		}
+		NormalizeFriendlySelectionState();
+		UpdateOfficerSelectionVisuals();
+		UpdateSelectedOfficerDisplay();
 
 		ReindexMissionNpcCells();
 		UpdateFogOfWar();
@@ -6596,7 +6821,7 @@ public partial class MissionMap : Node2D
 		return new MissionCombatantSummary
 		{
 			DisplayName = enemy.DisplayName,
-			Subtitle = enemy.IsHostile ? "Hostile Contact" : IsEscortSurvivor(enemy) ? "Escort Survivor" : "Mission Contact",
+			Subtitle = enemy.IsHostile ? "Hostile Contact" : IsEscortSurvivor(enemy) ? $"Escort {CampaignText.RemnantsLabel.TrimEnd('s')}" : "Mission Contact",
 			WeaponName = enemy.WeaponName,
 			ShieldName = enemy.ShieldName,
 			Icon = icon,

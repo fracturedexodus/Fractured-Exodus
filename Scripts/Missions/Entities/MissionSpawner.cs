@@ -1,6 +1,7 @@
 using Godot;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 public sealed class MissionSpawner
 {
@@ -55,15 +56,23 @@ public sealed class MissionSpawner
 			return spawnedNpcs;
 		}
 
-		foreach (MissionSpawnResult spawn in _spawnResolver.ResolveNpcSpawns(context))
+		List<MissionSpawnResult> npcSpawns = _spawnResolver.ResolveNpcSpawns(context);
+		HashSet<string> reservedPortraitPaths = new HashSet<string>();
+		foreach (MissionSpawnResult spawn in npcSpawns)
 		{
 			if (spawn?.NpcDefinition == null)
 			{
 				continue;
 			}
 
-			string scenePath = !string.IsNullOrWhiteSpace(spawn.NpcDefinition.ScenePath)
-				? spawn.NpcDefinition.ScenePath
+			MissionNpcDefinition resolvedDefinition = ResolvePortraitAssignment(spawn.NpcDefinition, reservedPortraitPaths);
+			if (resolvedDefinition == null)
+			{
+				continue;
+			}
+
+			string scenePath = !string.IsNullOrWhiteSpace(resolvedDefinition.ScenePath)
+				? resolvedDefinition.ScenePath
 				: MissionNpcPawnScenePath;
 			PackedScene npcScene = GD.Load<PackedScene>(scenePath);
 			if (npcScene == null)
@@ -73,11 +82,41 @@ public sealed class MissionSpawner
 
 			MissionNpcPawn npc = npcScene.Instantiate<MissionNpcPawn>();
 			characterLayer.AddChild(npc);
-			npc.ApplyDefinition(spawn.NpcDefinition);
+			npc.ApplyDefinition(resolvedDefinition);
 			npc.SetGridCell(spawn.Cell, cellToGlobalPosition(spawn.Cell));
 			spawnedNpcs.Add(npc);
 		}
 
 		return spawnedNpcs;
+	}
+
+	private static MissionNpcDefinition ResolvePortraitAssignment(MissionNpcDefinition definition, ISet<string> reservedPortraitPaths)
+	{
+		if (definition == null)
+		{
+			return null;
+		}
+
+		MissionNpcDefinition resolvedDefinition = definition.Duplicate() as MissionNpcDefinition ?? definition;
+		string portraitPath = resolvedDefinition.PortraitPath ?? string.Empty;
+		bool canKeepPortrait = MissionNpcPortraitCatalog.IsNpcPortraitPath(portraitPath)
+			&& !string.IsNullOrWhiteSpace(portraitPath)
+			&& !reservedPortraitPaths.Contains(portraitPath);
+		if (!canKeepPortrait)
+		{
+			string fallbackPortraitPath = MissionNpcPortraitCatalog.GetNextUnusedPortraitPath(reservedPortraitPaths);
+			if (!string.IsNullOrWhiteSpace(fallbackPortraitPath))
+			{
+				resolvedDefinition.PortraitPath = fallbackPortraitPath;
+				portraitPath = fallbackPortraitPath;
+			}
+		}
+
+		if (!string.IsNullOrWhiteSpace(portraitPath))
+		{
+			reservedPortraitPaths.Add(portraitPath);
+		}
+
+		return resolvedDefinition;
 	}
 }

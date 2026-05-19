@@ -27,6 +27,14 @@ public sealed class MissionCombatantSummary
 	public string Notes { get; init; } = string.Empty;
 }
 
+public sealed class MissionInfoPanelRefs
+{
+	public PanelContainer Panel { get; init; }
+	public TextureRect Icon { get; init; }
+	public Label Header { get; init; }
+	public Label Info { get; init; }
+}
+
 public partial class MissionUI : CanvasLayer
 {
 	private static readonly Color HudPanelBackground = new Color(0.04f, 0.05f, 0.08f, 0.74f);
@@ -34,10 +42,11 @@ public partial class MissionUI : CanvasLayer
 	private static readonly Color HudAccentBorder = new Color(0.24f, 0.64f, 0.78f, 0.82f);
 	private const string ActionLogReadyHeader = "[color=gray]--- ACTION LOG READY ---[/color]";
 
-	private const float ExplorationSelectionSingleWidth = 372f;
-	private const float ExplorationSelectionDoubleWidth = 732f;
+	private const float ExplorationSelectionMinimumWidth = 372f;
+	private const float ExplorationSelectionMaximumWidth = 1812f;
+	private const float ExplorationCardSpacing = 12f;
 	private const float ExplorationCardWidth = 348f;
-	private const float ExplorationCardHeight = 286f;
+	private const float ExplorationCardHeight = 340f;
 
 	[Signal]
 	public delegate void ExtractionOutcomeChosenEventHandler(string outcomeId);
@@ -86,14 +95,9 @@ public partial class MissionUI : CanvasLayer
 	private Label _enemyCombatHeaderLabel;
 	private Label _enemyCombatInfoLabel;
 	private PanelContainer _explorationSelectionPanel;
-	private PanelContainer _explorationPrimaryInfoPanel;
-	private TextureRect _explorationPrimaryIcon;
-	private Label _explorationPrimaryHeaderLabel;
-	private Label _explorationPrimaryInfoLabel;
-	private PanelContainer _explorationSecondaryInfoPanel;
-	private TextureRect _explorationSecondaryIcon;
-	private Label _explorationSecondaryHeaderLabel;
-	private Label _explorationSecondaryInfoLabel;
+	private ScrollContainer _explorationSelectionScroll;
+	private HBoxContainer _explorationSelectionRow;
+	private readonly List<MissionInfoPanelRefs> _explorationInfoCards = new List<MissionInfoPanelRefs>();
 	private PanelContainer _combatLogPanel;
 	private RichTextLabel _combatLogText;
 	private readonly List<string> _combatLogEntries = new List<string>();
@@ -340,21 +344,19 @@ public partial class MissionUI : CanvasLayer
 		}
 
 		_explorationSelectionPanel.Visible = true;
-		UpdateExplorationSelectionPanelWidth(Mathf.Clamp(summaries.Count, 1, 2));
-		UpdateCombatInfoPanel(
-			summaries.Count > 0 ? summaries[0] : null,
-			_explorationPrimaryInfoPanel,
-			_explorationPrimaryIcon,
-			_explorationPrimaryHeaderLabel,
-			_explorationPrimaryInfoLabel,
-			"UNIT");
-		UpdateCombatInfoPanel(
-			summaries.Count > 1 ? summaries[1] : null,
-			_explorationSecondaryInfoPanel,
-			_explorationSecondaryIcon,
-			_explorationSecondaryHeaderLabel,
-			_explorationSecondaryInfoLabel,
-			"UNIT");
+		EnsureExplorationSelectionCards(summaries.Count);
+		UpdateExplorationSelectionPanelWidth(summaries.Count);
+		for (int i = 0; i < _explorationInfoCards.Count; i++)
+		{
+			MissionInfoPanelRefs card = _explorationInfoCards[i];
+			UpdateCombatInfoPanel(
+				i < summaries.Count ? summaries[i] : null,
+				card.Panel,
+				card.Icon,
+				card.Header,
+				card.Info,
+				"UNIT");
+		}
 	}
 
 	public void SetCombatEndTurnEnabled(bool enabled, bool visible = true)
@@ -648,8 +650,8 @@ public partial class MissionUI : CanvasLayer
 		};
 		_explorationSelectionPanel.SetAnchorsPreset(Control.LayoutPreset.BottomLeft);
 		_explorationSelectionPanel.OffsetLeft = 20f;
-		_explorationSelectionPanel.OffsetTop = -360f;
-		_explorationSelectionPanel.OffsetRight = 20f + ExplorationSelectionDoubleWidth;
+		_explorationSelectionPanel.OffsetTop = -430f;
+		_explorationSelectionPanel.OffsetRight = 20f + ExplorationSelectionMaximumWidth;
 		_explorationSelectionPanel.OffsetBottom = -58f;
 		_explorationSelectionPanel.AddThemeStyleboxOverride("panel", CreateTransparentPanelStyle());
 		_uiRoot.AddChild(_explorationSelectionPanel);
@@ -661,35 +663,21 @@ public partial class MissionUI : CanvasLayer
 		margin.AddThemeConstantOverride("margin_bottom", 12);
 		_explorationSelectionPanel.AddChild(margin);
 
-		HBoxContainer row = new HBoxContainer
+		_explorationSelectionScroll = new ScrollContainer
+		{
+			HorizontalScrollMode = ScrollContainer.ScrollMode.ShowNever,
+			VerticalScrollMode = ScrollContainer.ScrollMode.ShowNever,
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+			SizeFlagsVertical = Control.SizeFlags.ExpandFill
+		};
+		margin.AddChild(_explorationSelectionScroll);
+
+		_explorationSelectionRow = new HBoxContainer
 		{
 			Alignment = BoxContainer.AlignmentMode.Begin
 		};
-		row.AddThemeConstantOverride("separation", 12);
-		margin.AddChild(row);
-
-		_explorationPrimaryInfoPanel = BuildCombatInfoPanel(
-			Vector2.Zero,
-			out _explorationPrimaryIcon,
-			out _explorationPrimaryHeaderLabel,
-			out _explorationPrimaryInfoLabel,
-			new Vector2(ExplorationCardWidth, ExplorationCardHeight),
-			new Vector2(156f, 132f));
-		_explorationSecondaryInfoPanel = BuildCombatInfoPanel(
-			Vector2.Zero,
-			out _explorationSecondaryIcon,
-			out _explorationSecondaryHeaderLabel,
-			out _explorationSecondaryInfoLabel,
-			new Vector2(ExplorationCardWidth, ExplorationCardHeight),
-			new Vector2(156f, 132f));
-		_explorationPrimaryInfoPanel.Position = Vector2.Zero;
-		_explorationSecondaryInfoPanel.Position = Vector2.Zero;
-		_explorationPrimaryInfoPanel.Visible = false;
-		_explorationSecondaryInfoPanel.Visible = false;
-		_explorationPrimaryInfoPanel.AddThemeStyleboxOverride("panel", CreateTransparentPanelStyle());
-		_explorationSecondaryInfoPanel.AddThemeStyleboxOverride("panel", CreateTransparentPanelStyle());
-		row.AddChild(_explorationPrimaryInfoPanel);
-		row.AddChild(_explorationSecondaryInfoPanel);
+		_explorationSelectionRow.AddThemeConstantOverride("separation", (int)ExplorationCardSpacing);
+		_explorationSelectionScroll.AddChild(_explorationSelectionRow);
 	}
 
 	private void BuildCombatLog()
@@ -1126,7 +1114,8 @@ public partial class MissionUI : CanvasLayer
 		panel.Visible = true;
 		iconRect.Texture = summary.Icon;
 		headerLabel.Text = $"== {summary.DisplayName.ToUpperInvariant()} ==";
-		infoLabel.Text = $"{emptyTitle}: {summary.DisplayName}\nWEAPON: {summary.WeaponName}\nSHIELD: {summary.ShieldName}\nHP: {summary.CurrentHP}/{summary.MaxHP}\nSHIELDS: {summary.CurrentShields}/{summary.MaxShields}\nAP: {summary.CurrentAP}/{summary.MaxAP}\nRANGE: {summary.AttackRange} | DMG: {summary.AttackMinDamage}-{summary.AttackMaxDamage}";
+		string subtitleLine = string.IsNullOrWhiteSpace(summary.Subtitle) ? string.Empty : $"{summary.Subtitle}\n";
+		infoLabel.Text = $"{emptyTitle}: {summary.DisplayName}\n{subtitleLine}WEAPON: {summary.WeaponName}\nSHIELD: {summary.ShieldName}\nHP: {summary.CurrentHP}/{summary.MaxHP}\nSHIELDS: {summary.CurrentShields}/{summary.MaxShields}\nAP: {summary.CurrentAP}/{summary.MaxAP}\nRANGE: {summary.AttackRange} | DMG: {summary.AttackMinDamage}-{summary.AttackMaxDamage}";
 	}
 
 	private void UpdateExplorationSelectionPanelWidth(int visibleCardCount)
@@ -1136,10 +1125,39 @@ public partial class MissionUI : CanvasLayer
 			return;
 		}
 
-		float targetWidth = visibleCardCount > 1
-			? ExplorationSelectionDoubleWidth
-			: ExplorationSelectionSingleWidth;
+		float contentWidth = (visibleCardCount * ExplorationCardWidth) + (Mathf.Max(0, visibleCardCount - 1) * ExplorationCardSpacing) + 24f;
+		float targetWidth = Mathf.Clamp(contentWidth, ExplorationSelectionMinimumWidth, ExplorationSelectionMaximumWidth);
 		_explorationSelectionPanel.OffsetRight = _explorationSelectionPanel.OffsetLeft + targetWidth;
+	}
+
+	private void EnsureExplorationSelectionCards(int requiredCount)
+	{
+		if (_explorationSelectionRow == null)
+		{
+			return;
+		}
+
+		while (_explorationInfoCards.Count < requiredCount)
+		{
+			PanelContainer panel = BuildCombatInfoPanel(
+				Vector2.Zero,
+				out TextureRect icon,
+				out Label header,
+				out Label info,
+				new Vector2(ExplorationCardWidth, ExplorationCardHeight),
+				new Vector2(156f, 132f));
+			panel.Position = Vector2.Zero;
+			panel.Visible = false;
+			panel.AddThemeStyleboxOverride("panel", CreateTransparentPanelStyle());
+			_explorationSelectionRow.AddChild(panel);
+			_explorationInfoCards.Add(new MissionInfoPanelRefs
+			{
+				Panel = panel,
+				Icon = icon,
+				Header = header,
+				Info = info
+			});
+		}
 	}
 
 	private static StyleBoxFlat CreateCombatSquareStyle(Color backgroundColor, Color borderColor)
