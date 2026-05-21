@@ -139,7 +139,9 @@ public partial class GalacticMap : Control
 		}
 
 		AudioStream streamToPlay = null;
-		if (string.IsNullOrEmpty(_globalData?.SavedSystem))
+		bool useOpeningMapMusic = string.IsNullOrEmpty(_globalData?.SavedSystem)
+			|| _globalData?.JustJumped == true;
+		if (useOpeningMapMusic)
 		{
 			string openingMusicFilePath = ProjectSettings.GlobalizePath(StartingRegionMusicPath);
 			streamToPlay = _audioPlaybackService?.GetMp3StreamFromFile(openingMusicFilePath, loop: true);
