@@ -5,6 +5,9 @@ using System.Linq;
 
 public partial class GalacticMap : Control
 {
+	private const string DefaultMapMusicPath = "res://Sounds/Custodian_s_Legacy.mp3";
+	private const string StartingRegionMusicPath = "res://Sounds/Where_The_Compass_Points.mp3";
+
 	// --- THE REGION IMAGE MASK ---
 	[Export] public Texture2D RegionMaskTexture; 
 	private Image _regionImage;
@@ -14,6 +17,7 @@ public partial class GalacticMap : Control
 	private SystemWindow _systemWindow;
 	private GlobalData _globalData; 
 	private JumpService _jumpService;
+	private AudioPlaybackService _audioPlaybackService;
 
 	// --- NEW: LIST TO TRACK VISUAL STARS FOR CLEANUP ---
 	private List<Control> _drawnStars = new List<Control>();
@@ -78,8 +82,10 @@ public partial class GalacticMap : Control
 	{
 		_globalData = GetNode<GlobalData>("/root/GlobalData");
 		_jumpService = new JumpService(_globalData);
+		_audioPlaybackService = new AudioPlaybackService();
 		_systemWindow = GetNode<SystemWindow>("SystemWindow");
 		_systemWindow.Visible = false;
+		ConfigureMapMusic();
 
 		_warpLine = new Line2D();
 		_warpLine.Width = 3.0f;
@@ -122,6 +128,38 @@ public partial class GalacticMap : Control
 			if (randomizeBtn != null) randomizeBtn.Visible = false;
 			if (menuBtn != null) menuBtn.Visible = false;
 		}
+	}
+
+	private void ConfigureMapMusic()
+	{
+		AudioStreamPlayer mapMusic = GetNodeOrNull<AudioStreamPlayer>("MapMusic");
+		if (mapMusic == null)
+		{
+			return;
+		}
+
+		AudioStream streamToPlay = null;
+		if (string.IsNullOrEmpty(_globalData?.SavedSystem))
+		{
+			string openingMusicFilePath = ProjectSettings.GlobalizePath(StartingRegionMusicPath);
+			streamToPlay = _audioPlaybackService?.GetMp3StreamFromFile(openingMusicFilePath, loop: true);
+		}
+
+		if (streamToPlay == null)
+		{
+			streamToPlay = _audioPlaybackService?.GetStream(DefaultMapMusicPath);
+			if (streamToPlay is AudioStreamMP3 defaultMapMusic)
+			{
+				defaultMapMusic.Loop = true;
+			}
+		}
+
+		if (streamToPlay == null)
+		{
+			return;
+		}
+
+		_audioPlaybackService?.TryPlayLoaded(mapMusic, streamToPlay);
 	}
 
 	private Vector2[] CreateCirclePolygon(float radius)

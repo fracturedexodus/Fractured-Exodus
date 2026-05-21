@@ -3,7 +3,6 @@
 [ext_resource type="Script" uid="uid://cvswq0fg77o43" path="res://GalacticMap.cs" id="1_e1oxo"]
 [ext_resource type="Texture2D" uid="uid://dbq6qkjwatdci" path="res://Assets/Backgrounds/EidraluneMap_BG.png" id="2_0oxw2"]
 [ext_resource type="Texture2D" uid="uid://bvewwcbbx0h2h" path="res://Assets/Backgrounds/region_mask.png" id="2_pd335"]
-[ext_resource type="AudioStream" uid="uid://diharanfm23q3" path="res://Sounds/Custodian_s_Legacy.mp3" id="3_tkp1o"]
 [ext_resource type="Script" uid="uid://b3cxpaw43vqb7" path="res://SystemWindow.cs" id="4_w7lh3"]
 [ext_resource type="FontFile" uid="uid://cs2qy7wansjjb" path="res://Assets/UI/Orbitron-VariableFont_wght.ttf" id="5_hafba"]
 
@@ -36,8 +35,6 @@ expand_mode = 1
 stretch_mode = 6
 
 [node name="MapMusic" type="AudioStreamPlayer" parent="." unique_id=1238771026]
-stream = ExtResource("3_tkp1o")
-autoplay = true
 
 [node name="MapControls" type="VBoxContainer" parent="." unique_id=1040973345]
 layout_mode = 1

@@ -81,15 +81,20 @@ size_flags_horizontal = 3
 custom_minimum_size = Vector2(260, 0)
 layout_mode = 2
 size_flags_horizontal = 3
+editable = false
 text = "black_site_relay_builder"
+
+[node name="NameMissionButton" type="Button" parent="UILayer/TopBar/Margin/TopRow" unique_id=1812013375]
+layout_mode = 2
+text = "Name Mission"
 
 [node name="SaveButton" type="Button" parent="UILayer/TopBar/Margin/TopRow" unique_id=1092572079]
 layout_mode = 2
-text = "Save Layout"
+text = "Save Mission"
 
 [node name="LoadButton" type="Button" parent="UILayer/TopBar/Margin/TopRow" unique_id=1621727418]
 layout_mode = 2
-text = "Load Layout"
+text = "Load Mission"
 
 [node name="ClearButton" type="Button" parent="UILayer/TopBar/Margin/TopRow" unique_id=216099019]
 layout_mode = 2

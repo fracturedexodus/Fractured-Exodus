@@ -14,6 +14,8 @@ public partial class MissionSceneBuilder : Node2D
 	private const float TileRotateStep = 15f;
 	private const int GridPreviewColumns = 20;
 	private const int GridPreviewRows = 20;
+	private const string DefaultLayoutName = "black_site_relay_builder";
+	private const string LayoutDirectoryResourcePath = "res://Data/MissionLayouts";
 
 	private enum BuilderLayer
 	{
@@ -32,6 +34,10 @@ public partial class MissionSceneBuilder : Node2D
 	private LineEdit _paletteSearchEdit;
 	private Label _statusLabel;
 	private LineEdit _layoutNameEdit;
+	private ConfirmationDialog _loadLayoutDialog;
+	private ItemList _loadLayoutList;
+	private ConfirmationDialog _nameMissionDialog;
+	private LineEdit _nameMissionEdit;
 	private OptionButton _backgroundOption;
 	private Node2D _hoverLayer;
 	private TextureRect _backgroundBackdrop;
@@ -135,6 +141,7 @@ public partial class MissionSceneBuilder : Node2D
 	private Vector2 _cachedPlacedMapCenter = Vector2.Zero;
 	private DialogueConversationData _activeDialogueConversation;
 	private string _activeDialogueNodeId = string.Empty;
+	private string _currentLayoutName = DefaultLayoutName;
 
 	private sealed class PropDefinitionPreview
 	{
@@ -204,11 +211,14 @@ public partial class MissionSceneBuilder : Node2D
 		_paletteContainer = GetNode<VBoxContainer>("UILayer/PalettePanel/Margin/PaletteScroll/PaletteList");
 		_statusLabel = GetNode<Label>("UILayer/BottomBar/Margin/StatusLabel");
 		_layoutNameEdit = GetNode<LineEdit>("UILayer/TopBar/Margin/TopRow/LayoutNameEdit");
+		_layoutNameEdit.Editable = false;
 		_selectedLabel = GetNode<Label>("UILayer/TopBar/Margin/TopRow/SelectedTileLabel");
 		_hoverLayer = GetNode<Node2D>("World/HoverLayer");
 		_controlsPanel = GetNodeOrNull<PanelContainer>("UILayer/ControlsPanel");
+		SetCurrentLayoutName(DefaultLayoutName);
 
 		EnsureBackgroundPreviewNodes();
+		BuildMissionDialogs();
 		BuildBackgroundControls();
 		BuildPalette();
 		BuildGrid();
@@ -411,7 +421,8 @@ public partial class MissionSceneBuilder : Node2D
 	private void WireUi()
 	{
 		GetNode<Button>("UILayer/TopBar/Margin/TopRow/SaveButton").Pressed += SaveLayout;
-		GetNode<Button>("UILayer/TopBar/Margin/TopRow/LoadButton").Pressed += LoadLayout;
+		GetNode<Button>("UILayer/TopBar/Margin/TopRow/LoadButton").Pressed += ShowLoadLayoutDialog;
+		GetNode<Button>("UILayer/TopBar/Margin/TopRow/NameMissionButton").Pressed += ShowNameMissionDialog;
 		Button validateButton = new Button { Text = "Validate" };
 		validateButton.Pressed += ValidateLayout;
 		HBoxContainer topRow = GetNode<HBoxContainer>("UILayer/TopBar/Margin/TopRow");
@@ -421,6 +432,72 @@ public partial class MissionSceneBuilder : Node2D
 		topRow.AddChild(frameMapButton);
 		GetNode<Button>("UILayer/TopBar/Margin/TopRow/ClearButton").Pressed += ClearLayout;
 		GetNode<Button>("UILayer/TopBar/Margin/TopRow/ExitButton").Pressed += ExitBuilder;
+	}
+
+	private void BuildMissionDialogs()
+	{
+		_loadLayoutDialog = new ConfirmationDialog
+		{
+			Title = "Load Mission Layout",
+			Exclusive = true,
+			MinSize = new Vector2I(560, 420)
+		};
+		AddChild(_loadLayoutDialog);
+		_loadLayoutDialog.GetOkButton().Text = "Load Selected";
+		_loadLayoutDialog.Confirmed += LoadSelectedLayoutFromDialog;
+
+		VBoxContainer loadRoot = new VBoxContainer();
+		loadRoot.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+		loadRoot.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
+		loadRoot.AddThemeConstantOverride("separation", 10);
+		_loadLayoutDialog.AddChild(loadRoot);
+
+		Label loadHelp = new Label
+		{
+			Text = "Choose which mission layout to open in the builder.",
+			AutowrapMode = TextServer.AutowrapMode.WordSmart
+		};
+		loadRoot.AddChild(loadHelp);
+
+		_loadLayoutList = new ItemList
+		{
+			SelectMode = ItemList.SelectModeEnum.Single,
+			CustomMinimumSize = new Vector2(0f, 280f),
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+			SizeFlagsVertical = Control.SizeFlags.ExpandFill
+		};
+		_loadLayoutList.ItemActivated += OnLoadLayoutItemActivated;
+		loadRoot.AddChild(_loadLayoutList);
+
+		_nameMissionDialog = new ConfirmationDialog
+		{
+			Title = "Name Mission",
+			Exclusive = true,
+			MinSize = new Vector2I(520, 180)
+		};
+		AddChild(_nameMissionDialog);
+		_nameMissionDialog.GetOkButton().Text = "Use Name";
+		_nameMissionDialog.Confirmed += ConfirmMissionNameFromDialog;
+
+		VBoxContainer nameRoot = new VBoxContainer();
+		nameRoot.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+		nameRoot.AddThemeConstantOverride("separation", 10);
+		_nameMissionDialog.AddChild(nameRoot);
+
+		Label nameHelp = new Label
+		{
+			Text = "Set the mission layout name for the current builder work. Save will write to that mission file later.",
+			AutowrapMode = TextServer.AutowrapMode.WordSmart
+		};
+		nameRoot.AddChild(nameHelp);
+
+		_nameMissionEdit = new LineEdit
+		{
+			PlaceholderText = DefaultLayoutName,
+			Text = _currentLayoutName
+		};
+		_nameMissionEdit.TextSubmitted += _ => ConfirmMissionNameFromDialog();
+		nameRoot.AddChild(_nameMissionEdit);
 	}
 
 	private void BuildBackgroundControls()
@@ -4032,13 +4109,193 @@ public partial class MissionSceneBuilder : Node2D
 
 	private string GetCurrentLayoutResourcePath()
 	{
-		string layoutName = _layoutNameEdit?.Text.StripEdges() ?? string.Empty;
-		if (string.IsNullOrEmpty(layoutName))
+		return GetLayoutResourcePath(GetCurrentLayoutName());
+	}
+
+	private void SetCurrentLayoutName(string layoutName)
+	{
+		_currentLayoutName = string.IsNullOrWhiteSpace(layoutName) ? DefaultLayoutName : layoutName.StripEdges();
+		if (_layoutNameEdit != null)
 		{
-			layoutName = "black_site_relay_builder";
+			_layoutNameEdit.Text = _currentLayoutName;
+		}
+	}
+
+	private string GetCurrentLayoutName()
+	{
+		if (string.IsNullOrWhiteSpace(_currentLayoutName))
+		{
+			_currentLayoutName = DefaultLayoutName;
 		}
 
-		return $"res://Data/MissionLayouts/{layoutName}.json";
+		return _currentLayoutName;
+	}
+
+	private string GetLayoutResourcePath(string layoutName)
+	{
+		return $"{LayoutDirectoryResourcePath}/{layoutName}.json";
+	}
+
+	private string GetLayoutAbsolutePath(string layoutName)
+	{
+		return ProjectSettings.GlobalizePath(GetLayoutResourcePath(layoutName));
+	}
+
+	private string GetLayoutDirectoryAbsolutePath()
+	{
+		return ProjectSettings.GlobalizePath(LayoutDirectoryResourcePath);
+	}
+
+	private bool TryNormalizeLayoutName(string rawName, out string normalizedName, out string errorMessage)
+	{
+		normalizedName = string.Empty;
+		errorMessage = string.Empty;
+
+		string trimmed = rawName?.StripEdges() ?? string.Empty;
+		if (string.IsNullOrWhiteSpace(trimmed))
+		{
+			errorMessage = "Enter a mission name first.";
+			return false;
+		}
+
+		char[] sanitizedChars = trimmed
+			.Select(ch => char.IsLetterOrDigit(ch) ? char.ToLowerInvariant(ch) : (ch == ' ' || ch == '-' ? '_' : ch))
+			.Where(ch => char.IsLetterOrDigit(ch) || ch == '_')
+			.ToArray();
+		normalizedName = new string(sanitizedChars).Trim('_');
+
+		if (string.IsNullOrWhiteSpace(normalizedName))
+		{
+			errorMessage = "Mission names need at least one letter or number.";
+			return false;
+		}
+
+		return true;
+	}
+
+	private List<string> GetAvailableLayoutNames()
+	{
+		List<string> layoutNames = new List<string>();
+		DirAccess dir = DirAccess.Open(LayoutDirectoryResourcePath);
+		if (dir == null)
+		{
+			return layoutNames;
+		}
+
+		dir.ListDirBegin();
+		while (true)
+		{
+			string entryName = dir.GetNext();
+			if (string.IsNullOrEmpty(entryName))
+			{
+				break;
+			}
+
+			if (dir.CurrentIsDir() || !entryName.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+			{
+				continue;
+			}
+
+			layoutNames.Add(entryName[..^5]);
+		}
+
+		dir.ListDirEnd();
+		layoutNames.Sort(StringComparer.OrdinalIgnoreCase);
+		return layoutNames;
+	}
+
+	private void ShowLoadLayoutDialog()
+	{
+		if (_loadLayoutDialog == null || _loadLayoutList == null)
+		{
+			return;
+		}
+
+		List<string> layoutNames = GetAvailableLayoutNames();
+		_loadLayoutList.Clear();
+		foreach (string layoutName in layoutNames)
+		{
+			_loadLayoutList.AddItem(layoutName);
+		}
+
+		if (layoutNames.Count == 0)
+		{
+			SetStatus("No mission layouts were found to load.");
+			return;
+		}
+
+		int selectedIndex = Math.Max(0, layoutNames.FindIndex(name => string.Equals(name, GetCurrentLayoutName(), StringComparison.OrdinalIgnoreCase)));
+		_loadLayoutList.Select(selectedIndex);
+		_loadLayoutDialog.PopupCentered();
+	}
+
+	private void OnLoadLayoutItemActivated(long index)
+	{
+		if (_loadLayoutList == null || index < 0 || index >= _loadLayoutList.ItemCount)
+		{
+			return;
+		}
+
+		LoadSelectedLayoutFromDialog();
+	}
+
+	private void LoadSelectedLayoutFromDialog()
+	{
+		if (_loadLayoutList == null)
+		{
+			return;
+		}
+
+		int[] selectedItems = _loadLayoutList.GetSelectedItems();
+		if (selectedItems.Length == 0)
+		{
+			SetStatus("Choose a mission layout to load.");
+			return;
+		}
+
+		string selectedLayoutName = _loadLayoutList.GetItemText(selectedItems[0]);
+		SetCurrentLayoutName(selectedLayoutName);
+		LoadLayout();
+		_loadLayoutDialog?.Hide();
+	}
+
+	private void ShowNameMissionDialog()
+	{
+		if (_nameMissionDialog == null || _nameMissionEdit == null)
+		{
+			return;
+		}
+
+		_nameMissionEdit.Text = GetCurrentLayoutName();
+		_nameMissionDialog.PopupCentered();
+		_nameMissionEdit.GrabFocus();
+		_nameMissionEdit.SelectAll();
+	}
+
+	private void ConfirmMissionNameFromDialog()
+	{
+		if (_nameMissionEdit == null)
+		{
+			return;
+		}
+
+		if (!TryNormalizeLayoutName(_nameMissionEdit.Text, out string layoutName, out string errorMessage))
+		{
+			SetStatus(errorMessage);
+			return;
+		}
+
+		SetCurrentLayoutName(layoutName);
+		_nameMissionDialog?.Hide();
+
+		string absolutePath = GetLayoutAbsolutePath(layoutName);
+		if (FileAccess.FileExists(absolutePath))
+		{
+			SetStatus($"Mission name set to {layoutName}. That file already exists, so Save Mission will overwrite it.");
+			return;
+		}
+
+		SetStatus($"Mission name set to {layoutName}. Build or edit the layout, then press Save Mission when you're ready.");
 	}
 
 	private void UpdateMarkerCaption(Sprite2D sprite)
@@ -4186,8 +4443,9 @@ public partial class MissionSceneBuilder : Node2D
 
 	private void SaveLayout()
 	{
-		string path = GetLayoutAbsolutePath();
-		DirAccess.MakeDirRecursiveAbsolute(ProjectSettings.GlobalizePath("res://Data/MissionLayouts"));
+		string layoutName = GetCurrentLayoutName();
+		string path = GetLayoutAbsolutePath(layoutName);
+		DirAccess.MakeDirRecursiveAbsolute(GetLayoutDirectoryAbsolutePath());
 		using FileAccess file = FileAccess.Open(path, FileAccess.ModeFlags.Write);
 		if (file == null)
 		{
@@ -4268,10 +4526,11 @@ public partial class MissionSceneBuilder : Node2D
 
 	private void LoadLayout()
 	{
-		string path = GetLayoutAbsolutePath();
+		string layoutName = GetCurrentLayoutName();
+		string path = GetLayoutAbsolutePath(layoutName);
 		if (!FileAccess.FileExists(path))
 		{
-			SetStatus("No saved layout yet. Start placing tiles.");
+			SetStatus($"No saved layout exists for {layoutName} yet. Start placing tiles or name a different mission.");
 			return;
 		}
 
@@ -4436,18 +4695,6 @@ public partial class MissionSceneBuilder : Node2D
 	private void ExitBuilder()
 	{
 		GetTree().Quit();
-	}
-
-	private string GetLayoutAbsolutePath()
-	{
-		string layoutName = _layoutNameEdit.Text.StripEdges();
-		if (string.IsNullOrEmpty(layoutName))
-		{
-			layoutName = "black_site_relay_builder";
-			_layoutNameEdit.Text = layoutName;
-		}
-
-		return ProjectSettings.GlobalizePath($"res://Data/MissionLayouts/{layoutName}.json");
 	}
 
 	private void AdjustZoom(float delta)
