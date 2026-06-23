@@ -55,14 +55,14 @@ public partial class GalacticMap : Control
 	// --- REGION LORE DICTIONARY (From World Bible) ---
 	private Dictionary<string, string> regionLore = new Dictionary<string, string>()
 	{
-		{ "Far Silence", "The vast, seemingly empty edge of known space. Believed to be untainted by the madness of the Core Spindle, it offers a true chance to escape the Aetherweb entirely." },
-		{ "Verdant Shroud", "One of the few regions with functioning biospheres, where factions like the Verdant Pact fight over habitable worlds shadowed by dormant machines." },
-		{ "Core Spindle", "The hyper-dense center of the galaxy, now a chaotic maelstrom of rogue AI, temporal anomalies, and malfunctioning megastructures." },
-		{ "Luminous Verge", "A brightly lit nebula sector teeming with ancient energy anomalies, dangerous stellar phenomena, and the remnants of crystalline entities." },
-		{ "Ember Wastes", "A volatile sector of dying red giants scoured by solar winds. It is dominated by mercenary scavengers like the Pyric Consortium and the Furnace Kin." },
-		{ "Shattered Reach", "A chaotic expanse of broken planets, shattered moons, and gravitational anomalies resulting from catastrophic ancient weapons." },
-		{ "Obsidian Belt", "A dark asteroid megastructure ring that serves as a hub for black market trade and forbidden AI experimentation. Home to data traffickers and memory-encrypting mystics." },
-		{ "Echo Spiral", "A warped spiral arm plagued by causality loops and time fractures resulting from intense AI temporal manipulation. Factions here worship the paradox." }
+		{ "Far Silence", "Voidbound seekers and the Pale Assembly probe the dead edge of Eidralune for signals no one can name. Start here for isolation, cosmic mystery, and the sense that the dark is listening." },
+		{ "Verdant Shroud", "The Verdant Pact and the Broken Banner clash over rare living worlds beneath dormant biosphere machines. Start here for frontier survival, contested colonies, and beauty under pressure." },
+		{ "Core Spindle", "The Cipher Remnant, Spindle Vanguard, and ruin-chasers dive into the shattered heart of the Aetherweb. Start here for rogue god-AIs, unstable space, and high-risk relic hunting." },
+		{ "Luminous Verge", "The Celestial Accord, Chorus of Light, and Null Weavers circle radiant anomalies at the galactic rim. Start here for wonder, prophecy, and danger wrapped in sacred light." },
+		{ "Ember Wastes", "The Pyric Consortium and Furnace Kin strip scorched terraform ruins while chemical storms and old weapons keep burning. Start here for brutal salvage, constant pressure, and survival by grit." },
+		{ "Shattered Reach", "The Riven Concord, Echoed Path, and Code Flayers haunt broken systems full of ghost signals and ruined colonies. Start here for desperate scavenging, haunted beauty, and collapse held together by hope." },
+		{ "Obsidian Belt", "The Iridium Veil and Ciphered Kin trade contraband, sealed memories, and forbidden AI relics through the dark ring. Start here for smuggler politics, dangerous bargains, and noir tension." },
+		{ "Echo Spiral", "The Continuum Fracture and Paradox Choir stalk a spiral arm shredded by failed time experiments. Start here for looping hazards, fractured identities, and a campaign steeped in paradox." }
 	};
 
 	// --- COLOR DEFINITIONS FOR YOUR REGIONS ---
@@ -394,7 +394,9 @@ public partial class GalacticMap : Control
 
 		_regionInfoText = new RichTextLabel();
 		_regionInfoText.BbcodeEnabled = true;
-		_regionInfoText.FitContent = true; 
+		_regionInfoText.FitContent = true;
+		_regionInfoText.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+		_regionInfoText.ScrollActive = false;
 		_regionInfoText.AddThemeColorOverride("default_color", new Color(1f, 1f, 1f));
 		_regionInfoText.AddThemeFontSizeOverride("normal_font_size", 14);
 		_regionInfoPanel.AddChild(_regionInfoText);

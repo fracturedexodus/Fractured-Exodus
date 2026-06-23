@@ -27,6 +27,14 @@ public sealed class MissionCombatantSummary
 	public string Notes { get; init; } = string.Empty;
 }
 
+public sealed class MissionInteractionMenuOption
+{
+	public string ActionId { get; init; } = string.Empty;
+	public string Label { get; init; } = string.Empty;
+	public string Description { get; init; } = string.Empty;
+	public bool Disabled { get; init; }
+}
+
 public sealed class MissionInfoPanelRefs
 {
 	public PanelContainer Panel { get; init; }
@@ -66,6 +74,9 @@ public partial class MissionUI : CanvasLayer
 	[Signal]
 	public delegate void ConfirmationCancelledEventHandler();
 
+	[Signal]
+	public delegate void InteractionMenuOptionChosenEventHandler(string actionId);
+
 	public Label TitleLabel { get; private set; }
 	public Label ObjectiveLabel { get; private set; }
 	public Label SelectedOfficerLabel { get; private set; }
@@ -74,6 +85,7 @@ public partial class MissionUI : CanvasLayer
 	public bool IsStoryEventVisible => _storyEventPanel?.Visible ?? false;
 	public bool IsConfirmationVisible => _confirmationPromptPanel?.Visible ?? false;
 	public bool IsMissionSavePromptVisible => _savePromptPanel?.Visible ?? false;
+	public bool IsInteractionMenuVisible => _interactionMenuPanel?.Visible ?? false;
 
 	private Control _uiRoot;
 	private PanelContainer _topLeftPanel;
@@ -106,6 +118,10 @@ public partial class MissionUI : CanvasLayer
 	private readonly List<string> _actionLogEntries = new List<string>();
 	private PanelContainer _hoverSummaryPanel;
 	private Label _hoverSummaryLabel;
+	private PanelContainer _interactionMenuPanel;
+	private Label _interactionMenuTitleLabel;
+	private Label _interactionMenuBodyLabel;
+	private VBoxContainer _interactionMenuButtonStack;
 	private PanelContainer _storyEventPanel;
 	private TextureRect _storyEventImage;
 	private RichTextLabel _storyEventDescription;
@@ -162,6 +178,7 @@ public partial class MissionUI : CanvasLayer
 		BuildExplorationSelectionHud();
 		BuildActionLog();
 		BuildHoverSummary();
+		BuildInteractionMenu();
 		BuildStoryEventPanel();
 		BuildConfirmationPrompt();
 		BuildMissionSavePrompt();
@@ -461,6 +478,67 @@ public partial class MissionUI : CanvasLayer
 		{
 			_hoverSummaryPanel.Visible = false;
 		}
+	}
+
+	public void ShowInteractionMenu(string title, string body, Vector2 screenPosition, IReadOnlyList<MissionInteractionMenuOption> options)
+	{
+		if (_interactionMenuPanel == null || _interactionMenuTitleLabel == null || _interactionMenuBodyLabel == null || _interactionMenuButtonStack == null)
+		{
+			return;
+		}
+
+		foreach (Node child in _interactionMenuButtonStack.GetChildren())
+		{
+			child.QueueFree();
+		}
+
+		_interactionMenuTitleLabel.Text = string.IsNullOrWhiteSpace(title) ? "INTERACT" : title.ToUpperInvariant();
+		_interactionMenuBodyLabel.Text = body ?? string.Empty;
+
+		foreach (MissionInteractionMenuOption option in options ?? new List<MissionInteractionMenuOption>())
+		{
+			if (option == null || string.IsNullOrWhiteSpace(option.ActionId))
+			{
+				continue;
+			}
+
+			Button button = new Button
+			{
+				Text = string.IsNullOrWhiteSpace(option.Label) ? option.ActionId.ToUpperInvariant() : option.Label.ToUpperInvariant(),
+				TooltipText = option.Description,
+				Disabled = option.Disabled,
+				CustomMinimumSize = new Vector2(0f, 42f),
+				SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+			};
+			string actionId = option.ActionId;
+			button.Pressed += () => EmitSignal(SignalName.InteractionMenuOptionChosen, actionId);
+			_interactionMenuButtonStack.AddChild(button);
+		}
+
+		Vector2 minimumSize = _interactionMenuPanel.GetCombinedMinimumSize();
+		Vector2 viewportSize = GetViewport().GetVisibleRect().Size;
+		Vector2 desiredPosition = screenPosition - new Vector2(8f, 8f);
+		float maxX = Mathf.Max(12f, viewportSize.X - minimumSize.X - 12f);
+		float maxY = Mathf.Max(12f, viewportSize.Y - minimumSize.Y - 12f);
+		_interactionMenuPanel.Position = new Vector2(
+			Mathf.Clamp(desiredPosition.X, 12f, maxX),
+			Mathf.Clamp(desiredPosition.Y, 12f, maxY));
+		_interactionMenuPanel.Visible = _interactionMenuButtonStack.GetChildCount() > 0;
+	}
+
+	public void HideInteractionMenu()
+	{
+		if (_interactionMenuPanel != null)
+		{
+			_interactionMenuPanel.Visible = false;
+		}
+	}
+
+	public bool IsMouseOverInteractionMenu()
+	{
+		return _interactionMenuPanel != null
+			&& _interactionMenuPanel.Visible
+			&& _interactionMenuPanel.GetGlobalRect().HasPoint(GetViewport().GetMousePosition());
 	}
 
 	public void ShowStoryEvent(string title, string description, string imagePath, string confirmButtonText)
@@ -792,6 +870,52 @@ public partial class MissionUI : CanvasLayer
 			AutowrapMode = TextServer.AutowrapMode.WordSmart
 		};
 		margin.AddChild(_hoverSummaryLabel);
+	}
+
+	private void BuildInteractionMenu()
+	{
+		if (_uiRoot == null)
+		{
+			return;
+		}
+
+		_interactionMenuPanel = new PanelContainer
+		{
+			Visible = false,
+			MouseFilter = Control.MouseFilterEnum.Stop,
+			CustomMinimumSize = new Vector2(312f, 0f)
+		};
+		_interactionMenuPanel.AddThemeStyleboxOverride("panel", CreateHudPanelStyle(0.92f, true));
+		_uiRoot.AddChild(_interactionMenuPanel);
+
+		MarginContainer margin = new MarginContainer();
+		margin.AddThemeConstantOverride("margin_left", 14);
+		margin.AddThemeConstantOverride("margin_top", 12);
+		margin.AddThemeConstantOverride("margin_right", 14);
+		margin.AddThemeConstantOverride("margin_bottom", 14);
+		_interactionMenuPanel.AddChild(margin);
+
+		VBoxContainer content = new VBoxContainer();
+		content.AddThemeConstantOverride("separation", 10);
+		margin.AddChild(content);
+
+		_interactionMenuTitleLabel = new Label
+		{
+			Text = "INTERACT"
+		};
+		_interactionMenuTitleLabel.AddThemeFontSizeOverride("font_size", 18);
+		_interactionMenuTitleLabel.AddThemeColorOverride("font_color", new Color(0.82f, 0.96f, 1f));
+		content.AddChild(_interactionMenuTitleLabel);
+
+		_interactionMenuBodyLabel = new Label
+		{
+			AutowrapMode = TextServer.AutowrapMode.WordSmart
+		};
+		content.AddChild(_interactionMenuBodyLabel);
+
+		_interactionMenuButtonStack = new VBoxContainer();
+		_interactionMenuButtonStack.AddThemeConstantOverride("separation", 8);
+		content.AddChild(_interactionMenuButtonStack);
 	}
 
 	private void BuildStoryEventPanel()
