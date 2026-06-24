@@ -61,6 +61,12 @@ public partial class MissionMap : Node2D
 		StaticInteraction
 	}
 
+	private enum MissionPlayerCombatActionMode
+	{
+		Attack,
+		Move
+	}
+
 	private sealed class MissionInteractionMenuTarget
 	{
 		public MissionInteractionMenuTargetKind Kind { get; init; }
@@ -130,6 +136,7 @@ public partial class MissionMap : Node2D
 	private readonly HashSet<string> _selectedEscortSurvivorIds = new HashSet<string>();
 	private string _selectedEscortSurvivorId = string.Empty;
 	private int _selectedOfficerIndex;
+	private bool _explorationPartyMovementEnabled;
 	private bool _isPanning;
 	private bool _isSelectionDragging;
 	private Vector2 _lastMouseScreenPosition;
@@ -174,6 +181,7 @@ public partial class MissionMap : Node2D
 	private readonly List<SaveGameSlotInfo> _availableSaveGames = new List<SaveGameSlotInfo>();
 	private MissionInteractionMenuTarget _activeInteractionMenuTarget;
 	private string _activeInteractionMenuOfficerId = string.Empty;
+	private MissionPlayerCombatActionMode _selectedCombatActionMode = MissionPlayerCombatActionMode.Attack;
 
 	public override void _Ready()
 	{
@@ -230,6 +238,10 @@ public partial class MissionMap : Node2D
 		{
 			_missionUi.ExtractionOutcomeChosen -= OnExtractionOutcomeChosen;
 			_missionUi.CombatEndTurnPressed -= OnCombatEndTurnPressed;
+			_missionUi.CombatActionChosen -= OnCombatActionChosen;
+			_missionUi.CombatWeaponSwapRequested -= OnCombatWeaponSwapRequested;
+			_missionUi.ExplorationControlModeChosen -= OnExplorationControlModeChosen;
+			_missionUi.ExplorationOfficerChosen -= OnExplorationOfficerChosen;
 			_missionUi.MissionSaveConfirmed -= OnMissionSaveConfirmed;
 			_missionUi.StoryEventConfirmed -= OnStoryEventConfirmed;
 			_missionUi.ConfirmationAccepted -= OnConfirmationAccepted;
@@ -998,19 +1010,52 @@ public partial class MissionMap : Node2D
 			return;
 		}
 
+		Vector2I hoveredCell = ResolveMovementTargetCell(_roomBuilder.GetNearestMovementCell(_isoWorld.ToLocal(GetGlobalMousePosition())));
 		if (_combatActive)
+		{
+			if (!IsPlayerTurnActive())
+			{
+				_movementCursorFill.Visible = false;
+				_movementCursorOutline.Visible = false;
+				return;
+			}
+
+			if (GetHoveredVisibleHostileAtMouse() is MissionNpcPawn hoveredHostile)
+			{
+				hoveredCell = hoveredHostile.CurrentCell;
+			}
+		}
+
+		if (!_roomBuilder.IsWalkableMovementCell(hoveredCell))
 		{
 			_movementCursorFill.Visible = false;
 			_movementCursorOutline.Visible = false;
 			return;
 		}
 
-		Vector2I hoveredCell = ResolveMovementTargetCell(_roomBuilder.GetNearestMovementCell(_isoWorld.ToLocal(GetGlobalMousePosition())));
-		if (!_roomBuilder.IsWalkableMovementCell(hoveredCell))
+		if (_combatActive && !_visibleCells.Contains(hoveredCell))
 		{
 			_movementCursorFill.Visible = false;
 			_movementCursorOutline.Visible = false;
 			return;
+		}
+
+		MissionNpcPawn hoveredEnemy = _combatActive ? GetNpcAtMovementCell(hoveredCell) : null;
+		bool hostileTargetCell = hoveredEnemy != null && hoveredEnemy.IsHostile && !hoveredEnemy.IsDead && _visibleCells.Contains(hoveredEnemy.CurrentCell);
+		if (_combatActive)
+		{
+			bool attackMode = _selectedCombatActionMode == MissionPlayerCombatActionMode.Attack;
+			_movementCursorFill.Color = attackMode && hostileTargetCell
+				? new Color(1.00f, 0.42f, 0.26f, 0.22f)
+				: new Color(0.26f, 0.78f, 1.00f, 0.16f);
+			_movementCursorOutline.DefaultColor = attackMode && hostileTargetCell
+				? new Color(1.00f, 0.72f, 0.48f, 0.96f)
+				: new Color(0.56f, 0.92f, 1.00f, 0.92f);
+		}
+		else
+		{
+			_movementCursorFill.Color = new Color(0.26f, 0.78f, 1.00f, 0.12f);
+			_movementCursorOutline.DefaultColor = new Color(0.56f, 0.92f, 1.00f, 0.88f);
 		}
 
 		Vector2 hoverPosition = _roomBuilder.GetMovementCellWorldPosition(hoveredCell.X, hoveredCell.Y);
@@ -1270,6 +1315,11 @@ public partial class MissionMap : Node2D
 		if (spawnedCount > 0)
 		{
 			AppendActionLog($"{spawnedCount} relay survivor{(spawnedCount == 1 ? string.Empty : "s")} join the away team and can now be guided to extraction.");
+			if (_explorationPartyMovementEnabled)
+			{
+				SelectEntireExplorationParty();
+			}
+			UpdateSelectedOfficerDisplay();
 			UpdateMissionCompletionActions();
 			UpdateFogOfWar();
 		}
@@ -1865,6 +1915,10 @@ public partial class MissionMap : Node2D
 		_missionUi.ClearActionLog();
 		_missionUi.ExtractionOutcomeChosen += OnExtractionOutcomeChosen;
 		_missionUi.CombatEndTurnPressed += OnCombatEndTurnPressed;
+		_missionUi.CombatActionChosen += OnCombatActionChosen;
+		_missionUi.CombatWeaponSwapRequested += OnCombatWeaponSwapRequested;
+		_missionUi.ExplorationControlModeChosen += OnExplorationControlModeChosen;
+		_missionUi.ExplorationOfficerChosen += OnExplorationOfficerChosen;
 		_missionUi.MissionSaveConfirmed += OnMissionSaveConfirmed;
 		_missionUi.StoryEventConfirmed += OnStoryEventConfirmed;
 		_missionUi.ConfirmationAccepted += OnConfirmationAccepted;
@@ -2634,6 +2688,7 @@ public partial class MissionMap : Node2D
 			&& _selectedEscortSurvivorIds.Contains(saveState.SelectedEscortSurvivorPrimaryId)
 			? saveState.SelectedEscortSurvivorPrimaryId
 			: string.Empty;
+		_explorationPartyMovementEnabled = (_selectedOfficerIds.Count + _selectedEscortSurvivorIds.Count) > 1;
 		NormalizeFriendlySelectionState();
 		UpdateOfficerSelectionVisuals();
 	}
@@ -2751,6 +2806,58 @@ public partial class MissionMap : Node2D
 		SetSelectedFriendlyUnits(new[] { selectedOfficer }, null, selectedOfficer);
 	}
 
+	private void SelectEntireExplorationParty(object primaryUnit = null)
+	{
+		List<OfficerPawn> officers = GetAliveOfficers().ToList();
+		List<MissionNpcPawn> survivors = GetAliveEscortSurvivors().ToList();
+		if (officers.Count == 0 && survivors.Count == 0)
+		{
+			return;
+		}
+
+		object resolvedPrimary = primaryUnit switch
+		{
+			OfficerPawn officer when officers.Contains(officer) => officer,
+			MissionNpcPawn survivor when survivors.Contains(survivor) => survivor,
+			_ => GetPrimarySelectedFriendlyUnit() switch
+			{
+				OfficerPawn officer when officers.Contains(officer) => officer,
+				MissionNpcPawn survivor when survivors.Contains(survivor) => survivor,
+				_ => officers.Cast<object>().Concat(survivors).FirstOrDefault()
+			}
+		};
+
+		SetSelectedFriendlyUnits(officers, survivors, resolvedPrimary);
+	}
+
+	private void SetExplorationMovementMode(bool partyModeEnabled, OfficerPawn preferredOfficer = null)
+	{
+		_explorationPartyMovementEnabled = partyModeEnabled;
+		if (_combatActive)
+		{
+			RefreshCombatHud();
+			return;
+		}
+
+		if (partyModeEnabled)
+		{
+			SelectEntireExplorationParty(preferredOfficer);
+			return;
+		}
+
+		OfficerPawn officer = preferredOfficer ?? GetSelectedOfficer() ?? GetAliveOfficers().FirstOrDefault();
+		if (officer == null)
+		{
+			return;
+		}
+
+		int officerIndex = _officerPawns.IndexOf(officer);
+		if (officerIndex >= 0)
+		{
+			SelectOfficer(officerIndex);
+		}
+	}
+
 	private void SetSelectedOfficers(IEnumerable<OfficerPawn> officers, OfficerPawn primaryOfficer = null)
 	{
 		SetSelectedFriendlyUnits(officers, null, primaryOfficer);
@@ -2799,6 +2906,11 @@ public partial class MissionMap : Node2D
 			case MissionNpcPawn primarySurvivor when _selectedEscortSurvivorIds.Contains(primarySurvivor.NpcId):
 				_selectedEscortSurvivorId = primarySurvivor.NpcId;
 				break;
+		}
+
+		if (!_combatActive)
+		{
+			_explorationPartyMovementEnabled = (_selectedOfficerIds.Count + _selectedEscortSurvivorIds.Count) > 1;
 		}
 
 		NormalizeFriendlySelectionState();
@@ -3015,6 +3127,53 @@ public partial class MissionMap : Node2D
 			.ToList();
 	}
 
+	private List<MissionCombatantSummary> GetExplorationDetailSummaries()
+	{
+		if (_explorationPartyMovementEnabled)
+		{
+			return new List<MissionCombatantSummary>();
+		}
+
+		object primaryUnit = GetPrimarySelectedFriendlyUnit();
+		MissionCombatantSummary summary = primaryUnit switch
+		{
+			OfficerPawn officer => BuildOfficerSummary(officer),
+			MissionNpcPawn survivor => BuildEnemySummary(survivor),
+			_ => null
+		};
+
+		return summary != null ? new List<MissionCombatantSummary> { summary } : new List<MissionCombatantSummary>();
+	}
+
+	private List<MissionExplorationOfficerOption> BuildExplorationOfficerOptions()
+	{
+		object primaryUnit = GetPrimarySelectedFriendlyUnit();
+		List<MissionExplorationOfficerOption> options = GetAliveOfficers()
+			.Select(officer => new MissionExplorationOfficerOption
+			{
+				OfficerId = $"officer:{officer.OfficerID}",
+				DisplayName = officer.OfficerName,
+				Subtitle = officer.Specialty,
+				Icon = LoadPortraitTexture(officer.PortraitPath),
+				Selected = officer == primaryUnit
+			})
+			.ToList();
+
+		options.AddRange(GetAliveEscortSurvivors()
+			.OrderBy(survivor => survivor.DisplayName)
+			.Select(survivor => new MissionExplorationOfficerOption
+			{
+				OfficerId = $"survivor:{survivor.NpcId}",
+				DisplayName = survivor.DisplayName,
+				Subtitle = "Rescued Survivor",
+				Icon = LoadPortraitTexture(survivor.PortraitPath),
+				Selected = survivor == primaryUnit
+			}));
+
+		return options
+			.ToList();
+	}
+
 	private List<object> GetControllableUnitsForSelection()
 	{
 		List<object> units = new List<object>();
@@ -3056,8 +3215,16 @@ public partial class MissionMap : Node2D
 			return;
 		}
 
+		_missionUi.SetExplorationControlPanel(
+			_explorationPartyMovementEnabled
+				? "Move orders will guide the whole away team together."
+				: "Move orders and interactions apply to the selected unit only.",
+			_explorationPartyMovementEnabled,
+			BuildExplorationOfficerOptions(),
+			!_combatActive && !_missionGameOver);
+
 		List<object> selectedUnits = GetSelectedFriendlyUnits();
-		_missionUi.SetExplorationSelectionInfo(GetSelectedFriendlySummaries(), !_combatActive && !_missionGameOver);
+		_missionUi.SetExplorationSelectionInfo(GetExplorationDetailSummaries(), !_combatActive && !_missionGameOver && !_explorationPartyMovementEnabled);
 		if (selectedUnits.Count == 0)
 		{
 			_missionUi.SetExplorationSelectionInfo(Array.Empty<MissionCombatantSummary>(), false);
@@ -3282,7 +3449,7 @@ public partial class MissionMap : Node2D
 		string basePrompt = GetBaseMissionPromptText();
 		if (_combatActive)
 		{
-			return $"{basePrompt} Combat is active: click a visible hostile to attack with officers, click the ground to reposition your active unit, and use END TURN when that unit is done.";
+			return $"{basePrompt} Combat is active: {GetCombatActionPromptText(GetActiveCombatOfficer())} Use END TURN when that unit is done.";
 		}
 
 		List<MissionExtractionOption> extractionOptions = GetAvailableExtractionOptions();
@@ -3513,6 +3680,23 @@ public partial class MissionMap : Node2D
 		if (activeSurvivor != null)
 		{
 			TryMoveSelectedEscortSurvivor();
+			return;
+		}
+
+		if (_combatActive && activeOfficer == GetActiveCombatOfficer())
+		{
+			if (_selectedCombatActionMode == MissionPlayerCombatActionMode.Attack)
+			{
+				TryHandleCombatAttackClick(activeOfficer);
+				return;
+			}
+
+			if (TryHandleInteractionClick(activeOfficer))
+			{
+				return;
+			}
+
+			TryMoveSelectedOfficer();
 			return;
 		}
 
@@ -5180,6 +5364,103 @@ public partial class MissionMap : Node2D
 		return _combatActive && (GetActiveCombatOfficer() != null || GetActiveCombatEscortSurvivor() != null) && !_enemyTurnInProgress;
 	}
 
+	private bool TryGetOfficerState(OfficerPawn officer, out OfficerState officerState)
+	{
+		officerState = null;
+		return officer != null
+			&& _globalData?.ShipOfficers != null
+			&& !string.IsNullOrWhiteSpace(officer.ShipName)
+			&& _globalData.ShipOfficers.TryGetValue(officer.ShipName, out officerState)
+			&& officerState != null;
+	}
+
+	private string GetCombatActionPromptText(OfficerPawn activeOfficer)
+	{
+		if (!_combatActive)
+		{
+			return string.Empty;
+		}
+
+		if (activeOfficer == null)
+		{
+			return "Click the ground to move the active escort and use END TURN when that unit is done.";
+		}
+
+		string attackVerb = activeOfficer.UsesMeleeWeapon ? "strike" : "fire";
+		return _selectedCombatActionMode == MissionPlayerCombatActionMode.Move
+			? "MOVE is selected: click the ground or a reachable interaction target to reposition the active officer."
+			: $"{(activeOfficer.UsesMeleeWeapon ? "MELEE" : "RANGED")} ATTACK is selected: click the highlighted ground square beneath a visible hostile to {attackVerb} with the equipped weapon.";
+	}
+
+	private List<MissionCombatActionOption> BuildCombatActionOptions(OfficerPawn officer)
+	{
+		return new List<MissionCombatActionOption>
+		{
+			new MissionCombatActionOption
+			{
+				ActionId = "attack",
+				Label = $"{(officer?.UsesMeleeWeapon == true ? "Melee" : "Ranged")} Attack ({CombatAttackActionCost} AP)",
+				Description = officer == null
+					? "Attack with the active officer."
+					: $"Attack with {officer.WeaponName}. Costs {CombatAttackActionCost} AP.",
+				Disabled = officer == null || officer.IsDead || !officer.CanSpendActions(CombatAttackActionCost),
+				Selected = _selectedCombatActionMode == MissionPlayerCombatActionMode.Attack
+			},
+			new MissionCombatActionOption
+			{
+				ActionId = "move",
+				Label = "Move",
+				Description = "Click a floor tile to reposition the active officer. Distance determines AP cost.",
+				Disabled = officer == null || officer.IsDead || officer.CurrentActions <= 0,
+				Selected = _selectedCombatActionMode == MissionPlayerCombatActionMode.Move
+			}
+		};
+	}
+
+	private List<MissionCombatWeaponOption> BuildCombatWeaponOptions(OfficerPawn officer)
+	{
+		List<MissionCombatWeaponOption> options = new List<MissionCombatWeaponOption>();
+		if (officer == null || !TryGetOfficerState(officer, out OfficerState officerState))
+		{
+			return options;
+		}
+
+		List<string> ownedWeaponIds = (officerState.OwnedMissionWeaponIds ?? new List<string>())
+			.Where(weaponId => MissionEquipmentRegistry.GetWeapon(weaponId) != null)
+			.Distinct()
+			.ToList();
+		if (ownedWeaponIds.Count == 0)
+		{
+			string fallbackWeaponId = MissionEquipmentRegistry.GetDefaultWeaponIdForSpecialty(officerState.Specialty);
+			if (!string.IsNullOrWhiteSpace(fallbackWeaponId))
+			{
+				ownedWeaponIds.Add(fallbackWeaponId);
+			}
+		}
+
+		foreach (string weaponId in ownedWeaponIds)
+		{
+			MissionWeaponDefinition weapon = MissionEquipmentRegistry.GetWeapon(weaponId);
+			if (weapon == null)
+			{
+				continue;
+			}
+
+			bool equipped = string.Equals(officer.WeaponId, weapon.WeaponId, StringComparison.Ordinal);
+			string stance = weapon.IsMelee ? "Melee" : "Ranged";
+			options.Add(new MissionCombatWeaponOption
+			{
+				WeaponId = weapon.WeaponId,
+				Label = $"{weapon.DisplayName} [{stance} | R{weapon.AttackRange} | {weapon.MinDamage}-{weapon.MaxDamage}]",
+				Description = $"{weapon.Description}\nCosts {CombatAttackActionCost} AP to equip during combat.",
+				Disabled = equipped || !officer.CanSpendActions(CombatAttackActionCost),
+				Equipped = equipped
+			});
+		}
+
+		return options;
+	}
+
 	private void EvaluateCombatState()
 	{
 		if (_missionGameOver || IsAnyCombatActorMoving())
@@ -5244,6 +5525,7 @@ public partial class MissionMap : Node2D
 
 		_combatActive = true;
 		_enemyTurnInProgress = false;
+		_selectedCombatActionMode = MissionPlayerCombatActionMode.Attack;
 		_combatRound = 1;
 		_combatActiveIndex = -1;
 		_missionUi?.ClearCombatLog();
@@ -5258,6 +5540,7 @@ public partial class MissionMap : Node2D
 	{
 		_combatActive = false;
 		_enemyTurnInProgress = false;
+		_selectedCombatActionMode = MissionPlayerCombatActionMode.Attack;
 		_combatQueue.Clear();
 		_combatActiveIndex = -1;
 		_pendingCombatMoveOfficerId = string.Empty;
@@ -5267,6 +5550,10 @@ public partial class MissionMap : Node2D
 		_hoveredCombatActor = null;
 		_missionUi?.HideHoverSummary();
 		AppendCombatLog("The last engaged hostile goes quiet. Combat control returns to exploration.");
+		if (_explorationPartyMovementEnabled)
+		{
+			SelectEntireExplorationParty();
+		}
 		UpdateMovementGridVisibility();
 		RefreshCombatHud();
 	}
@@ -5604,6 +5891,7 @@ public partial class MissionMap : Node2D
 		if (entry.IsOfficer)
 		{
 			entry.Officer?.BeginTurn();
+			_selectedCombatActionMode = MissionPlayerCombatActionMode.Attack;
 			int officerIndex = _officerPawns.IndexOf(entry.Officer);
 			if (officerIndex >= 0)
 			{
@@ -5627,6 +5915,7 @@ public partial class MissionMap : Node2D
 		}
 
 		activeNpc.BeginTurn();
+		_selectedCombatActionMode = MissionPlayerCombatActionMode.Move;
 		_focusedEnemy = activeNpc.IsHostile ? activeNpc : _focusedEnemy;
 		AppendCombatLog(activeNpc.IsHostile
 			? $"Round {_combatRound}: {activeNpc.DisplayName} advances with {activeNpc.CurrentActions} AP and {activeNpc.CurrentHP} HP."
@@ -5692,6 +5981,105 @@ public partial class MissionMap : Node2D
 		}
 
 		EndCurrentCombatTurn();
+	}
+
+	private void OnExplorationControlModeChosen(string modeId)
+	{
+		if (_combatActive || _missionGameOver)
+		{
+			return;
+		}
+
+		SetExplorationMovementMode(string.Equals(modeId, "party", StringComparison.OrdinalIgnoreCase));
+	}
+
+	private void OnExplorationOfficerChosen(string officerId)
+	{
+		if (_combatActive || _missionGameOver || string.IsNullOrWhiteSpace(officerId))
+		{
+			return;
+		}
+
+		if (officerId.StartsWith("officer:", StringComparison.Ordinal))
+		{
+			string resolvedOfficerId = officerId["officer:".Length..];
+			OfficerPawn officer = _officerPawns.FirstOrDefault(candidate => candidate != null && !candidate.IsDead && candidate.OfficerID == resolvedOfficerId);
+			if (officer == null)
+			{
+				return;
+			}
+
+			SetExplorationMovementMode(false, officer);
+			return;
+		}
+
+		if (officerId.StartsWith("survivor:", StringComparison.Ordinal))
+		{
+			string survivorNpcId = officerId["survivor:".Length..];
+			MissionNpcPawn survivor = _missionNpcs.FirstOrDefault(candidate => candidate != null && candidate.NpcId == survivorNpcId && IsActiveEscortSurvivor(candidate));
+			if (survivor != null)
+			{
+				_explorationPartyMovementEnabled = false;
+				SelectEscortSurvivor(survivor);
+			}
+		}
+	}
+
+	private void OnCombatActionChosen(string actionId)
+	{
+		if (!_combatActive || _missionGameOver || _enemyTurnInProgress)
+		{
+			return;
+		}
+
+		if (string.Equals(actionId, "move", StringComparison.OrdinalIgnoreCase))
+		{
+			_selectedCombatActionMode = MissionPlayerCombatActionMode.Move;
+		}
+		else
+		{
+			_selectedCombatActionMode = MissionPlayerCombatActionMode.Attack;
+		}
+
+		RefreshCombatHud();
+	}
+
+	private void OnCombatWeaponSwapRequested(string weaponId)
+	{
+		OfficerPawn officer = GetActiveCombatOfficer();
+		if (!_combatActive || _missionGameOver || _enemyTurnInProgress || officer == null || officer.IsDead || string.IsNullOrWhiteSpace(weaponId))
+		{
+			return;
+		}
+
+		if (!TryGetOfficerState(officer, out OfficerState officerState))
+		{
+			return;
+		}
+
+		if (string.Equals(officer.WeaponId, weaponId, StringComparison.Ordinal))
+		{
+			RefreshCombatHud();
+			return;
+		}
+
+		MissionWeaponDefinition weapon = MissionEquipmentRegistry.GetWeapon(weaponId);
+		if (weapon == null || !officer.CanSpendActions(CombatAttackActionCost) || !OfficerMissionLoadoutService.EquipWeapon(officerState, weaponId))
+		{
+			RefreshCombatHud();
+			return;
+		}
+
+		officer.SpendActions(CombatAttackActionCost);
+		officer.RefreshEquippedWeaponFromLoadout();
+		_selectedCombatActionMode = MissionPlayerCombatActionMode.Attack;
+		AppendCombatLog($"{officer.OfficerName} swaps to {weapon.DisplayName.ToLowerInvariant()}, spending {CombatAttackActionCost} AP to rearm.");
+		RefreshCombatHud();
+
+		if (officer.CurrentActions <= 0)
+		{
+			EndCurrentCombatTurn();
+		}
 	}
 
 	private bool TryHandleCombatAttackClick(OfficerPawn officer)
@@ -6701,6 +7089,18 @@ public partial class MissionMap : Node2D
 		return null;
 	}
 
+	private MissionNpcPawn GetHoveredVisibleHostileAtMouse()
+	{
+		Vector2 mousePosition = GetGlobalMousePosition();
+		return _missionNpcs.FirstOrDefault(npc =>
+			npc != null
+			&& npc.IsHostile
+			&& npc.Visible
+			&& !npc.IsDead
+			&& _visibleCells.Contains(npc.CurrentCell)
+			&& BuildHoverBounds(npc).HasPoint(mousePosition));
+	}
+
 	private static Rect2 BuildHoverBounds(Node2D actor)
 	{
 		return new Rect2(actor.GlobalPosition + new Vector2(-54f, -96f), new Vector2(108f, 144f));
@@ -7425,9 +7825,17 @@ public partial class MissionMap : Node2D
 		if (!showCombatHud)
 		{
 			_missionUi.SetCombatEndTurnEnabled(false, false);
+			_missionUi.SetCombatActionPanel(string.Empty, string.Empty, Array.Empty<MissionCombatActionOption>(), Array.Empty<MissionCombatWeaponOption>(), false);
+			_missionUi.SetExplorationControlPanel(
+				_explorationPartyMovementEnabled
+					? "Move orders will guide the whole away team together."
+					: "Move orders and interactions apply to the selected unit only.",
+				_explorationPartyMovementEnabled,
+				BuildExplorationOfficerOptions(),
+				!_missionGameOver);
 			_missionUi.SetPlayerCombatInfo(null);
 			_missionUi.SetEnemyCombatInfo(null);
-			_missionUi.SetExplorationSelectionInfo(GetSelectedFriendlySummaries(), !_missionGameOver);
+			_missionUi.SetExplorationSelectionInfo(GetExplorationDetailSummaries(), !_missionGameOver && !_explorationPartyMovementEnabled);
 			_missionUi.SetCombatTurnLabel("MISSION COMBAT");
 			_missionUi.SetCombatInitiative(Array.Empty<MissionCombatantSummary>(), -1);
 			RefreshMissionPrompt();
@@ -7453,6 +7861,16 @@ public partial class MissionMap : Node2D
 		_missionUi.SetEnemyCombatInfo(BuildEnemySummary(enemyFocus));
 		bool canPlayerEndTurn = _combatActive && !_enemyTurnInProgress && (playerOfficer != null || playerSurvivor != null);
 		_missionUi.SetCombatEndTurnEnabled(canPlayerEndTurn, _combatActive);
+		bool showActionPanel = playerOfficer != null && playerOfficer == GetActiveCombatOfficer() && !_enemyTurnInProgress;
+		_missionUi.SetCombatActionPanel(
+			playerOfficer != null ? $"{playerOfficer.OfficerName} Commands" : string.Empty,
+			playerOfficer == null
+				? string.Empty
+				: $"{playerOfficer.WeaponName} ready. {GetCombatActionPromptText(playerOfficer)} Swapping weapons costs {CombatAttackActionCost} AP.",
+			showActionPanel ? BuildCombatActionOptions(playerOfficer) : Array.Empty<MissionCombatActionOption>(),
+			showActionPanel ? BuildCombatWeaponOptions(playerOfficer) : Array.Empty<MissionCombatWeaponOption>(),
+			showActionPanel);
+		_missionUi.SetExplorationControlPanel(string.Empty, _explorationPartyMovementEnabled, Array.Empty<MissionExplorationOfficerOption>(), false);
 		RefreshMissionPrompt();
 	}
 

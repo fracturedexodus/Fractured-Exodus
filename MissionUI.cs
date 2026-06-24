@@ -35,6 +35,33 @@ public sealed class MissionInteractionMenuOption
 	public bool Disabled { get; init; }
 }
 
+public sealed class MissionCombatActionOption
+{
+	public string ActionId { get; init; } = string.Empty;
+	public string Label { get; init; } = string.Empty;
+	public string Description { get; init; } = string.Empty;
+	public bool Disabled { get; init; }
+	public bool Selected { get; init; }
+}
+
+public sealed class MissionCombatWeaponOption
+{
+	public string WeaponId { get; init; } = string.Empty;
+	public string Label { get; init; } = string.Empty;
+	public string Description { get; init; } = string.Empty;
+	public bool Disabled { get; init; }
+	public bool Equipped { get; init; }
+}
+
+public sealed class MissionExplorationOfficerOption
+{
+	public string OfficerId { get; init; } = string.Empty;
+	public string DisplayName { get; init; } = string.Empty;
+	public string Subtitle { get; init; } = string.Empty;
+	public Texture2D Icon { get; init; }
+	public bool Selected { get; init; }
+}
+
 public sealed class MissionInfoPanelRefs
 {
 	public PanelContainer Panel { get; init; }
@@ -63,6 +90,18 @@ public partial class MissionUI : CanvasLayer
 
 	[Signal]
 	public delegate void CombatEndTurnPressedEventHandler();
+
+	[Signal]
+	public delegate void CombatActionChosenEventHandler(string actionId);
+
+	[Signal]
+	public delegate void CombatWeaponSwapRequestedEventHandler(string weaponId);
+
+	[Signal]
+	public delegate void ExplorationControlModeChosenEventHandler(string modeId);
+
+	[Signal]
+	public delegate void ExplorationOfficerChosenEventHandler(string officerId);
 
 	[Signal]
 	public delegate void MissionSaveConfirmedEventHandler(string saveName);
@@ -108,6 +147,16 @@ public partial class MissionUI : CanvasLayer
 	private TextureRect _enemyCombatIcon;
 	private Label _enemyCombatHeaderLabel;
 	private Label _enemyCombatInfoLabel;
+	private PanelContainer _combatActionPanel;
+	private Label _combatActionTitleLabel;
+	private Label _combatActionStatusLabel;
+	private HBoxContainer _combatActionButtonRow;
+	private VBoxContainer _combatWeaponButtonStack;
+	private PanelContainer _explorationControlPanel;
+	private Label _explorationControlStatusLabel;
+	private Button _explorationSingleModeButton;
+	private Button _explorationPartyModeButton;
+	private VBoxContainer _explorationOfficerButtonStack;
 	private PanelContainer _explorationSelectionPanel;
 	private ScrollContainer _explorationSelectionScroll;
 	private HBoxContainer _explorationSelectionRow;
@@ -181,6 +230,8 @@ public partial class MissionUI : CanvasLayer
 
 		BuildExtractionPrompt();
 		BuildCombatHud();
+		BuildCombatActionPanel();
+		BuildExplorationControlPanel();
 		BuildExplorationSelectionHud();
 		BuildActionLog();
 		BuildHoverSummary();
@@ -195,6 +246,7 @@ public partial class MissionUI : CanvasLayer
 	public override void _ExitTree()
 	{
 		ClearExtractionPromptButtons();
+		ClearExplorationOfficerButtons();
 		ClearInteractionMenuButtons();
 		HideStoryEvent();
 
@@ -202,6 +254,9 @@ public partial class MissionUI : CanvasLayer
 		{
 			_combatEndTurnButton.Pressed -= OnCombatEndTurnButtonPressed;
 		}
+
+		ClearCombatActionButtons();
+		ClearCombatWeaponButtons();
 
 		if (_storyEventConfirmButton != null)
 		{
@@ -308,6 +363,16 @@ public partial class MissionUI : CanvasLayer
 		if (_enemyCombatInfoPanel != null)
 		{
 			_enemyCombatInfoPanel.Visible = visible;
+		}
+
+		if (_combatActionPanel != null && !visible)
+		{
+			_combatActionPanel.Visible = false;
+		}
+
+		if (_explorationControlPanel != null && visible)
+		{
+			_explorationControlPanel.Visible = false;
 		}
 
 		if (_combatLogPanel != null)
@@ -430,6 +495,126 @@ public partial class MissionUI : CanvasLayer
 
 		_combatEndTurnButton.Visible = visible;
 		_combatEndTurnButton.Disabled = !enabled;
+	}
+
+	public void SetCombatActionPanel(
+		string title,
+		string status,
+		IReadOnlyList<MissionCombatActionOption> actions,
+		IReadOnlyList<MissionCombatWeaponOption> weapons,
+		bool visible)
+	{
+		if (_combatActionPanel == null || _combatActionTitleLabel == null || _combatActionStatusLabel == null || _combatActionButtonRow == null || _combatWeaponButtonStack == null)
+		{
+			return;
+		}
+
+		_combatActionPanel.Visible = visible;
+		if (!visible)
+		{
+			ClearCombatActionButtons();
+			ClearCombatWeaponButtons();
+			return;
+		}
+
+		_combatActionTitleLabel.Text = string.IsNullOrWhiteSpace(title) ? "TACTICAL OPTIONS" : title.ToUpperInvariant();
+		_combatActionStatusLabel.Text = status ?? string.Empty;
+
+		ClearCombatActionButtons();
+		foreach (MissionCombatActionOption option in actions ?? new List<MissionCombatActionOption>())
+		{
+			if (option == null || string.IsNullOrWhiteSpace(option.ActionId))
+			{
+				continue;
+			}
+
+			string prefix = option.Selected ? "> " : string.Empty;
+			Button button = new Button
+			{
+				Text = $"{prefix}{(string.IsNullOrWhiteSpace(option.Label) ? option.ActionId : option.Label).ToUpperInvariant()}",
+				TooltipText = option.Description,
+				Disabled = option.Disabled,
+				CustomMinimumSize = new Vector2(0f, 42f),
+				SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+			};
+			string actionId = option.ActionId;
+			button.Pressed += () => EmitSignal(SignalName.CombatActionChosen, actionId);
+			_combatActionButtonRow.AddChild(button);
+		}
+
+		ClearCombatWeaponButtons();
+		foreach (MissionCombatWeaponOption option in weapons ?? new List<MissionCombatWeaponOption>())
+		{
+			if (option == null || string.IsNullOrWhiteSpace(option.WeaponId))
+			{
+				continue;
+			}
+
+			string suffix = option.Equipped ? " [EQUIPPED]" : string.Empty;
+			Button button = new Button
+			{
+				Text = $"{(string.IsNullOrWhiteSpace(option.Label) ? option.WeaponId : option.Label).ToUpperInvariant()}{suffix}",
+				TooltipText = option.Description,
+				Disabled = option.Disabled,
+				CustomMinimumSize = new Vector2(0f, 40f),
+				SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+			};
+			string weaponId = option.WeaponId;
+			button.Pressed += () => EmitSignal(SignalName.CombatWeaponSwapRequested, weaponId);
+			_combatWeaponButtonStack.AddChild(button);
+		}
+	}
+
+	public void SetExplorationControlPanel(
+		string status,
+		bool partyModeEnabled,
+		IReadOnlyList<MissionExplorationOfficerOption> officers,
+		bool visible)
+	{
+		if (_explorationControlPanel == null || _explorationControlStatusLabel == null || _explorationSingleModeButton == null || _explorationPartyModeButton == null || _explorationOfficerButtonStack == null)
+		{
+			return;
+		}
+
+		_explorationControlPanel.Visible = visible;
+		if (!visible)
+		{
+			ClearExplorationOfficerButtons();
+			return;
+		}
+
+		_explorationControlStatusLabel.Text = status ?? string.Empty;
+		ApplyExplorationModeButtonState(_explorationSingleModeButton, !partyModeEnabled);
+		ApplyExplorationModeButtonState(_explorationPartyModeButton, partyModeEnabled);
+
+		ClearExplorationOfficerButtons();
+		foreach (MissionExplorationOfficerOption officer in officers ?? new List<MissionExplorationOfficerOption>())
+		{
+			if (officer == null || string.IsNullOrWhiteSpace(officer.OfficerId))
+			{
+				continue;
+			}
+
+			Button button = new Button
+			{
+				Text = string.IsNullOrWhiteSpace(officer.Subtitle)
+					? officer.DisplayName
+					: $"{officer.DisplayName}\n{officer.Subtitle}",
+				TooltipText = officer.DisplayName,
+				Icon = officer.Icon,
+				ExpandIcon = true,
+				IconAlignment = HorizontalAlignment.Left,
+				VerticalIconAlignment = VerticalAlignment.Center,
+				Alignment = HorizontalAlignment.Left,
+				CustomMinimumSize = new Vector2(0f, 74f),
+				SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+			};
+			button.AddThemeFontSizeOverride("font_size", 13);
+			ApplyExplorationOfficerButtonState(button, officer.Selected);
+			string officerId = officer.OfficerId;
+			button.Pressed += () => EmitSignal(SignalName.ExplorationOfficerChosen, officerId);
+			_explorationOfficerButtonStack.AddChild(button);
+		}
 	}
 
 	public void ShowMissionGameOver()
@@ -773,6 +958,135 @@ public partial class MissionUI : CanvasLayer
 		_enemyCombatInfoPanel.Visible = false;
 		_uiRoot.AddChild(_playerCombatInfoPanel);
 		_uiRoot.AddChild(_enemyCombatInfoPanel);
+	}
+
+	private void BuildCombatActionPanel()
+	{
+		if (_uiRoot == null)
+		{
+			return;
+		}
+
+		_combatActionPanel = new PanelContainer
+		{
+			Visible = false
+		};
+		_combatActionPanel.SetAnchorsPreset(Control.LayoutPreset.TopRight);
+		_combatActionPanel.OffsetLeft = -396f;
+		_combatActionPanel.OffsetTop = 290f;
+		_combatActionPanel.OffsetRight = -46f;
+		_combatActionPanel.OffsetBottom = 610f;
+		_combatActionPanel.AddThemeStyleboxOverride("panel", CreateHudPanelStyle());
+		_uiRoot.AddChild(_combatActionPanel);
+
+		MarginContainer margin = new MarginContainer();
+		margin.AddThemeConstantOverride("margin_left", 12);
+		margin.AddThemeConstantOverride("margin_top", 12);
+		margin.AddThemeConstantOverride("margin_right", 12);
+		margin.AddThemeConstantOverride("margin_bottom", 12);
+		_combatActionPanel.AddChild(margin);
+
+		VBoxContainer content = new VBoxContainer();
+		content.AddThemeConstantOverride("separation", 10);
+		margin.AddChild(content);
+
+		_combatActionTitleLabel = new Label
+		{
+			Text = "TACTICAL OPTIONS"
+		};
+		_combatActionTitleLabel.AddThemeFontSizeOverride("font_size", 18);
+		content.AddChild(_combatActionTitleLabel);
+
+		_combatActionStatusLabel = new Label
+		{
+			AutowrapMode = TextServer.AutowrapMode.WordSmart
+		};
+		content.AddChild(_combatActionStatusLabel);
+
+		_combatActionButtonRow = new HBoxContainer();
+		_combatActionButtonRow.AddThemeConstantOverride("separation", 8);
+		content.AddChild(_combatActionButtonRow);
+
+		Label inventoryLabel = new Label
+		{
+			Text = "WEAPONS"
+		};
+		inventoryLabel.AddThemeFontSizeOverride("font_size", 14);
+		content.AddChild(inventoryLabel);
+
+		_combatWeaponButtonStack = new VBoxContainer();
+		_combatWeaponButtonStack.AddThemeConstantOverride("separation", 8);
+		content.AddChild(_combatWeaponButtonStack);
+	}
+
+	private void BuildExplorationControlPanel()
+	{
+		if (_uiRoot == null)
+		{
+			return;
+		}
+
+		_explorationControlPanel = new PanelContainer
+		{
+			Visible = false
+		};
+		_explorationControlPanel.SetAnchorsPreset(Control.LayoutPreset.TopLeft);
+		_explorationControlPanel.OffsetLeft = 20f;
+		_explorationControlPanel.OffsetTop = 20f;
+		_explorationControlPanel.OffsetRight = 280f;
+		_explorationControlPanel.OffsetBottom = 560f;
+		_explorationControlPanel.AddThemeStyleboxOverride("panel", CreateHudPanelStyle(0.84f, true));
+		_uiRoot.AddChild(_explorationControlPanel);
+
+		MarginContainer margin = new MarginContainer();
+		margin.AddThemeConstantOverride("margin_left", 12);
+		margin.AddThemeConstantOverride("margin_top", 12);
+		margin.AddThemeConstantOverride("margin_right", 12);
+		margin.AddThemeConstantOverride("margin_bottom", 12);
+		_explorationControlPanel.AddChild(margin);
+
+		VBoxContainer content = new VBoxContainer();
+		content.AddThemeConstantOverride("separation", 10);
+		margin.AddChild(content);
+
+		Label titleLabel = new Label
+		{
+			Text = "EXPLORATION CONTROL"
+		};
+		titleLabel.AddThemeFontSizeOverride("font_size", 18);
+		content.AddChild(titleLabel);
+
+		_explorationControlStatusLabel = new Label
+		{
+			AutowrapMode = TextServer.AutowrapMode.WordSmart
+		};
+		content.AddChild(_explorationControlStatusLabel);
+
+		HBoxContainer modeRow = new HBoxContainer();
+		modeRow.AddThemeConstantOverride("separation", 8);
+		content.AddChild(modeRow);
+
+		_explorationSingleModeButton = new Button
+		{
+			Text = "SINGLE",
+			CustomMinimumSize = new Vector2(0f, 38f),
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+		};
+		_explorationSingleModeButton.Pressed += () => EmitSignal(SignalName.ExplorationControlModeChosen, "single");
+		modeRow.AddChild(_explorationSingleModeButton);
+
+		_explorationPartyModeButton = new Button
+		{
+			Text = "PARTY",
+			CustomMinimumSize = new Vector2(0f, 38f),
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+		};
+		_explorationPartyModeButton.Pressed += () => EmitSignal(SignalName.ExplorationControlModeChosen, "party");
+		modeRow.AddChild(_explorationPartyModeButton);
+
+		_explorationOfficerButtonStack = new VBoxContainer();
+		_explorationOfficerButtonStack.AddThemeConstantOverride("separation", 8);
+		content.AddChild(_explorationOfficerButtonStack);
 	}
 
 	private void BuildExplorationSelectionHud()
@@ -1344,6 +1658,40 @@ public partial class MissionUI : CanvasLayer
 		}
 	}
 
+	private void ApplyExplorationModeButtonState(Button button, bool selected)
+	{
+		if (button == null)
+		{
+			return;
+		}
+
+		StyleBoxFlat style = CreateCombatSquareStyle(
+			selected ? new Color(0.08f, 0.14f, 0.11f, 0.96f) : new Color(0.09f, 0.09f, 0.10f, 0.92f),
+			selected ? new Color(0.34f, 0.98f, 0.60f, 1f) : new Color(0.32f, 0.36f, 0.42f, 1f));
+		button.AddThemeStyleboxOverride("normal", style);
+		button.AddThemeStyleboxOverride("hover", style);
+		button.AddThemeStyleboxOverride("pressed", style);
+		button.AddThemeStyleboxOverride("focus", style);
+		button.AddThemeColorOverride("font_color", selected ? new Color(0.92f, 1f, 0.96f) : Colors.White);
+	}
+
+	private void ApplyExplorationOfficerButtonState(Button button, bool selected)
+	{
+		if (button == null)
+		{
+			return;
+		}
+
+		StyleBoxFlat style = CreateCombatSquareStyle(
+			selected ? new Color(0.10f, 0.14f, 0.18f, 0.96f) : new Color(0.08f, 0.08f, 0.09f, 0.90f),
+			selected ? new Color(0.40f, 0.92f, 1.00f, 1f) : new Color(0.26f, 0.30f, 0.36f, 1f));
+		button.AddThemeStyleboxOverride("normal", style);
+		button.AddThemeStyleboxOverride("hover", style);
+		button.AddThemeStyleboxOverride("pressed", style);
+		button.AddThemeStyleboxOverride("focus", style);
+		button.AddThemeColorOverride("font_color", Colors.White);
+	}
+
 	private static StyleBoxFlat CreateCombatSquareStyle(Color backgroundColor, Color borderColor)
 	{
 		return new StyleBoxFlat
@@ -1476,6 +1824,45 @@ public partial class MissionUI : CanvasLayer
 		}
 
 		foreach (Node child in _extractionPromptButtonStack.GetChildren())
+		{
+			child.QueueFree();
+		}
+	}
+
+	private void ClearCombatActionButtons()
+	{
+		if (_combatActionButtonRow == null)
+		{
+			return;
+		}
+
+		foreach (Node child in _combatActionButtonRow.GetChildren())
+		{
+			child.QueueFree();
+		}
+	}
+
+	private void ClearExplorationOfficerButtons()
+	{
+		if (_explorationOfficerButtonStack == null)
+		{
+			return;
+		}
+
+		foreach (Node child in _explorationOfficerButtonStack.GetChildren())
+		{
+			child.QueueFree();
+		}
+	}
+
+	private void ClearCombatWeaponButtons()
+	{
+		if (_combatWeaponButtonStack == null)
+		{
+			return;
+		}
+
+		foreach (Node child in _combatWeaponButtonStack.GetChildren())
 		{
 			child.QueueFree();
 		}

@@ -82,6 +82,7 @@ public partial class OfficerPawn : Node2D
 	private Color _reactionFlashColor = Colors.White;
 	private float _facingHoldTimer;
 	private Color _bodyBaseColor = Colors.White;
+	private OfficerState _officerState;
 
 	public override void _Ready()
 	{
@@ -131,6 +132,7 @@ public partial class OfficerPawn : Node2D
 			return;
 		}
 
+		_officerState = officer;
 		OfficerID = officer.OfficerID;
 		ShipName = officer.ShipName;
 		OfficerName = officer.DisplayName;
@@ -184,6 +186,19 @@ public partial class OfficerPawn : Node2D
 		}
 
 		EmitSignal(SignalName.CombatStateChanged, this);
+	}
+
+	public bool RefreshEquippedWeaponFromLoadout()
+	{
+		if (_officerState == null)
+		{
+			return false;
+		}
+
+		OfficerMissionLoadoutService.EnsureOfficerLoadout(_officerState);
+		ApplyMissionWeaponLoadout(OfficerMissionLoadoutService.GetEquippedWeapon(_officerState));
+		EmitSignal(SignalName.CombatStateChanged, this);
+		return true;
 	}
 
 	public bool CanSpendActions(int amount)
@@ -612,29 +627,40 @@ public partial class OfficerPawn : Node2D
 
 	private void ApplyMissionLoadout(OfficerState officer)
 	{
-		MissionWeaponDefinition weapon = OfficerMissionLoadoutService.GetEquippedWeapon(officer);
-		if (weapon != null)
+		ApplyMissionWeaponLoadout(OfficerMissionLoadoutService.GetEquippedWeapon(officer));
+		ApplyMissionShieldLoadout(OfficerMissionLoadoutService.GetEquippedShield(officer));
+	}
+
+	private void ApplyMissionWeaponLoadout(MissionWeaponDefinition weapon)
+	{
+		if (weapon == null)
 		{
-			WeaponId = weapon.WeaponId ?? string.Empty;
-			WeaponName = string.IsNullOrWhiteSpace(weapon.DisplayName) ? WeaponName : weapon.DisplayName;
-			UsesMeleeWeapon = weapon.IsMelee;
-			AttackRange = Mathf.Max(1, weapon.AttackRange);
-			AttackMinDamage = Mathf.Max(1, weapon.MinDamage);
-			AttackDamage = Mathf.Max(AttackMinDamage, weapon.MaxDamage);
-			BonusShieldDamage = Mathf.Max(0, weapon.BonusShieldDamage);
-			ShieldPiercingDamage = Mathf.Max(0, weapon.ShieldPiercingDamage);
-			WeaponStatusEffectId = weapon.StatusEffectId ?? string.Empty;
-			WeaponStatusEffectChance = Mathf.Clamp(weapon.StatusEffectChance, 0f, 1f);
+			return;
 		}
 
-		MissionShieldDefinition shield = OfficerMissionLoadoutService.GetEquippedShield(officer);
-		if (shield != null)
+		WeaponId = weapon.WeaponId ?? string.Empty;
+		WeaponName = string.IsNullOrWhiteSpace(weapon.DisplayName) ? WeaponName : weapon.DisplayName;
+		UsesMeleeWeapon = weapon.IsMelee;
+		AttackRange = Mathf.Max(1, weapon.AttackRange);
+		AttackMinDamage = Mathf.Max(1, weapon.MinDamage);
+		AttackDamage = Mathf.Max(AttackMinDamage, weapon.MaxDamage);
+		BonusShieldDamage = Mathf.Max(0, weapon.BonusShieldDamage);
+		ShieldPiercingDamage = Mathf.Max(0, weapon.ShieldPiercingDamage);
+		WeaponStatusEffectId = weapon.StatusEffectId ?? string.Empty;
+		WeaponStatusEffectChance = Mathf.Clamp(weapon.StatusEffectChance, 0f, 1f);
+	}
+
+	private void ApplyMissionShieldLoadout(MissionShieldDefinition shield)
+	{
+		if (shield == null)
 		{
-			ShieldName = string.IsNullOrWhiteSpace(shield.DisplayName) ? ShieldName : shield.DisplayName;
-			MaxShields = Mathf.Max(0, MaxShields + shield.CapacityBonus);
-			CurrentShields = MaxShields;
-			ShieldRechargePerTurn = Mathf.Max(0, shield.RechargePerTurn);
+			return;
 		}
+
+		ShieldName = string.IsNullOrWhiteSpace(shield.DisplayName) ? ShieldName : shield.DisplayName;
+		MaxShields = Mathf.Max(0, MaxShields + shield.CapacityBonus);
+		CurrentShields = MaxShields;
+		ShieldRechargePerTurn = Mathf.Max(0, shield.RechargePerTurn);
 	}
 
 	private Vector2[] BuildDiamond(float halfWidth, float halfHeight)
