@@ -109,6 +109,7 @@ public partial class MissionMap : Node2D
 	private readonly List<MissionNpcPawn> _missionNpcs = new List<MissionNpcPawn>();
 	private readonly Dictionary<Vector2I, MissionNpcPawn> _missionNpcsByCell = new Dictionary<Vector2I, MissionNpcPawn>();
 	private readonly Dictionary<Vector2I, MissionProp> _missionPropsByCell = new Dictionary<Vector2I, MissionProp>();
+	private readonly Dictionary<string, Texture2D> _portraitTextureCache = new Dictionary<string, Texture2D>();
 	private readonly HashSet<Vector2I> _blockedStaticPropCells = new HashSet<Vector2I>();
 	private readonly Dictionary<string, MissionRoomBuilder.MarkerPlacement> _propPlacementsByInstanceId = new Dictionary<string, MissionRoomBuilder.MarkerPlacement>();
 	private readonly MissionSpawner _missionSpawner = new MissionSpawner();
@@ -223,6 +224,28 @@ public partial class MissionMap : Node2D
 	public override void _ExitTree()
 	{
 		_bgmPlayer?.Stop();
+		_portraitTextureCache.Clear();
+
+		if (_missionUi != null)
+		{
+			_missionUi.ExtractionOutcomeChosen -= OnExtractionOutcomeChosen;
+			_missionUi.CombatEndTurnPressed -= OnCombatEndTurnPressed;
+			_missionUi.MissionSaveConfirmed -= OnMissionSaveConfirmed;
+			_missionUi.StoryEventConfirmed -= OnStoryEventConfirmed;
+			_missionUi.ConfirmationAccepted -= OnConfirmationAccepted;
+			_missionUi.ConfirmationCancelled -= OnConfirmationCancelled;
+			_missionUi.InteractionMenuOptionChosen -= OnInteractionMenuOptionChosen;
+			if (_missionUi.GameOverReturnButton != null)
+			{
+				_missionUi.GameOverReturnButton.Pressed -= ReturnToMainMenu;
+			}
+		}
+
+		if (_dialogueUi != null)
+		{
+			_dialogueUi.ConversationEnded -= OnMissionConversationEnded;
+			_dialogueUi.DialogueStateChanged -= OnMissionDialogueStateChanged;
+		}
 	}
 
 	public override void _Process(double delta)
@@ -480,6 +503,27 @@ public partial class MissionMap : Node2D
 				GetViewport().SetInputAsHandled();
 				return;
 			}
+		}
+
+		if (@event is InputEventMouseButton rightMouseButton
+			&& rightMouseButton.Pressed
+			&& rightMouseButton.ButtonIndex == MouseButton.Right)
+		{
+			if (_missionUi?.IsMouseOverInteractionMenu() == true)
+			{
+				GetViewport().SetInputAsHandled();
+				return;
+			}
+
+			if (TryShowInteractionMenuAtMouse())
+			{
+				GetViewport().SetInputAsHandled();
+				return;
+			}
+
+			ClearInteractionMenu();
+			GetViewport().SetInputAsHandled();
+			return;
 		}
 
 		if (@event is InputEventMouseButton mouseButton && mouseButton.ButtonIndex == MouseButton.Left)
@@ -3430,6 +3474,8 @@ public partial class MissionMap : Node2D
 			_selectionBox.QueueRedraw();
 		}
 
+		ClearInteractionMenu();
+
 		if (!_combatActive && selectionRect.Area >= 100f)
 		{
 			SelectControllableUnitsInRect(selectionRect);
@@ -4429,6 +4475,7 @@ public partial class MissionMap : Node2D
 		if (interaction.LogicRole == "door")
 		{
 			bool nextOpenState = !_roomBuilder.IsDoorOpen(interaction.TargetId);
+			FaceNodeToward(officer, GetCellGlobalPosition(interaction.Cell));
 			if (_combatActive)
 			{
 				officer.SpendActions(CombatInteractionActionCost);
@@ -4448,6 +4495,7 @@ public partial class MissionMap : Node2D
 		{
 			bool controlsDoor = !string.IsNullOrEmpty(interaction.TargetId);
 			bool nextOpenState = controlsDoor && !_roomBuilder.IsDoorOpen(interaction.TargetId);
+			FaceNodeToward(officer, GetCellGlobalPosition(interaction.Cell));
 			if (_combatActive)
 			{
 				officer.SpendActions(CombatInteractionActionCost);
@@ -4470,6 +4518,7 @@ public partial class MissionMap : Node2D
 
 		if (interaction.MarkerId == "trigger_dialogue")
 		{
+			FaceNodeToward(officer, GetCellGlobalPosition(interaction.Cell));
 			if (_combatActive)
 			{
 				officer.SpendActions(CombatInteractionActionCost);
@@ -4581,6 +4630,7 @@ public partial class MissionMap : Node2D
 			return;
 		}
 
+		FaceNodeToward(officer, prop.GlobalPosition);
 		if (TryPromptMedicalBedUse(officer, prop))
 		{
 			return;
@@ -4609,6 +4659,8 @@ public partial class MissionMap : Node2D
 			return;
 		}
 
+		FaceNodeToward(officer, npc.GlobalPosition);
+		FaceNodeToward(npc, officer.GlobalPosition, 0.2f);
 		PropInteractionContext context = BuildNpcInteractionContext(officer, npc);
 		PropInteractionResult result = npc.Interact(context);
 		if (result == null || !result.Success)
@@ -5893,13 +5945,16 @@ public partial class MissionMap : Node2D
 			return;
 		}
 
+		FaceNodeToward(officer, enemy.GlobalPosition, 0.45f);
 		officer.SpendActions(CombatAttackActionCost);
+		PlayNodeAttackRecoil(officer, enemy.GlobalPosition);
 		if (ShouldPlayOfficerLaserFireSound(attackProfile))
 		{
 			PlayOfficerLaserFireSound();
 		}
 		int damage = _combatRng.RandiRange(attackProfile.MinDamage, attackProfile.MaxDamage);
 		CombatDamageResult result = ApplyAttackProfileToTarget(enemy, damage, attackProfile);
+		PlayNodeHitReaction(enemy, officer.GlobalPosition, result);
 		string statusText = TryApplyStatusEffect(enemy, attackProfile)
 			? $" {enemy.DisplayName} is afflicted with {attackProfile.StatusEffectId}."
 			: string.Empty;
@@ -5939,13 +5994,16 @@ public partial class MissionMap : Node2D
 			return;
 		}
 
+		FaceNodeToward(enemy, officer.GlobalPosition, 0.45f);
 		enemy.SpendActions(CombatAttackActionCost);
+		PlayNodeAttackRecoil(enemy, officer.GlobalPosition);
 		if (ShouldPlayEnemyLaserFireSound(attackProfile))
 		{
 			PlayEnemyLaserFireSound();
 		}
 		int damage = _combatRng.RandiRange(attackProfile.MinDamage, attackProfile.MaxDamage);
 		CombatDamageResult result = ApplyAttackProfileToTarget(officer, damage, attackProfile);
+		PlayNodeHitReaction(officer, enemy.GlobalPosition, result);
 		string statusText = TryApplyStatusEffect(officer, attackProfile)
 			? $" {officer.OfficerName} is afflicted with {attackProfile.StatusEffectId}."
 			: string.Empty;
@@ -5979,7 +6037,9 @@ public partial class MissionMap : Node2D
 			return;
 		}
 
+		FaceNodeToward(enemy, survivor.GlobalPosition, 0.45f);
 		enemy.SpendActions(CombatAttackActionCost);
+		PlayNodeAttackRecoil(enemy, survivor.GlobalPosition);
 		if (ShouldPlayEnemyLaserFireSound(attackProfile))
 		{
 			PlayEnemyLaserFireSound();
@@ -5987,6 +6047,7 @@ public partial class MissionMap : Node2D
 
 		int damage = _combatRng.RandiRange(attackProfile.MinDamage, attackProfile.MaxDamage);
 		CombatDamageResult result = ApplyAttackProfileToTarget(survivor, damage, attackProfile);
+		PlayNodeHitReaction(survivor, enemy.GlobalPosition, result);
 		string statusText = TryApplyStatusEffect(survivor, attackProfile)
 			? $" {survivor.DisplayName} is afflicted with {attackProfile.StatusEffectId}."
 			: string.Empty;
@@ -6046,6 +6107,52 @@ public partial class MissionMap : Node2D
 		}
 
 		return target.ApplyDamage(rolledDamage, attackProfile.BonusShieldDamage, 0);
+	}
+
+	private static void FaceNodeToward(Node2D actor, Vector2 targetGlobalPosition, float holdSeconds = 0.3f)
+	{
+		switch (actor)
+		{
+			case OfficerPawn officer:
+				officer.FaceToward(targetGlobalPosition, holdSeconds);
+				break;
+			case MissionNpcPawn npc:
+				npc.FaceToward(targetGlobalPosition, holdSeconds);
+				break;
+		}
+	}
+
+	private static void PlayNodeAttackRecoil(Node2D actor, Vector2 targetGlobalPosition)
+	{
+		switch (actor)
+		{
+			case OfficerPawn officer:
+				officer.PlayAttackRecoil(targetGlobalPosition);
+				break;
+			case MissionNpcPawn npc:
+				npc.PlayAttackRecoil(targetGlobalPosition);
+				break;
+		}
+	}
+
+	private static void PlayNodeHitReaction(Node2D actor, Vector2 sourceGlobalPosition, CombatDamageResult result)
+	{
+		if (actor == null || result == null)
+		{
+			return;
+		}
+
+		bool shieldHit = result.ShieldDamage > 0;
+		bool hullHit = result.HealthDamage > 0;
+		switch (actor)
+		{
+			case OfficerPawn officer:
+				officer.PlayHitReaction(sourceGlobalPosition, shieldHit, hullHit);
+				break;
+			case MissionNpcPawn npc:
+				npc.PlayHitReaction(sourceGlobalPosition, shieldHit, hullHit);
+				break;
+		}
 	}
 
 	private void PlayAttackEffects(Node2D attacker, Node2D target, MissionAttackProfile attackProfile, CombatDamageResult result)
@@ -6612,33 +6719,16 @@ public partial class MissionMap : Node2D
 			return;
 		}
 
+		if (!_missionUi.IsInteractionMenuVisible || _activeInteractionMenuTarget == null)
+		{
+			return;
+		}
+
 		OfficerPawn activeOfficer = GetInteractionMenuOfficer();
 		string officerId = activeOfficer?.OfficerID ?? string.Empty;
-		if (_missionUi.IsMouseOverInteractionMenu() && _activeInteractionMenuTarget != null)
+		if (_activeInteractionMenuOfficerId != officerId)
 		{
-			if (_activeInteractionMenuOfficerId != officerId)
-			{
-				ShowInteractionMenuForTarget(_activeInteractionMenuTarget, activeOfficer);
-			}
-			return;
-		}
-
-		if (!TryBuildHoveredInteractionMenuTarget(out MissionInteractionMenuTarget target))
-		{
-			ClearInteractionMenu();
-			return;
-		}
-
-		if (_activeInteractionMenuTarget == null
-			|| _activeInteractionMenuTarget.TargetKey != target.TargetKey
-			|| _activeInteractionMenuOfficerId != officerId
-			|| !_missionUi.IsInteractionMenuVisible)
-		{
-			ShowInteractionMenuForTarget(target, activeOfficer);
-		}
-		else
-		{
-			_activeInteractionMenuTarget = target;
+			ShowInteractionMenuForTarget(_activeInteractionMenuTarget, activeOfficer);
 		}
 	}
 
@@ -6659,6 +6749,22 @@ public partial class MissionMap : Node2D
 	private OfficerPawn GetInteractionMenuOfficer()
 	{
 		return GetSelectedEscortSurvivor() == null ? GetSelectedOfficer() : null;
+	}
+
+	private bool TryShowInteractionMenuAtMouse()
+	{
+		if (_missionUi == null || ShouldSuppressInteractionMenu())
+		{
+			return false;
+		}
+
+		if (!TryBuildHoveredInteractionMenuTarget(out MissionInteractionMenuTarget target))
+		{
+			return false;
+		}
+
+		ShowInteractionMenuForTarget(target, GetInteractionMenuOfficer());
+		return true;
 	}
 
 	private bool TryBuildHoveredInteractionMenuTarget(out MissionInteractionMenuTarget target)
@@ -7357,9 +7463,7 @@ public partial class MissionMap : Node2D
 			return null;
 		}
 
-		Texture2D icon = !string.IsNullOrWhiteSpace(officer.PortraitPath)
-			? GD.Load<Texture2D>(officer.PortraitPath)
-			: null;
+		Texture2D icon = LoadPortraitTexture(officer.PortraitPath);
 		return new MissionCombatantSummary
 		{
 			DisplayName = officer.OfficerName,
@@ -7387,9 +7491,7 @@ public partial class MissionMap : Node2D
 			return null;
 		}
 
-		Texture2D icon = !string.IsNullOrWhiteSpace(enemy.PortraitPath)
-			? GD.Load<Texture2D>(enemy.PortraitPath)
-			: null;
+		Texture2D icon = LoadPortraitTexture(enemy.PortraitPath);
 		if (icon == null && enemy.GetNodeOrNull<Sprite2D>("Sprite2D") is Sprite2D sprite)
 		{
 			icon = sprite.Texture;
@@ -7415,6 +7517,27 @@ public partial class MissionMap : Node2D
 				? BuildCombatantNotes(enemy.InitiativeBonus, enemy.ShieldRechargePerTurn, enemy.BonusShieldDamage, enemy.ShieldPiercingDamage, enemy.WeaponStatusEffectId, enemy.WeaponStatusEffectChance, enemy.ActiveStatusEffectId)
 				: "Non-hostile contact"
 		};
+	}
+
+	private Texture2D LoadPortraitTexture(string resourcePath)
+	{
+		if (string.IsNullOrWhiteSpace(resourcePath) || !ResourceLoader.Exists(resourcePath))
+		{
+			return null;
+		}
+
+		if (_portraitTextureCache.TryGetValue(resourcePath, out Texture2D cachedTexture))
+		{
+			return cachedTexture;
+		}
+
+		Texture2D loadedTexture = ResourceLoader.Load<Texture2D>(resourcePath, string.Empty, ResourceLoader.CacheMode.IgnoreDeep);
+		if (loadedTexture != null)
+		{
+			_portraitTextureCache[resourcePath] = loadedTexture;
+		}
+
+		return loadedTexture;
 	}
 
 	private static string BuildCombatantNotes(int initiativeBonus, int shieldRechargePerTurn, int bonusShieldDamage, int shieldPiercingDamage, string statusEffectId, float statusEffectChance, string activeStatusEffectId)

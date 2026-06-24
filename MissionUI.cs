@@ -55,6 +55,8 @@ public partial class MissionUI : CanvasLayer
 	private const float ExplorationCardSpacing = 12f;
 	private const float ExplorationCardWidth = 348f;
 	private const float ExplorationCardHeight = 340f;
+	private const string ExtractionOutcomeMetaKey = "mission_ui_extraction_outcome_id";
+	private const string InteractionActionMetaKey = "mission_ui_interaction_action_id";
 
 	[Signal]
 	public delegate void ExtractionOutcomeChosenEventHandler(string outcomeId);
@@ -123,9 +125,11 @@ public partial class MissionUI : CanvasLayer
 	private Label _interactionMenuBodyLabel;
 	private VBoxContainer _interactionMenuButtonStack;
 	private PanelContainer _storyEventPanel;
+	private Label _storyEventTitleLabel;
 	private TextureRect _storyEventImage;
 	private RichTextLabel _storyEventDescription;
 	private Button _storyEventConfirmButton;
+	private Texture2D _storyEventRuntimeTexture;
 	private PanelContainer _confirmationPromptPanel;
 	private Label _confirmationPromptTitleLabel;
 	private Label _confirmationPromptBodyLabel;
@@ -134,6 +138,8 @@ public partial class MissionUI : CanvasLayer
 	private PanelContainer _savePromptPanel;
 	private LineEdit _saveNameLineEdit;
 	private Label _savePromptStatusLabel;
+	private Button _savePromptCancelButton;
+	private Button _savePromptConfirmButton;
 	private ColorRect _gameOverPanel;
 	private Label _gameOverLabel;
 	private Button _gameOverReturnButton;
@@ -186,6 +192,48 @@ public partial class MissionUI : CanvasLayer
 		ApplyBattlemapLabelStyling();
 	}
 
+	public override void _ExitTree()
+	{
+		ClearExtractionPromptButtons();
+		ClearInteractionMenuButtons();
+		HideStoryEvent();
+
+		if (_combatEndTurnButton != null)
+		{
+			_combatEndTurnButton.Pressed -= OnCombatEndTurnButtonPressed;
+		}
+
+		if (_storyEventConfirmButton != null)
+		{
+			_storyEventConfirmButton.Pressed -= OnStoryEventConfirmButtonPressed;
+		}
+
+		if (_confirmationPromptCancelButton != null)
+		{
+			_confirmationPromptCancelButton.Pressed -= OnConfirmationCancelledButtonPressed;
+		}
+
+		if (_confirmationPromptConfirmButton != null)
+		{
+			_confirmationPromptConfirmButton.Pressed -= OnConfirmationAcceptedButtonPressed;
+		}
+
+		if (_saveNameLineEdit != null)
+		{
+			_saveNameLineEdit.TextSubmitted -= OnSaveNameSubmitted;
+		}
+
+		if (_savePromptCancelButton != null)
+		{
+			_savePromptCancelButton.Pressed -= HideMissionSavePrompt;
+		}
+
+		if (_savePromptConfirmButton != null)
+		{
+			_savePromptConfirmButton.Pressed -= ConfirmMissionSavePrompt;
+		}
+	}
+
 	public void SetMissionText(string title, string objective, string prompt)
 	{
 		if (TitleLabel != null) TitleLabel.Text = title;
@@ -213,10 +261,7 @@ public partial class MissionUI : CanvasLayer
 		_extractionPromptTitleLabel.Text = title;
 		_extractionPromptBodyLabel.Text = body;
 
-		foreach (Node child in _extractionPromptButtonStack.GetChildren())
-		{
-			child.QueueFree();
-		}
+		ClearExtractionPromptButtons();
 
 		foreach (MissionExtractionOption option in options ?? new List<MissionExtractionOption>())
 		{
@@ -487,10 +532,7 @@ public partial class MissionUI : CanvasLayer
 			return;
 		}
 
-		foreach (Node child in _interactionMenuButtonStack.GetChildren())
-		{
-			child.QueueFree();
-		}
+		ClearInteractionMenuButtons();
 
 		_interactionMenuTitleLabel.Text = string.IsNullOrWhiteSpace(title) ? "INTERACT" : title.ToUpperInvariant();
 		_interactionMenuBodyLabel.Text = body ?? string.Empty;
@@ -548,17 +590,16 @@ public partial class MissionUI : CanvasLayer
 			return;
 		}
 
-		if (_storyEventPanel.GetNodeOrNull<Label>("TitleLabel") is Label titleLabel)
+		if (_storyEventTitleLabel != null)
 		{
-			titleLabel.Text = string.IsNullOrWhiteSpace(title) ? "MISSION EVENT" : title.ToUpperInvariant();
+			_storyEventTitleLabel.Text = string.IsNullOrWhiteSpace(title) ? "MISSION EVENT" : title.ToUpperInvariant();
 		}
 
 		_storyEventDescription.Text = string.IsNullOrWhiteSpace(description)
 			? string.Empty
 			: description;
-		_storyEventImage.Texture = !string.IsNullOrWhiteSpace(imagePath) && ResourceLoader.Exists(imagePath)
-			? GD.Load<Texture2D>(imagePath)
-			: null;
+		_storyEventRuntimeTexture = LoadTextureWithoutCache(imagePath);
+		_storyEventImage.Texture = _storyEventRuntimeTexture;
 		_storyEventConfirmButton.Text = string.IsNullOrWhiteSpace(confirmButtonText) ? "CONTINUE" : confirmButtonText;
 		_storyEventPanel.Visible = true;
 	}
@@ -569,6 +610,25 @@ public partial class MissionUI : CanvasLayer
 		{
 			_storyEventPanel.Visible = false;
 		}
+
+		if (_storyEventImage != null)
+		{
+			_storyEventImage.Texture = null;
+		}
+
+		_storyEventRuntimeTexture = null;
+	}
+
+	private static Texture2D LoadTextureWithoutCache(string resourcePath)
+	{
+		if (string.IsNullOrWhiteSpace(resourcePath))
+		{
+			return null;
+		}
+
+		return ResourceLoader.Exists(resourcePath)
+			? ResourceLoader.Load<Texture2D>(resourcePath, string.Empty, ResourceLoader.CacheMode.IgnoreDeep)
+			: null;
 	}
 
 	public void ShowConfirmationPrompt(string title, string body, string confirmText, string cancelText)
@@ -704,7 +764,7 @@ public partial class MissionUI : CanvasLayer
 			CustomMinimumSize = new Vector2(180f, 42f),
 			SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin
 		};
-		_combatEndTurnButton.Pressed += () => EmitSignal(SignalName.CombatEndTurnPressed);
+		_combatEndTurnButton.Pressed += OnCombatEndTurnButtonPressed;
 		_initiativeRoot.AddChild(_combatEndTurnButton);
 
 		_playerCombatInfoPanel = BuildCombatInfoPanel(new Vector2(20f, 760f), out _playerCombatIcon, out _playerCombatHeaderLabel, out _playerCombatInfoLabel);
@@ -949,15 +1009,15 @@ public partial class MissionUI : CanvasLayer
 		content.AddThemeConstantOverride("separation", 12);
 		margin.AddChild(content);
 
-		Label titleLabel = new Label
+		_storyEventTitleLabel = new Label
 		{
 			Name = "TitleLabel",
 			Text = "MISSION EVENT",
 			HorizontalAlignment = HorizontalAlignment.Center
 		};
-		titleLabel.AddThemeFontSizeOverride("font_size", 26);
-		titleLabel.AddThemeColorOverride("font_color", new Color(0.82f, 0.96f, 1f));
-		content.AddChild(titleLabel);
+		_storyEventTitleLabel.AddThemeFontSizeOverride("font_size", 26);
+		_storyEventTitleLabel.AddThemeColorOverride("font_color", new Color(0.82f, 0.96f, 1f));
+		content.AddChild(_storyEventTitleLabel);
 
 		_storyEventImage = new TextureRect
 		{
@@ -982,7 +1042,7 @@ public partial class MissionUI : CanvasLayer
 			CustomMinimumSize = new Vector2(0f, 48f),
 			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
 		};
-		_storyEventConfirmButton.Pressed += () => EmitSignal(SignalName.StoryEventConfirmed);
+		_storyEventConfirmButton.Pressed += OnStoryEventConfirmButtonPressed;
 		content.AddChild(_storyEventConfirmButton);
 	}
 
@@ -1042,7 +1102,7 @@ public partial class MissionUI : CanvasLayer
 			CustomMinimumSize = new Vector2(0f, 46f),
 			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
 		};
-		_confirmationPromptCancelButton.Pressed += () => EmitSignal(SignalName.ConfirmationCancelled);
+		_confirmationPromptCancelButton.Pressed += OnConfirmationCancelledButtonPressed;
 		buttons.AddChild(_confirmationPromptCancelButton);
 
 		_confirmationPromptConfirmButton = new Button
@@ -1051,7 +1111,7 @@ public partial class MissionUI : CanvasLayer
 			CustomMinimumSize = new Vector2(0f, 46f),
 			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
 		};
-		_confirmationPromptConfirmButton.Pressed += () => EmitSignal(SignalName.ConfirmationAccepted);
+		_confirmationPromptConfirmButton.Pressed += OnConfirmationAcceptedButtonPressed;
 		buttons.AddChild(_confirmationPromptConfirmButton);
 	}
 
@@ -1098,7 +1158,7 @@ public partial class MissionUI : CanvasLayer
 			PlaceholderText = "Black Site Relay Save",
 			CustomMinimumSize = new Vector2(0f, 42f)
 		};
-		_saveNameLineEdit.TextSubmitted += _ => ConfirmMissionSavePrompt();
+		_saveNameLineEdit.TextSubmitted += OnSaveNameSubmitted;
 		content.AddChild(_saveNameLineEdit);
 
 		_savePromptStatusLabel = new Label
@@ -1116,21 +1176,21 @@ public partial class MissionUI : CanvasLayer
 		buttons.AddThemeConstantOverride("separation", 12);
 		content.AddChild(buttons);
 
-		Button cancelButton = new Button
+		_savePromptCancelButton = new Button
 		{
 			Text = "CANCEL",
 			CustomMinimumSize = new Vector2(180f, 42f)
 		};
-		cancelButton.Pressed += HideMissionSavePrompt;
-		buttons.AddChild(cancelButton);
+		_savePromptCancelButton.Pressed += HideMissionSavePrompt;
+		buttons.AddChild(_savePromptCancelButton);
 
-		Button saveButton = new Button
+		_savePromptConfirmButton = new Button
 		{
 			Text = "SAVE",
 			CustomMinimumSize = new Vector2(180f, 42f)
 		};
-		saveButton.Pressed += ConfirmMissionSavePrompt;
-		buttons.AddChild(saveButton);
+		_savePromptConfirmButton.Pressed += ConfirmMissionSavePrompt;
+		buttons.AddChild(_savePromptConfirmButton);
 	}
 
 	private void BuildGameOverPanel()
@@ -1406,5 +1466,56 @@ public partial class MissionUI : CanvasLayer
 			CornerRadiusBottomRight = 2,
 			CornerRadiusBottomLeft = 2
 		};
+	}
+
+	private void ClearExtractionPromptButtons()
+	{
+		if (_extractionPromptButtonStack == null)
+		{
+			return;
+		}
+
+		foreach (Node child in _extractionPromptButtonStack.GetChildren())
+		{
+			child.QueueFree();
+		}
+	}
+
+	private void ClearInteractionMenuButtons()
+	{
+		if (_interactionMenuButtonStack == null)
+		{
+			return;
+		}
+
+		foreach (Node child in _interactionMenuButtonStack.GetChildren())
+		{
+			child.QueueFree();
+		}
+	}
+
+	private void OnCombatEndTurnButtonPressed()
+	{
+		EmitSignal(SignalName.CombatEndTurnPressed);
+	}
+
+	private void OnStoryEventConfirmButtonPressed()
+	{
+		EmitSignal(SignalName.StoryEventConfirmed);
+	}
+
+	private void OnConfirmationAcceptedButtonPressed()
+	{
+		EmitSignal(SignalName.ConfirmationAccepted);
+	}
+
+	private void OnConfirmationCancelledButtonPressed()
+	{
+		EmitSignal(SignalName.ConfirmationCancelled);
+	}
+
+	private void OnSaveNameSubmitted(string _text)
+	{
+		ConfirmMissionSavePrompt();
 	}
 }

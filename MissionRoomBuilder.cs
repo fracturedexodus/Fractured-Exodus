@@ -6,6 +6,7 @@ using System.Linq;
 public partial class MissionRoomBuilder : Node
 {
 	private const string DefaultLayoutPath = "res://Data/MissionLayouts/black_site_relay_builder.json";
+	private const string DefaultTilesetTexturePath = "res://Assets/Missions/BlackSiteRelay/black_site_relay_tileset.png";
 	private const int MovementSubdivisionsPerTile = 8;
 	private const int MovementCellMinOffset = 3;
 	private const int MovementCellMaxOffset = 4;
@@ -52,6 +53,7 @@ public partial class MissionRoomBuilder : Node
 	private readonly HashSet<string> _movementBlockedTransitions = new HashSet<string>();
 	private readonly Dictionary<string, MissionDoor2D> _doorsById = new Dictionary<string, MissionDoor2D>();
 	private readonly Dictionary<Vector2I, string> _doorIdsByCell = new Dictionary<Vector2I, string>();
+	private readonly Dictionary<string, Texture2D> _textureCache = new Dictionary<string, Texture2D>();
 	private readonly HashSet<Vector2I> _closedDoorCells = new HashSet<Vector2I>();
 	private readonly HashSet<Vector2I> _closedDoorMovementCells = new HashSet<Vector2I>();
 	private readonly Dictionary<string, string> _doorTransitionKeysById = new Dictionary<string, string>();
@@ -1032,7 +1034,7 @@ public partial class MissionRoomBuilder : Node
 			ZIndex = GetCanvasSortOrderForBuildCell(cell, GetSortBiasForDefinition(definition))
 		};
 		doorNode.Configure(
-			GD.Load<Texture2D>(resolvedTexturePath),
+			LoadTextureCached(resolvedTexturePath),
 			definition.Scale,
 			GetCellWorldPosition(cell.X, cell.Y, definition.Offset + extraOffset),
 			string.IsNullOrEmpty(doorId) ? $"{definition.Id}_{cell.X}_{cell.Y}" : doorId,
@@ -1130,9 +1132,30 @@ public partial class MissionRoomBuilder : Node
 
 		if (!string.IsNullOrEmpty(definition.TexturePath))
 		{
-			return GD.Load<Texture2D>(definition.TexturePath);
+			return LoadTextureCached(definition.TexturePath);
 		}
 
-		return TilesetTexture;
+		return TilesetTexture ?? LoadTextureCached(DefaultTilesetTexturePath);
+	}
+
+	private Texture2D LoadTextureCached(string resourcePath)
+	{
+		if (string.IsNullOrWhiteSpace(resourcePath) || !ResourceLoader.Exists(resourcePath))
+		{
+			return null;
+		}
+
+		if (_textureCache.TryGetValue(resourcePath, out Texture2D cachedTexture))
+		{
+			return cachedTexture;
+		}
+
+		Texture2D loadedTexture = ResourceLoader.Load<Texture2D>(resourcePath, string.Empty, ResourceLoader.CacheMode.IgnoreDeep);
+		if (loadedTexture != null)
+		{
+			_textureCache[resourcePath] = loadedTexture;
+		}
+
+		return loadedTexture;
 	}
 }

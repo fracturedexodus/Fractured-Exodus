@@ -130,6 +130,18 @@ public partial class GalacticMap : Control
 		}
 	}
 
+	public override void _ExitTree()
+	{
+		_regionImage = null;
+
+		AudioStreamPlayer mapMusic = GetNodeOrNull<AudioStreamPlayer>("MapMusic");
+		if (mapMusic != null)
+		{
+			mapMusic.Stop();
+			mapMusic.Stream = null;
+		}
+	}
+
 	private void ConfigureMapMusic()
 	{
 		AudioStreamPlayer mapMusic = GetNodeOrNull<AudioStreamPlayer>("MapMusic");
@@ -149,7 +161,8 @@ public partial class GalacticMap : Control
 
 		if (streamToPlay == null)
 		{
-			streamToPlay = _audioPlaybackService?.GetStream(DefaultMapMusicPath);
+			string defaultMusicFilePath = ProjectSettings.GlobalizePath(DefaultMapMusicPath);
+			streamToPlay = _audioPlaybackService?.GetMp3StreamFromFile(defaultMusicFilePath, loop: true);
 			if (streamToPlay is AudioStreamMP3 defaultMapMusic)
 			{
 				defaultMapMusic.Loop = true;

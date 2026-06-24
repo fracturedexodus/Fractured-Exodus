@@ -5,6 +5,9 @@ public partial class MissionDoor2D : Node2D
 	private Sprite2D _frameSprite;
 	private Sprite2D _leftPanel;
 	private Sprite2D _rightPanel;
+	private Texture2D _frameTexture;
+	private Texture2D _leftPanelTexture;
+	private Texture2D _rightPanelTexture;
 	private AtlasTexture _legacyLeftAtlas;
 	private AtlasTexture _legacyRightAtlas;
 	private Vector2 _closedLeftPosition;
@@ -91,6 +94,9 @@ public partial class MissionDoor2D : Node2D
 	{
 		_legacyLeftAtlas = null;
 		_legacyRightAtlas = null;
+		_frameTexture = null;
+		_leftPanelTexture = null;
+		_rightPanelTexture = null;
 
 		string sourcePath = sourceTexture?.ResourcePath ?? string.Empty;
 		if (string.IsNullOrEmpty(sourcePath) || !sourcePath.EndsWith("_closed.png"))
@@ -102,29 +108,29 @@ public partial class MissionDoor2D : Node2D
 		string leftPath = sourcePath.Replace("_closed.png", "_leaf_left.png");
 		string rightPath = sourcePath.Replace("_closed.png", "_leaf_right.png");
 
-		Texture2D frameTexture = GD.Load<Texture2D>(framePath);
-		Texture2D leftTexture = GD.Load<Texture2D>(leftPath);
-		Texture2D rightTexture = GD.Load<Texture2D>(rightPath);
-		if (frameTexture == null || leftTexture == null || rightTexture == null)
+		_frameTexture = LoadTextureWithoutCache(framePath);
+		_leftPanelTexture = LoadTextureWithoutCache(leftPath);
+		_rightPanelTexture = LoadTextureWithoutCache(rightPath);
+		if (_frameTexture == null || _leftPanelTexture == null || _rightPanelTexture == null)
 		{
 			return false;
 		}
 
 		_frameSprite = new Sprite2D
 		{
-			Texture = frameTexture,
+			Texture = _frameTexture,
 			Centered = true,
 			Scale = scale
 		};
 		_leftPanel = new Sprite2D
 		{
-			Texture = leftTexture,
+			Texture = _leftPanelTexture,
 			Centered = true,
 			Scale = scale
 		};
 		_rightPanel = new Sprite2D
 		{
-			Texture = rightTexture,
+			Texture = _rightPanelTexture,
 			Centered = true,
 			Scale = scale
 		};
@@ -211,5 +217,15 @@ public partial class MissionDoor2D : Node2D
 		}
 
 		return "nw";
+	}
+
+	private static Texture2D LoadTextureWithoutCache(string resourcePath)
+	{
+		if (string.IsNullOrWhiteSpace(resourcePath) || !ResourceLoader.Exists(resourcePath))
+		{
+			return null;
+		}
+
+		return ResourceLoader.Load<Texture2D>(resourcePath, string.Empty, ResourceLoader.CacheMode.IgnoreDeep);
 	}
 }

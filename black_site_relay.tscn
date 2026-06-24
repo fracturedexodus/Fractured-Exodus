@@ -2,7 +2,6 @@
 
 [ext_resource type="Script" path="res://MissionMap.cs" id="1_mission_map"]
 [ext_resource type="PackedScene" path="res://MissionUI.tscn" id="2_mission_ui"]
-[ext_resource type="Texture2D" path="res://Assets/Missions/BlackSiteRelay/black_site_relay_tileset.png" id="3_tileset"]
 [ext_resource type="Script" path="res://MissionRoomBuilder.cs" id="4_room_builder"]
 [ext_resource type="PackedScene" path="res://DialogueUI.tscn" id="5_dialogue_ui"]
 
@@ -43,7 +42,6 @@ y_sort_enabled = true
 
 [node name="RoomBuilder" type="Node" parent="IsoWorld"]
 script = ExtResource("4_room_builder")
-tileset_texture = ExtResource("3_tileset")
 origin = Vector2(0, -20)
 tile_step = Vector2(226, 133)
 layout_resource_path = "res://Data/MissionLayouts/black_site_relay_builder.json"

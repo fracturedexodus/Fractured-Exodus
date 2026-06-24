@@ -1,4 +1,5 @@
 using Godot;
+using System;
 using System.Collections.Generic;
 
 public class ShipBlueprint
@@ -14,6 +15,7 @@ public class ShipBlueprint
 public partial class FleetSelection : Control
 {
 	private GlobalData _globalData;
+	private readonly List<Action> _signalCleanup = new List<Action>();
 
 	// --- LEFT PANEL UI ---
 	private Label _planetInfoLabel;
@@ -63,9 +65,44 @@ public partial class FleetSelection : Control
 		Button vanguardBtn = GetNodeOrNull<Button>("HBoxContainer/RightPanel/StyleSelection/VanguardButton");
 		Button budgetBtn = GetNodeOrNull<Button>("HBoxContainer/RightPanel/StyleSelection/BudgetButton");
 
-		if (loneWolfBtn != null) loneWolfBtn.Pressed += () => StartFleetBuilder(1);
-		if (vanguardBtn != null) vanguardBtn.Pressed += () => StartFleetBuilder(3);
-		if (budgetBtn != null) budgetBtn.Pressed += () => StartFleetBuilder(5); 
+		if (loneWolfBtn != null)
+		{
+			Action loneWolfHandler = () => StartFleetBuilder(1);
+			loneWolfBtn.Pressed += loneWolfHandler;
+			RegisterCleanup(() =>
+			{
+				if (GodotObject.IsInstanceValid(loneWolfBtn))
+				{
+					loneWolfBtn.Pressed -= loneWolfHandler;
+				}
+			});
+		}
+
+		if (vanguardBtn != null)
+		{
+			Action vanguardHandler = () => StartFleetBuilder(3);
+			vanguardBtn.Pressed += vanguardHandler;
+			RegisterCleanup(() =>
+			{
+				if (GodotObject.IsInstanceValid(vanguardBtn))
+				{
+					vanguardBtn.Pressed -= vanguardHandler;
+				}
+			});
+		}
+
+		if (budgetBtn != null)
+		{
+			Action budgetHandler = () => StartFleetBuilder(5);
+			budgetBtn.Pressed += budgetHandler;
+			RegisterCleanup(() =>
+			{
+				if (GodotObject.IsInstanceValid(budgetBtn))
+				{
+					budgetBtn.Pressed -= budgetHandler;
+				}
+			});
+		}
 
 		if (_backButton != null) _backButton.Pressed += _on_back_button_pressed;
 
@@ -96,6 +133,37 @@ public partial class FleetSelection : Control
 			int restoredSlots = _globalData.SelectedFleetCapacity > 0 ? _globalData.SelectedFleetCapacity : _globalData.SelectedPlayerFleet.Count;
 			StartFleetBuilder(restoredSlots);
 			RestoreSelectedFleet();
+		}
+	}
+
+	public override void _ExitTree()
+	{
+		foreach (Action cleanup in _signalCleanup)
+		{
+			cleanup?.Invoke();
+		}
+
+		_signalCleanup.Clear();
+
+		if (_deployButton != null)
+		{
+			_deployButton.Pressed -= OnDeployButtonPressed;
+		}
+
+		if (_backButton != null)
+		{
+			_backButton.Pressed -= _on_back_button_pressed;
+		}
+
+		if (_planetPreview != null)
+		{
+			_planetPreview.Texture = null;
+		}
+
+		if (_shipDescriptionPreview != null)
+		{
+			_shipDescriptionPreview.Texture = null;
+			_shipDescriptionPreview.Visible = false;
 		}
 	}
 
@@ -172,7 +240,15 @@ public partial class FleetSelection : Control
 				}
 				
 				int slotIndex = i; 
-				slotBtn.Pressed += () => RemoveShipFromSlot(slotIndex);
+				Action removeShipHandler = () => RemoveShipFromSlot(slotIndex);
+				slotBtn.Pressed += removeShipHandler;
+				RegisterCleanup(() =>
+				{
+					if (GodotObject.IsInstanceValid(slotBtn))
+					{
+						slotBtn.Pressed -= removeShipHandler;
+					}
+				});
 			}
 
 			_slotContainer.AddChild(slotBtn);
@@ -204,9 +280,23 @@ public partial class FleetSelection : Control
 				GD.PrintErr($"Could not load texture for {ship.Name} at: {ship.TexturePath}");
 			}
 			
-			shipBtn.Pressed += () => AssignShipToNextEmptySlot(ship);
-			shipBtn.MouseEntered += () => OnShipHovered(ship);
-			shipBtn.MouseExited += OnShipHoverExited;
+			Action assignShipHandler = () => AssignShipToNextEmptySlot(ship);
+			Action hoverEnterHandler = () => OnShipHovered(ship);
+			Action hoverExitHandler = OnShipHoverExited;
+			shipBtn.Pressed += assignShipHandler;
+			shipBtn.MouseEntered += hoverEnterHandler;
+			shipBtn.MouseExited += hoverExitHandler;
+			RegisterCleanup(() =>
+			{
+				if (!GodotObject.IsInstanceValid(shipBtn))
+				{
+					return;
+				}
+
+				shipBtn.Pressed -= assignShipHandler;
+				shipBtn.MouseEntered -= hoverEnterHandler;
+				shipBtn.MouseExited -= hoverExitHandler;
+			});
 
 			_availableShipsList.AddChild(shipBtn);
 		}
@@ -231,6 +321,15 @@ public partial class FleetSelection : Control
 		if (_shipDescriptionPreview != null)
 		{
 			_shipDescriptionPreview.Visible = false; // Hide when mouse leaves
+			_shipDescriptionPreview.Texture = null;
+		}
+	}
+
+	private void RegisterCleanup(Action cleanup)
+	{
+		if (cleanup != null)
+		{
+			_signalCleanup.Add(cleanup);
 		}
 	}
 

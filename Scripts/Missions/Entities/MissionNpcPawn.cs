@@ -54,6 +54,7 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 	private MissionNpcDefinition _definition;
 	private Polygon2D _selectionRing;
 	private Sprite2D _visualSprite;
+	private Texture2D _visualTexture;
 	private Sprite2D _coverGhostSprite;
 	private Label _nameLabel;
 	private Polygon2D _shadow;
@@ -64,6 +65,19 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 	private Vector2I _pendingDestinationCell = Vector2I.Zero;
 	private readonly Queue<Vector2> _pathPoints = new Queue<Vector2>();
 	private readonly Queue<Vector2I> _pathCells = new Queue<Vector2I>();
+	private readonly Dictionary<string, Texture2D> _directionTextures = new Dictionary<string, Texture2D>();
+	private float _animationClock;
+	private string _facingDirection = "se";
+	private Vector2 _baseVisualPosition = Vector2.Zero;
+	private Vector2 _baseVisualScale = new Vector2(0.11f, 0.11f);
+	private Color _baseVisualModulate = Colors.White;
+	private Vector2 _reactionOffset = Vector2.Zero;
+	private float _reactionRotationDegrees;
+	private float _reactionStretch;
+	private float _reactionFlashStrength;
+	private Color _reactionFlashColor = Colors.White;
+	private float _facingHoldTimer;
+	private bool _useDirectionalTextures;
 
 	public override void _Ready()
 	{
@@ -108,31 +122,84 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 
 	public override void _Process(double delta)
 	{
-		if (!_isMoving)
-		{
-			return;
-		}
-
 		float frameDelta = (float)delta;
-		GlobalPosition = GlobalPosition.MoveToward(_targetPosition, MoveSpeed * frameDelta);
-		if (GlobalPosition.DistanceTo(_targetPosition) > 2f)
+		_facingHoldTimer = Mathf.Max(0f, _facingHoldTimer - frameDelta);
+		if (_isMoving)
 		{
-			return;
+			UpdateFacing(_targetPosition - GlobalPosition);
+			GlobalPosition = GlobalPosition.MoveToward(_targetPosition, MoveSpeed * frameDelta);
+			if (GlobalPosition.DistanceTo(_targetPosition) > 2f)
+			{
+				UpdateVisualAnimation(frameDelta);
+				return;
+			}
+
+			GlobalPosition = _targetPosition;
+			CurrentCell = _targetCell;
+			EmitSignal(SignalName.EnteredCell, this, CurrentCell);
+			if (_pathPoints.Count > 0)
+			{
+				_targetPosition = _pathPoints.Dequeue();
+				_targetCell = _pathCells.Dequeue();
+				UpdateFacing(_targetPosition - GlobalPosition);
+			}
+			else
+			{
+				_isMoving = false;
+				CurrentCell = _pendingDestinationCell;
+				EmitSignal(SignalName.ReachedCell, this, CurrentCell);
+			}
 		}
 
-		GlobalPosition = _targetPosition;
-		CurrentCell = _targetCell;
-		EmitSignal(SignalName.EnteredCell, this, CurrentCell);
-		if (_pathPoints.Count > 0)
+		_reactionOffset = _reactionOffset.MoveToward(Vector2.Zero, 34f * frameDelta);
+		_reactionRotationDegrees = Mathf.MoveToward(_reactionRotationDegrees, 0f, 180f * frameDelta);
+		_reactionStretch = Mathf.MoveToward(_reactionStretch, 0f, 1.7f * frameDelta);
+		_reactionFlashStrength = Mathf.MoveToward(_reactionFlashStrength, 0f, 5.5f * frameDelta);
+		UpdateVisualAnimation(frameDelta);
+	}
+
+	public void FaceToward(Vector2 globalTargetPosition, float holdSeconds = 0.3f)
+	{
+		UpdateFacing(globalTargetPosition - GlobalPosition);
+		_facingHoldTimer = Mathf.Max(_facingHoldTimer, holdSeconds);
+	}
+
+	public void PlayAttackRecoil(Vector2 globalTargetPosition)
+	{
+		FaceToward(globalTargetPosition, 0.4f);
+		Vector2 away = GlobalPosition - globalTargetPosition;
+		if (away.LengthSquared() <= 0.001f)
 		{
-			_targetPosition = _pathPoints.Dequeue();
-			_targetCell = _pathCells.Dequeue();
-			return;
+			away = _facingDirection == "nw" || _facingDirection == "sw"
+				? new Vector2(-1f, 0f)
+				: new Vector2(1f, 0f);
 		}
 
-		_isMoving = false;
-		CurrentCell = _pendingDestinationCell;
-		EmitSignal(SignalName.ReachedCell, this, CurrentCell);
+		away = away.Normalized();
+		_reactionOffset += away * 4.5f + new Vector2(0f, -1f);
+		_reactionRotationDegrees += Mathf.Clamp(away.X * 8f, -8f, 8f);
+		_reactionStretch = Mathf.Max(_reactionStretch, 0.1f);
+		_reactionFlashColor = new Color(1f, 0.92f, 0.72f, 1f);
+		_reactionFlashStrength = Mathf.Max(_reactionFlashStrength, 0.12f);
+	}
+
+	public void PlayHitReaction(Vector2 sourceGlobalPosition, bool shieldHit, bool hullHit)
+	{
+		Vector2 away = GlobalPosition - sourceGlobalPosition;
+		if (away.LengthSquared() <= 0.001f)
+		{
+			away = Vector2.Up;
+		}
+
+		away = away.Normalized();
+		float force = hullHit ? 7f : shieldHit ? 4.5f : 3f;
+		_reactionOffset += away * force;
+		_reactionRotationDegrees += Mathf.Clamp(away.X * (hullHit ? 10f : 6f), -10f, 10f);
+		_reactionStretch = Mathf.Max(_reactionStretch, hullHit ? 0.15f : 0.08f);
+		_reactionFlashColor = shieldHit && !hullHit
+			? new Color(0.35f, 0.92f, 1f, 1f)
+			: new Color(1f, 0.42f, 0.38f, 1f);
+		_reactionFlashStrength = Mathf.Max(_reactionFlashStrength, hullHit ? 0.6f : 0.42f);
 	}
 
 	public void ApplyDefinition(MissionNpcDefinition definition)
@@ -178,22 +245,15 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 
 		if (_visualSprite != null)
 		{
-			_visualSprite.Texture = string.IsNullOrWhiteSpace(definition.SpriteTexturePath)
-				? null
-				: GD.Load<Texture2D>(definition.SpriteTexturePath);
-			_visualSprite.Modulate = definition.AccentColor;
-			_visualSprite.Scale = new Vector2(definition.VisualScaleMultiplier, definition.VisualScaleMultiplier);
-			if (_visualSprite.Texture != null)
-			{
-				_visualSprite.Position = new Vector2(0f, -(_visualSprite.Texture.GetHeight() * definition.VisualScaleMultiplier * 0.5f));
-			}
+			_baseVisualModulate = definition.AccentColor;
+			_baseVisualScale = new Vector2(definition.VisualScaleMultiplier, definition.VisualScaleMultiplier);
+			LoadDirectionalTextures(definition.SpriteTexturePath);
+			RefreshVisualTexture();
 		}
 
 		if (_coverGhostSprite != null && _visualSprite != null)
 		{
-			_coverGhostSprite.Texture = _visualSprite.Texture;
-			_coverGhostSprite.Position = _visualSprite.Position;
-			_coverGhostSprite.Scale = _visualSprite.Scale * 1.04f;
+			_coverGhostSprite.Modulate = new Color(0.55f, 0.95f, 1f, 0.28f);
 		}
 
 		if (_nameLabel != null)
@@ -206,6 +266,66 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 		{
 			_shadow.Color = new Color(definition.AccentColor.R, definition.AccentColor.G, definition.AccentColor.B, 0.18f);
 		}
+
+		ApplyFacingToVisuals();
+	}
+
+	private static Texture2D LoadTextureWithoutCache(string resourcePath)
+	{
+		if (string.IsNullOrWhiteSpace(resourcePath) || !ResourceLoader.Exists(resourcePath))
+		{
+			return null;
+		}
+
+		return ResourceLoader.Load<Texture2D>(resourcePath, string.Empty, ResourceLoader.CacheMode.IgnoreDeep);
+	}
+
+	private void LoadDirectionalTextures(string spriteTexturePath)
+	{
+		_directionTextures.Clear();
+		_useDirectionalTextures = false;
+		_visualTexture = LoadTextureWithoutCache(spriteTexturePath);
+		if (string.IsNullOrWhiteSpace(spriteTexturePath))
+		{
+			return;
+		}
+
+		string normalizedPath = spriteTexturePath.Replace('\\', '/');
+		int slashIndex = normalizedPath.LastIndexOf('/');
+		int extensionIndex = normalizedPath.LastIndexOf('.');
+		if (slashIndex < 0 || extensionIndex <= slashIndex)
+		{
+			return;
+		}
+
+		string directory = normalizedPath[..slashIndex];
+		string extension = normalizedPath[extensionIndex..];
+		string fileWithoutExtension = normalizedPath[(slashIndex + 1)..extensionIndex];
+		if (string.IsNullOrWhiteSpace(extension) || string.IsNullOrWhiteSpace(fileWithoutExtension) || string.IsNullOrWhiteSpace(directory))
+		{
+			return;
+		}
+
+		string[] suffixes = { "_ne", "_nw", "_se", "_sw" };
+		string matchedSuffix = suffixes.FirstOrDefault(fileWithoutExtension.EndsWith);
+		if (string.IsNullOrWhiteSpace(matchedSuffix))
+		{
+			return;
+		}
+
+		string baseName = fileWithoutExtension[..^matchedSuffix.Length];
+		string[] directions = { "ne", "nw", "se", "sw" };
+		foreach (string direction in directions)
+		{
+			string candidatePath = $"{directory}/{baseName}_{direction}{extension}";
+			Texture2D texture = LoadTextureWithoutCache(candidatePath);
+			if (texture != null)
+			{
+				_directionTextures[direction] = texture;
+			}
+		}
+
+		_useDirectionalTextures = _directionTextures.Count > 0;
 	}
 
 	public void SetGridCell(Vector2I cell, Vector2 globalPosition)
@@ -499,6 +619,116 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 		{
 			IsConsumed = true;
 			Modulate = new Color(1f, 1f, 1f, 0.45f);
+		}
+	}
+
+	private void UpdateFacing(Vector2 moveVector)
+	{
+		if (_facingHoldTimer > 0f && !_isMoving)
+		{
+			return;
+		}
+
+		if (moveVector.LengthSquared() <= 4f)
+		{
+			return;
+		}
+
+		string nextFacing = moveVector.Y < 0f
+			? (moveVector.X >= 0f ? "ne" : "nw")
+			: (moveVector.X >= 0f ? "se" : "sw");
+		if (nextFacing == _facingDirection)
+		{
+			return;
+		}
+
+		_facingDirection = nextFacing;
+		RefreshVisualTexture();
+	}
+
+	private void ApplyFacingToVisuals()
+	{
+		bool flipHorizontally = !_useDirectionalTextures && (_facingDirection == "nw" || _facingDirection == "sw");
+		if (_visualSprite != null)
+		{
+			_visualSprite.FlipH = flipHorizontally;
+		}
+
+		if (_coverGhostSprite != null)
+		{
+			_coverGhostSprite.FlipH = flipHorizontally;
+		}
+	}
+
+	private void RefreshVisualTexture()
+	{
+		if (_visualSprite == null)
+		{
+			return;
+		}
+
+		Texture2D facingTexture = null;
+		if (_directionTextures.TryGetValue(_facingDirection, out Texture2D directionalTexture))
+		{
+			facingTexture = directionalTexture;
+		}
+		else
+		{
+			facingTexture = _visualTexture;
+		}
+
+		_visualSprite.Texture = facingTexture;
+		_visualSprite.Visible = facingTexture != null;
+		_visualSprite.Modulate = _baseVisualModulate;
+		_visualSprite.Scale = _baseVisualScale;
+		if (facingTexture != null)
+		{
+			_baseVisualPosition = new Vector2(0f, -(facingTexture.GetHeight() * _baseVisualScale.Y * 0.5f));
+			_visualSprite.Position = _baseVisualPosition;
+		}
+
+		if (_coverGhostSprite != null)
+		{
+			_coverGhostSprite.Texture = facingTexture;
+			_coverGhostSprite.Visible = false;
+			_coverGhostSprite.Position = _baseVisualPosition;
+			_coverGhostSprite.Scale = _baseVisualScale * 1.04f;
+		}
+
+		ApplyFacingToVisuals();
+	}
+
+	private void UpdateVisualAnimation(float delta)
+	{
+		_animationClock += delta * (_isMoving ? 8f : 2.4f);
+		float swayX = _isMoving ? Mathf.Sin(_animationClock * 0.5f) * 1.6f : Mathf.Sin(_animationClock * 0.35f) * 0.7f;
+		float bobY = _isMoving ? Mathf.Abs(Mathf.Sin(_animationClock)) * -5f : Mathf.Sin(_animationClock * 0.8f) * -1.4f;
+		float squash = _isMoving ? 1f + Mathf.Sin(_animationClock * 2f) * 0.035f : 1f + Mathf.Sin(_animationClock * 1.4f) * 0.012f;
+		squash += _reactionStretch;
+		Vector2 animationOffset = new Vector2(swayX, bobY) + _reactionOffset;
+		Vector2 animatedScale = new Vector2(_baseVisualScale.X / squash, _baseVisualScale.Y * squash);
+		Color flashColor = _baseVisualModulate.Lerp(_reactionFlashColor, _reactionFlashStrength);
+
+		if (_visualSprite != null)
+		{
+			_visualSprite.Position = _baseVisualPosition + animationOffset;
+			_visualSprite.Scale = animatedScale;
+			_visualSprite.RotationDegrees = _reactionRotationDegrees;
+			_visualSprite.Modulate = flashColor;
+		}
+
+		if (_coverGhostSprite != null)
+		{
+			_coverGhostSprite.Position = _baseVisualPosition + animationOffset;
+			_coverGhostSprite.Scale = animatedScale * 1.04f;
+			_coverGhostSprite.RotationDegrees = _reactionRotationDegrees;
+		}
+
+		if (_shadow != null)
+		{
+			_shadow.Scale = _isMoving
+				? new Vector2(1.03f + Mathf.Sin(_animationClock * 2f) * 0.04f, 0.96f - (_reactionStretch * 0.1f))
+				: new Vector2(1f + (_reactionStretch * 0.12f), 1f - (_reactionStretch * 0.08f));
 		}
 	}
 

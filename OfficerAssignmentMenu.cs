@@ -1,11 +1,15 @@
 using Godot;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 
 public partial class OfficerAssignmentMenu : Control
 {
+	private const string BackgroundMusicPath = "res://Sounds/Custodian_s_Legacy.mp3";
+
 	private GlobalData _globalData;
 	private OfficerService _officerService;
+	private readonly List<Action> _signalCleanup = new List<Action>();
 	private List<string> _fleetShips = new List<string>();
 	private List<string> _portraitOptions = new List<string>();
 	private int _currentShipIndex = 0;
@@ -44,7 +48,40 @@ public partial class OfficerAssignmentMenu : Control
 		}
 
 		BuildUi();
+		PlayBackgroundMusic();
 		RefreshCurrentShip();
+	}
+
+	public override void _ExitTree()
+	{
+		foreach (Action cleanup in _signalCleanup)
+		{
+			cleanup?.Invoke();
+		}
+
+		_signalCleanup.Clear();
+
+		if (_portraitOption != null)
+		{
+			_portraitOption.ItemSelected -= OnPortraitOptionItemSelected;
+		}
+
+		if (_shipPreview != null)
+		{
+			_shipPreview.Texture = null;
+		}
+
+		if (_portraitPreview != null)
+		{
+			_portraitPreview.Texture = null;
+		}
+
+		AudioStreamPlayer backgroundMusic = GetNodeOrNull<AudioStreamPlayer>("BackgroundMusic");
+		if (backgroundMusic != null)
+		{
+			backgroundMusic.Stop();
+			backgroundMusic.Stream = null;
+		}
 	}
 
 	private void BuildUi()
@@ -179,19 +216,35 @@ public partial class OfficerAssignmentMenu : Control
 		right.AddChild(modeButtons);
 
 		_presetModeButton = new Button { Text = "Use Preset Officer", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
-		_presetModeButton.Pressed += () =>
+		Action presetModeHandler = () =>
 		{
 			_useCustomMode = false;
 			RefreshCurrentShip(true);
 		};
+		_presetModeButton.Pressed += presetModeHandler;
+		RegisterCleanup(() =>
+		{
+			if (GodotObject.IsInstanceValid(_presetModeButton))
+			{
+				_presetModeButton.Pressed -= presetModeHandler;
+			}
+		});
 		modeButtons.AddChild(_presetModeButton);
 
 		_customModeButton = new Button { Text = "Create Custom Officer", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
-		_customModeButton.Pressed += () =>
+		Action customModeHandler = () =>
 		{
 			_useCustomMode = true;
 			RefreshCurrentShip(true);
 		};
+		_customModeButton.Pressed += customModeHandler;
+		RegisterCleanup(() =>
+		{
+			if (GodotObject.IsInstanceValid(_customModeButton))
+			{
+				_customModeButton.Pressed -= customModeHandler;
+			}
+		});
 		modeButtons.AddChild(_customModeButton);
 
 		_presetPanel = new VBoxContainer();
@@ -224,7 +277,7 @@ public partial class OfficerAssignmentMenu : Control
 		PopulateOptionButton(_flawOption, OfficerService.Flaws);
 		PopulateOptionButton(_bioSeedOption, OfficerService.BiographySeeds);
 
-		_portraitOption.ItemSelected += _ => UpdateCustomPortraitPreview();
+		_portraitOption.ItemSelected += OnPortraitOptionItemSelected;
 
 		_messageLabel = new Label
 		{
@@ -238,33 +291,103 @@ public partial class OfficerAssignmentMenu : Control
 		root.AddChild(footerButtons);
 
 		Button backButton = new Button { Text = "Back to Fleet Builder", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
-		backButton.Pressed += () =>
+		Action backHandler = () =>
 		{
 			SaveCurrentOfficer();
 			GoBack();
 		};
+		backButton.Pressed += backHandler;
+		RegisterCleanup(() =>
+		{
+			if (GodotObject.IsInstanceValid(backButton))
+			{
+				backButton.Pressed -= backHandler;
+			}
+		});
 		footerButtons.AddChild(backButton);
 
 		Button prevButton = new Button { Text = "Previous Ship", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
-		prevButton.Pressed += () => StepShip(-1);
+		Action prevHandler = () => StepShip(-1);
+		prevButton.Pressed += prevHandler;
+		RegisterCleanup(() =>
+		{
+			if (GodotObject.IsInstanceValid(prevButton))
+			{
+				prevButton.Pressed -= prevHandler;
+			}
+		});
 		footerButtons.AddChild(prevButton);
 
 		Button nextButton = new Button { Text = "Next Ship", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
-		nextButton.Pressed += () => StepShip(1);
+		Action nextHandler = () => StepShip(1);
+		nextButton.Pressed += nextHandler;
+		RegisterCleanup(() =>
+		{
+			if (GodotObject.IsInstanceValid(nextButton))
+			{
+				nextButton.Pressed -= nextHandler;
+			}
+		});
 		footerButtons.AddChild(nextButton);
 
 		Button saveButton = new Button { Text = "Save Officer", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
-		saveButton.Pressed += () =>
+		Action saveHandler = () =>
 		{
 			SaveCurrentOfficer();
 			SetMessage("Officer saved for this ship.");
 			RefreshCurrentShip(true);
 		};
+		saveButton.Pressed += saveHandler;
+		RegisterCleanup(() =>
+		{
+			if (GodotObject.IsInstanceValid(saveButton))
+			{
+				saveButton.Pressed -= saveHandler;
+			}
+		});
 		footerButtons.AddChild(saveButton);
 
 		_launchButton = new Button { Text = "Begin Exodus", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
 		_launchButton.Pressed += OnLaunchPressed;
+		RegisterCleanup(() =>
+		{
+			if (GodotObject.IsInstanceValid(_launchButton))
+			{
+				_launchButton.Pressed -= OnLaunchPressed;
+			}
+		});
 		footerButtons.AddChild(_launchButton);
+	}
+
+	private void PlayBackgroundMusic()
+	{
+		AudioStreamPlayer backgroundMusic = GetNodeOrNull<AudioStreamPlayer>("BackgroundMusic");
+		if (backgroundMusic == null)
+		{
+			return;
+		}
+
+		string absolutePath = ProjectSettings.GlobalizePath(BackgroundMusicPath);
+		if (!FileAccess.FileExists(absolutePath))
+		{
+			backgroundMusic.Stream = null;
+			return;
+		}
+
+		using FileAccess file = FileAccess.Open(absolutePath, FileAccess.ModeFlags.Read);
+		if (file == null)
+		{
+			backgroundMusic.Stream = null;
+			return;
+		}
+
+		backgroundMusic.Stream = new AudioStreamMP3
+		{
+			Data = file.GetBuffer((long)file.GetLength()),
+			Loop = true
+		};
+		backgroundMusic.VolumeDb = -8.0f;
+		backgroundMusic.Play();
 	}
 
 	private LineEdit AddLabeledLineEdit(VBoxContainer parent, string labelText)
@@ -422,7 +545,10 @@ public partial class OfficerAssignmentMenu : Control
 		if (!string.IsNullOrEmpty(portraitPath))
 		{
 			_portraitPreview.Texture = GD.Load<Texture2D>(portraitPath);
+			return;
 		}
+
+		_portraitPreview.Texture = null;
 	}
 
 	private void StepShip(int direction)
@@ -520,5 +646,18 @@ public partial class OfficerAssignmentMenu : Control
 	private void SetMessage(string message)
 	{
 		_messageLabel.Text = message;
+	}
+
+	private void OnPortraitOptionItemSelected(long _index)
+	{
+		UpdateCustomPortraitPreview();
+	}
+
+	private void RegisterCleanup(Action cleanup)
+	{
+		if (cleanup != null)
+		{
+			_signalCleanup.Add(cleanup);
+		}
 	}
 }

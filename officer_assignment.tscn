@@ -1,7 +1,6 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=2 format=3]
 
 [ext_resource type="Script" path="res://OfficerAssignmentMenu.cs" id="1_1"]
-[ext_resource type="AudioStream" uid="uid://d5y1gu2dhl0r3" path="res://Sounds/Custodian_s_Legacy.mp3" id="2_oa6th"]
 
 [node name="OfficerAssignmentMenu" type="Control"]
 layout_mode = 3
@@ -13,6 +12,4 @@ grow_vertical = 2
 script = ExtResource("1_1")
 
 [node name="BackgroundMusic" type="AudioStreamPlayer" parent="."]
-stream = ExtResource("2_oa6th")
 volume_db = -8.0
-autoplay = true

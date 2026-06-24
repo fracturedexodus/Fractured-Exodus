@@ -75,6 +75,13 @@ public partial class OfficerPawn : Node2D
 	private Vector2 _baseSpritePosition = Vector2.Zero;
 	private Vector2 _baseSpriteScale = new Vector2(0.11f, 0.11f);
 	private bool _isSelected;
+	private Vector2 _reactionOffset = Vector2.Zero;
+	private float _reactionRotationDegrees;
+	private float _reactionStretch;
+	private float _reactionFlashStrength;
+	private Color _reactionFlashColor = Colors.White;
+	private float _facingHoldTimer;
+	private Color _bodyBaseColor = Colors.White;
 
 	public override void _Ready()
 	{
@@ -85,6 +92,7 @@ public partial class OfficerPawn : Node2D
 	public override void _Process(double delta)
 	{
 		float frameDelta = (float)delta;
+		_facingHoldTimer = Mathf.Max(0f, _facingHoldTimer - frameDelta);
 		if (_isMoving)
 		{
 			UpdateFacing(_targetPosition - GlobalPosition);
@@ -109,6 +117,10 @@ public partial class OfficerPawn : Node2D
 			}
 		}
 
+		_reactionOffset = _reactionOffset.MoveToward(Vector2.Zero, 38f * frameDelta);
+		_reactionRotationDegrees = Mathf.MoveToward(_reactionRotationDegrees, 0f, 180f * frameDelta);
+		_reactionStretch = Mathf.MoveToward(_reactionStretch, 0f, 1.8f * frameDelta);
+		_reactionFlashStrength = Mathf.MoveToward(_reactionFlashStrength, 0f, 5.5f * frameDelta);
 		UpdateVisualAnimation(frameDelta);
 	}
 
@@ -147,6 +159,7 @@ public partial class OfficerPawn : Node2D
 
 		if (_body != null)
 		{
+			_bodyBaseColor = accentColor;
 			_body.Color = accentColor;
 		}
 	}
@@ -282,6 +295,50 @@ public partial class OfficerPawn : Node2D
 		{
 			_selectionRing.Visible = isSelected;
 		}
+	}
+
+	public void FaceToward(Vector2 globalTargetPosition, float holdSeconds = 0.3f)
+	{
+		UpdateFacing(globalTargetPosition - GlobalPosition);
+		_facingHoldTimer = Mathf.Max(_facingHoldTimer, holdSeconds);
+	}
+
+	public void PlayAttackRecoil(Vector2 globalTargetPosition)
+	{
+		FaceToward(globalTargetPosition, 0.4f);
+		Vector2 away = GlobalPosition - globalTargetPosition;
+		if (away.LengthSquared() <= 0.001f)
+		{
+			away = _facingDirection == "nw" || _facingDirection == "sw"
+				? new Vector2(-1f, 0f)
+				: new Vector2(1f, 0f);
+		}
+
+		away = away.Normalized();
+		_reactionOffset += away * 5f + new Vector2(0f, -1.2f);
+		_reactionRotationDegrees += Mathf.Clamp(away.X * 8f, -8f, 8f);
+		_reactionStretch = Mathf.Max(_reactionStretch, 0.11f);
+		_reactionFlashColor = new Color(1f, 0.92f, 0.72f, 1f);
+		_reactionFlashStrength = Mathf.Max(_reactionFlashStrength, 0.12f);
+	}
+
+	public void PlayHitReaction(Vector2 sourceGlobalPosition, bool shieldHit, bool hullHit)
+	{
+		Vector2 away = GlobalPosition - sourceGlobalPosition;
+		if (away.LengthSquared() <= 0.001f)
+		{
+			away = Vector2.Up;
+		}
+
+		away = away.Normalized();
+		float force = hullHit ? 8f : shieldHit ? 5f : 3f;
+		_reactionOffset += away * force;
+		_reactionRotationDegrees += Mathf.Clamp(away.X * (hullHit ? 12f : 7f), -12f, 12f);
+		_reactionStretch = Mathf.Max(_reactionStretch, hullHit ? 0.16f : 0.08f);
+		_reactionFlashColor = shieldHit && !hullHit
+			? new Color(0.35f, 0.92f, 1f, 1f)
+			: new Color(1f, 0.42f, 0.38f, 1f);
+		_reactionFlashStrength = Mathf.Max(_reactionFlashStrength, hullHit ? 0.65f : 0.45f);
 	}
 
 	public void SetCoverOccluded(bool occluded, int overlayZIndex)
@@ -441,6 +498,7 @@ public partial class OfficerPawn : Node2D
 			Position = new Vector2(0f, -18f)
 		};
 		AddChild(_body);
+		_bodyBaseColor = _body.Color;
 
 		_coverGhostBody = new Polygon2D
 		{
@@ -651,6 +709,11 @@ public partial class OfficerPawn : Node2D
 
 	private void UpdateFacing(Vector2 moveVector)
 	{
+		if (_facingHoldTimer > 0f && !_isMoving)
+		{
+			return;
+		}
+
 		if (moveVector.LengthSquared() <= 4f)
 		{
 			return;
@@ -671,25 +734,43 @@ public partial class OfficerPawn : Node2D
 	private void UpdateVisualAnimation(float delta)
 	{
 		_animationClock += delta * (_isMoving ? 8f : 2.4f);
-		if (_sprite == null || !_sprite.Visible)
-		{
-			return;
-		}
-
 		float swayX = _isMoving ? Mathf.Sin(_animationClock * 0.5f) * 1.6f : Mathf.Sin(_animationClock * 0.35f) * 0.7f;
 		float bobY = _isMoving ? Mathf.Abs(Mathf.Sin(_animationClock)) * -5f : Mathf.Sin(_animationClock * 0.8f) * -1.4f;
 		float squash = _isMoving ? 1f + Mathf.Sin(_animationClock * 2f) * 0.035f : 1f + Mathf.Sin(_animationClock * 1.4f) * 0.012f;
+		squash += _reactionStretch;
+		Vector2 animationOffset = new Vector2(swayX, bobY) + _reactionOffset;
+		Vector2 animatedScale = new Vector2(_baseSpriteScale.X / squash, _baseSpriteScale.Y * squash);
+		Color flashColor = Colors.White.Lerp(_reactionFlashColor, _reactionFlashStrength);
 
-		_sprite.Position = _baseSpritePosition + new Vector2(swayX, bobY);
-		_sprite.Scale = new Vector2(_baseSpriteScale.X / squash, _baseSpriteScale.Y * squash);
+		if (_sprite != null && _sprite.Visible)
+		{
+			_sprite.Position = _baseSpritePosition + animationOffset;
+			_sprite.Scale = animatedScale;
+			_sprite.RotationDegrees = _reactionRotationDegrees;
+			_sprite.Modulate = flashColor;
+		}
 		if (_coverGhostSprite != null)
 		{
-			_coverGhostSprite.Position = _sprite.Position;
-			_coverGhostSprite.Scale = _sprite.Scale * 1.04f;
+			_coverGhostSprite.Position = _baseSpritePosition + animationOffset;
+			_coverGhostSprite.Scale = animatedScale * 1.04f;
+			_coverGhostSprite.RotationDegrees = _reactionRotationDegrees;
+		}
+		if (_body != null && _body.Visible)
+		{
+			_body.Position = new Vector2(0f, -18f) + animationOffset;
+			_body.Scale = new Vector2(1f / squash, squash);
+			_body.RotationDegrees = _reactionRotationDegrees;
+			_body.Color = _bodyBaseColor.Lerp(_reactionFlashColor, _reactionFlashStrength);
+		}
+		if (_coverGhostBody != null)
+		{
+			_coverGhostBody.Position = new Vector2(0f, -18f) + animationOffset;
+			_coverGhostBody.Scale = new Vector2(1.08f / squash, 1.08f * squash);
+			_coverGhostBody.RotationDegrees = _reactionRotationDegrees;
 		}
 		_shadow.Scale = _isMoving
-			? new Vector2(1.03f + Mathf.Sin(_animationClock * 2f) * 0.04f, 0.96f)
-			: new Vector2(1f, 1f);
+			? new Vector2(1.03f + Mathf.Sin(_animationClock * 2f) * 0.04f, 0.96f - (_reactionStretch * 0.1f))
+			: new Vector2(1f + (_reactionStretch * 0.12f), 1f - (_reactionStretch * 0.08f));
 	}
 
 	private Color GetSpecialtyColor(string specialty)

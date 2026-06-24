@@ -16,6 +16,7 @@ public partial class MissionProp : Area2D, IInteractable
 	public bool IsConsumed { get; private set; }
 
 	private Sprite2D _visualSprite;
+	private Texture2D _visualTexture;
 	private bool _isFogVisible = true;
 	private bool _isCoverOccluded;
 
@@ -216,12 +217,22 @@ public partial class MissionProp : Area2D, IInteractable
 			return;
 		}
 
-		Texture2D texture = GD.Load<Texture2D>(Definition.SpriteTexturePath);
-		_visualSprite.Texture = texture;
-		_visualSprite.Scale = PropVisualSizing.GetScale(texture, Definition.VisualScaleMultiplier);
+		_visualTexture = LoadTextureWithoutCache(Definition.SpriteTexturePath);
+		_visualSprite.Texture = _visualTexture;
+		_visualSprite.Scale = PropVisualSizing.GetScale(_visualTexture, Definition.VisualScaleMultiplier);
 		_visualSprite.FlipH = PlacementFlipH;
 		_visualSprite.FlipV = PlacementFlipV;
 		RotationDegrees = PlacementRotationDegrees;
+	}
+
+	private static Texture2D LoadTextureWithoutCache(string resourcePath)
+	{
+		if (string.IsNullOrWhiteSpace(resourcePath) || !ResourceLoader.Exists(resourcePath))
+		{
+			return null;
+		}
+
+		return ResourceLoader.Load<Texture2D>(resourcePath, string.Empty, ResourceLoader.CacheMode.IgnoreDeep);
 	}
 
 	private void ApplyDefinitionDefaults(PropInteractionResult result, PropInteractionContext context)
