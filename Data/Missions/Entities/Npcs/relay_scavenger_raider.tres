@@ -23,3 +23,4 @@ AttackDamage = 4
 InitiativeBonus = 2
 WeaponName = "Scrap Pistol"
 Notes = "Hostile ranged scavenger for black site combat."
+PersonalInventoryItemIDs = PackedStringArray("scavenger_stim_pack")

@@ -13,6 +13,7 @@ public partial class PropDefinition : Resource
 	[Export] public int InteractionRange { get; set; } = 1;
 	[Export] public bool OneShot { get; set; } = false;
 	[Export] public bool HideWhenConsumed { get; set; } = true;
+	[Export] public bool BlocksMovement { get; set; } = true;
 	[Export] public string RequiredOfficerSpecialty { get; set; } = string.Empty;
 	[Export] public Godot.Collections.Array<string> RequiredFlags { get; set; } = new Godot.Collections.Array<string>();
 	[Export] public Godot.Collections.Array<string> BlockedFlags { get; set; } = new Godot.Collections.Array<string>();

@@ -74,6 +74,8 @@ public partial class OfficerPawn : Node2D
 	private float _animationClock;
 	private Vector2 _baseSpritePosition = Vector2.Zero;
 	private Vector2 _baseSpriteScale = new Vector2(0.11f, 0.11f);
+	private int _baseMaxShields = 5;
+	private int _baseShieldRechargePerTurn = 1;
 	private bool _isSelected;
 	private Vector2 _reactionOffset = Vector2.Zero;
 	private float _reactionRotationDegrees;
@@ -622,6 +624,8 @@ public partial class OfficerPawn : Node2D
 				break;
 		}
 
+		_baseMaxShields = MaxShields;
+		_baseShieldRechargePerTurn = ShieldRechargePerTurn;
 		CurrentHP = MaxHP;
 		CurrentShields = MaxShields;
 		CurrentActions = MaxActions;
@@ -660,9 +664,9 @@ public partial class OfficerPawn : Node2D
 		}
 
 		ShieldName = string.IsNullOrWhiteSpace(shield.DisplayName) ? ShieldName : shield.DisplayName;
-		MaxShields = Mathf.Max(0, MaxShields + shield.CapacityBonus);
+		MaxShields = Mathf.Max(0, _baseMaxShields + shield.CapacityBonus);
 		CurrentShields = MaxShields;
-		ShieldRechargePerTurn = Mathf.Max(0, shield.RechargePerTurn);
+		ShieldRechargePerTurn = Mathf.Max(0, _baseShieldRechargePerTurn + shield.RechargePerTurn);
 	}
 
 	private Vector2[] BuildDiamond(float halfWidth, float halfHeight)

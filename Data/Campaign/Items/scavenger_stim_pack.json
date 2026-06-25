@@ -1,0 +1,8 @@
+{
+	"item_id": "scavenger_stim_pack",
+	"display_name": "Scavenger Stim Pack",
+	"description": "A cracked injector bundle scavengers use to push through pain and keep moving in hostile ruins.",
+	"category": "Field Supplies",
+	"stackable": true,
+	"codex_entry_id": ""
+}

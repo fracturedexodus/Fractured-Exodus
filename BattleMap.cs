@@ -1314,18 +1314,7 @@ public partial class BattleMap : Node2D
 			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
 		};
 
-		List<string> ownedWeaponIds = (officer?.OwnedMissionWeaponIds ?? new List<string>())
-			.Where(weaponId => MissionEquipmentRegistry.GetWeapon(weaponId) != null)
-			.Distinct()
-			.ToList();
-		if (ownedWeaponIds.Count == 0)
-		{
-			string fallbackWeaponId = MissionEquipmentRegistry.GetDefaultWeaponIdForSpecialty(officer?.Specialty ?? string.Empty);
-			if (!string.IsNullOrWhiteSpace(fallbackWeaponId))
-			{
-				ownedWeaponIds.Add(fallbackWeaponId);
-			}
-		}
+		List<string> ownedWeaponIds = OfficerMissionLoadoutService.GetOwnedWeaponIds(officer).ToList();
 
 		int selectedIndex = 0;
 		for (int i = 0; i < ownedWeaponIds.Count; i++)
@@ -1363,18 +1352,7 @@ public partial class BattleMap : Node2D
 			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
 		};
 
-		List<string> ownedShieldIds = (officer?.OwnedMissionShieldIds ?? new List<string>())
-			.Where(shieldId => MissionEquipmentRegistry.GetShield(shieldId) != null)
-			.Distinct()
-			.ToList();
-		if (ownedShieldIds.Count == 0)
-		{
-			string fallbackShieldId = MissionEquipmentRegistry.GetDefaultShieldIdForSpecialty(officer?.Specialty ?? string.Empty);
-			if (!string.IsNullOrWhiteSpace(fallbackShieldId))
-			{
-				ownedShieldIds.Add(fallbackShieldId);
-			}
-		}
+		List<string> ownedShieldIds = OfficerMissionLoadoutService.GetOwnedShieldIds(officer).ToList();
 
 		int selectedIndex = 0;
 		for (int i = 0; i < ownedShieldIds.Count; i++)

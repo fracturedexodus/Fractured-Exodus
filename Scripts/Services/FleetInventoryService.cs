@@ -294,6 +294,30 @@ public class FleetInventoryService
 			report.Lines.Add("- No officer-carried mission items.");
 		}
 
+		report.Lines.Add(string.Empty);
+		report.Lines.Add("[color=gold]--- RESCUED SURVIVOR INVENTORY ---[/color]");
+		bool foundRemnantItems = false;
+		foreach (RemnantRecord remnant in (_globalData.RescuedRemnants ?? Enumerable.Empty<RemnantRecord>()).Where(remnant => remnant != null))
+		{
+			List<CampaignItemStack> remnantItems = GetGroupedRemnantInventory(remnant);
+			if (remnantItems.Count == 0)
+			{
+				continue;
+			}
+
+			foundRemnantItems = true;
+			report.Lines.Add($"- {remnant.DisplayName}:");
+			foreach (CampaignItemStack stack in remnantItems)
+			{
+				report.Lines.Add($"  * {stack.Item.DisplayName} (x{stack.Count}) [{stack.Item.Category}]");
+			}
+		}
+
+		if (!foundRemnantItems)
+		{
+			report.Lines.Add("- No rescued survivors are carrying tracked items.");
+		}
+
 		return report;
 	}
 
@@ -305,6 +329,11 @@ public class FleetInventoryService
 	public List<CampaignItemStack> GetGroupedOfficerInventory(OfficerState officer)
 	{
 		return GroupCampaignItems(officer?.PersonalInventoryItemIDs);
+	}
+
+	public List<CampaignItemStack> GetGroupedRemnantInventory(RemnantRecord remnant)
+	{
+		return GroupCampaignItems(remnant?.PersonalInventoryItemIDs);
 	}
 
 	private static List<CampaignItemStack> GroupCampaignItems(IEnumerable<string> itemIds)

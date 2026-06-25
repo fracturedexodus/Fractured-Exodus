@@ -89,6 +89,7 @@ public class MissionActorSaveData
 	public int CurrentShields { get; set; }
 	public int CurrentActions { get; set; }
 	public string ActiveStatusEffectId { get; set; } = string.Empty;
+	public List<string> PersonalInventoryItemIDs { get; set; } = new List<string>();
 	public bool IsDead { get; set; }
 	public bool IsConsumed { get; set; }
 	public bool IsExtracted { get; set; }
@@ -104,6 +105,7 @@ public class MissionActorSaveData
 			{ "CurrentShields", CurrentShields },
 			{ "CurrentActions", CurrentActions },
 			{ "ActiveStatusEffectId", ActiveStatusEffectId },
+			{ "PersonalInventoryItemIDs", CampaignSaveData.ToVariantArray(PersonalInventoryItemIDs) },
 			{ "IsDead", IsDead },
 			{ "IsConsumed", IsConsumed },
 			{ "IsExtracted", IsExtracted }
@@ -123,6 +125,7 @@ public class MissionActorSaveData
 			CurrentShields = dict.ContainsKey("CurrentShields") ? (int)dict["CurrentShields"] : 0,
 			CurrentActions = dict.ContainsKey("CurrentActions") ? (int)dict["CurrentActions"] : 0,
 			ActiveStatusEffectId = dict.ContainsKey("ActiveStatusEffectId") ? (string)dict["ActiveStatusEffectId"] : string.Empty,
+			PersonalInventoryItemIDs = CampaignSaveData.FromStringArray(dict.ContainsKey("PersonalInventoryItemIDs") ? (Godot.Collections.Array)dict["PersonalInventoryItemIDs"] : new Godot.Collections.Array()),
 			IsDead = dict.ContainsKey("IsDead") && (bool)dict["IsDead"],
 			IsConsumed = dict.ContainsKey("IsConsumed") && (bool)dict["IsConsumed"],
 			IsExtracted = dict.ContainsKey("IsExtracted") && (bool)dict["IsExtracted"]
@@ -133,14 +136,18 @@ public class MissionActorSaveData
 public class MissionPropSaveData
 {
 	public string PropInstanceId { get; set; } = string.Empty;
+	public Vector2ISaveData Cell { get; set; } = new Vector2ISaveData();
 	public bool IsConsumed { get; set; }
+	public List<string> RewardOfficerItemIds { get; set; } = new List<string>();
 
 	public Godot.Collections.Dictionary<string, Variant> ToVariantDictionary()
 	{
 		return new Godot.Collections.Dictionary<string, Variant>
 		{
 			{ "PropInstanceId", PropInstanceId },
-			{ "IsConsumed", IsConsumed }
+			{ "Cell", Cell.ToVariantDictionary() },
+			{ "IsConsumed", IsConsumed },
+			{ "RewardOfficerItemIds", CampaignSaveData.ToVariantArray(RewardOfficerItemIds) }
 		};
 	}
 
@@ -149,7 +156,11 @@ public class MissionPropSaveData
 		return new MissionPropSaveData
 		{
 			PropInstanceId = dict.ContainsKey("PropInstanceId") ? (string)dict["PropInstanceId"] : string.Empty,
-			IsConsumed = dict.ContainsKey("IsConsumed") && (bool)dict["IsConsumed"]
+			Cell = dict.ContainsKey("Cell")
+				? Vector2ISaveData.FromVariantDictionary((Godot.Collections.Dictionary)dict["Cell"])
+				: new Vector2ISaveData(),
+			IsConsumed = dict.ContainsKey("IsConsumed") && (bool)dict["IsConsumed"],
+			RewardOfficerItemIds = CampaignSaveData.FromStringArray(dict.ContainsKey("RewardOfficerItemIds") ? (Godot.Collections.Array)dict["RewardOfficerItemIds"] : new Godot.Collections.Array())
 		};
 	}
 }

@@ -1591,14 +1591,7 @@ public partial class MissionUI : CanvasLayer
 		bodyRow.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
 		content.AddChild(bodyRow);
 
-		iconRect = new TextureRect
-		{
-			CustomMinimumSize = iconSizeOverride ?? new Vector2(120f, 88f),
-			ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
-			StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
-			SizeFlagsVertical = Control.SizeFlags.ShrinkCenter
-		};
-		bodyRow.AddChild(iconRect);
+		iconRect = null;
 
 		infoLabel = new Label
 		{
@@ -1625,7 +1618,7 @@ public partial class MissionUI : CanvasLayer
 
 	private void UpdateCombatInfoPanel(MissionCombatantSummary summary, PanelContainer panel, TextureRect iconRect, Label headerLabel, Label infoLabel, Label inventoryLabel, string emptyTitle)
 	{
-		if (panel == null || iconRect == null || headerLabel == null || infoLabel == null)
+		if (panel == null || headerLabel == null || infoLabel == null)
 		{
 			return;
 		}
@@ -1637,7 +1630,6 @@ public partial class MissionUI : CanvasLayer
 		}
 
 		panel.Visible = true;
-		iconRect.Texture = summary.Icon;
 		headerLabel.Text = $"== {summary.DisplayName.ToUpperInvariant()} ==";
 		string subtitleLine = string.IsNullOrWhiteSpace(summary.Subtitle) ? string.Empty : $"{summary.Subtitle}\n";
 		infoLabel.Text = $"{emptyTitle}: {summary.DisplayName}\n{subtitleLine}WEAPON: {summary.WeaponName}\nSHIELD: {summary.ShieldName}\nHP: {summary.CurrentHP}/{summary.MaxHP}\nSHIELDS: {summary.CurrentShields}/{summary.MaxShields}\nAP: {summary.CurrentAP}/{summary.MaxAP}\nRANGE: {summary.AttackRange} | DMG: {summary.AttackMinDamage}-{summary.AttackMaxDamage}";

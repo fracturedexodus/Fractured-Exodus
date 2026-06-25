@@ -29,4 +29,5 @@ public partial class MissionNpcDefinition : Resource
 	[Export] public string SuccessMessage { get; set; } = string.Empty;
 	[Export] public string DefaultDialogueId { get; set; } = string.Empty;
 	[Export(PropertyHint.MultilineText)] public string Notes { get; set; } = string.Empty;
+	[Export] public Godot.Collections.Array<string> PersonalInventoryItemIDs { get; set; } = new Godot.Collections.Array<string>();
 }

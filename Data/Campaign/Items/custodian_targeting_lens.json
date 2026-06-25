@@ -1,0 +1,8 @@
+{
+	"item_id": "custodian_targeting_lens",
+	"display_name": "Custodian Targeting Lens",
+	"description": "A precision sensor crystal recovered from a sentry's ruined targeting assembly.",
+	"category": "Recovered Artifact",
+	"stackable": true,
+	"codex_entry_id": ""
+}

@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.Linq;
 
 public static class OfficerMissionLoadoutService
 {
@@ -11,16 +13,19 @@ public static class OfficerMissionLoadoutService
 
 		officer.OwnedMissionWeaponIds ??= new List<string>();
 		officer.OwnedMissionShieldIds ??= new List<string>();
+		officer.OwnedMissionWeaponIds = SanitizeOwnedIds(officer.OwnedMissionWeaponIds, MissionEquipmentRegistry.GetWeapon);
+		officer.OwnedMissionShieldIds = SanitizeOwnedIds(officer.OwnedMissionShieldIds, MissionEquipmentRegistry.GetShield);
 
-		if (string.IsNullOrWhiteSpace(officer.EquippedMissionWeaponId))
-		{
-			officer.EquippedMissionWeaponId = MissionEquipmentRegistry.GetDefaultWeaponIdForSpecialty(officer.Specialty);
-		}
-
-		if (string.IsNullOrWhiteSpace(officer.EquippedMissionShieldId))
-		{
-			officer.EquippedMissionShieldId = MissionEquipmentRegistry.GetDefaultShieldIdForSpecialty(officer.Specialty);
-		}
+		officer.EquippedMissionWeaponId = ResolveEquippedId(
+			officer.EquippedMissionWeaponId,
+			officer.OwnedMissionWeaponIds,
+			MissionEquipmentRegistry.GetDefaultWeaponIdForSpecialty(officer.Specialty),
+			MissionEquipmentRegistry.GetWeapon);
+		officer.EquippedMissionShieldId = ResolveEquippedId(
+			officer.EquippedMissionShieldId,
+			officer.OwnedMissionShieldIds,
+			MissionEquipmentRegistry.GetDefaultShieldIdForSpecialty(officer.Specialty),
+			MissionEquipmentRegistry.GetShield);
 
 		if (!string.IsNullOrWhiteSpace(officer.EquippedMissionWeaponId) && !officer.OwnedMissionWeaponIds.Contains(officer.EquippedMissionWeaponId))
 		{
@@ -31,6 +36,18 @@ public static class OfficerMissionLoadoutService
 		{
 			officer.OwnedMissionShieldIds.Add(officer.EquippedMissionShieldId);
 		}
+	}
+
+	public static IReadOnlyList<string> GetOwnedWeaponIds(OfficerState officer)
+	{
+		EnsureOfficerLoadout(officer);
+		return officer?.OwnedMissionWeaponIds?.ToList() ?? new List<string>();
+	}
+
+	public static IReadOnlyList<string> GetOwnedShieldIds(OfficerState officer)
+	{
+		EnsureOfficerLoadout(officer);
+		return officer?.OwnedMissionShieldIds?.ToList() ?? new List<string>();
 	}
 
 	public static MissionWeaponDefinition GetEquippedWeapon(OfficerState officer)
@@ -77,5 +94,44 @@ public static class OfficerMissionLoadoutService
 
 		officer.EquippedMissionShieldId = shieldId;
 		return true;
+	}
+
+	private static List<string> SanitizeOwnedIds<TDefinition>(IEnumerable<string> ids, Func<string, TDefinition> resolver)
+		where TDefinition : class
+	{
+		HashSet<string> seenIds = new HashSet<string>(StringComparer.Ordinal);
+		List<string> sanitizedIds = new List<string>();
+		foreach (string id in ids ?? Enumerable.Empty<string>())
+		{
+			if (string.IsNullOrWhiteSpace(id) || !seenIds.Add(id) || resolver(id) == null)
+			{
+				continue;
+			}
+
+			sanitizedIds.Add(id);
+		}
+
+		return sanitizedIds;
+	}
+
+	private static string ResolveEquippedId<TDefinition>(
+		string equippedId,
+		IReadOnlyList<string> ownedIds,
+		string defaultId,
+		Func<string, TDefinition> resolver)
+		where TDefinition : class
+	{
+		if (!string.IsNullOrWhiteSpace(equippedId) && resolver(equippedId) != null)
+		{
+			return equippedId;
+		}
+
+		string ownedFallback = ownedIds?.FirstOrDefault(id => !string.IsNullOrWhiteSpace(id) && resolver(id) != null);
+		if (!string.IsNullOrWhiteSpace(ownedFallback))
+		{
+			return ownedFallback;
+		}
+
+		return resolver(defaultId) != null ? defaultId : string.Empty;
 	}
 }

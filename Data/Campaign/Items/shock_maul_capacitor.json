@@ -1,0 +1,8 @@
+{
+	"item_id": "shock_maul_capacitor",
+	"display_name": "Shock Maul Capacitor",
+	"description": "A heavy charge cell stripped from a scavenger breaching maul, still warm with residual current.",
+	"category": "Field Salvage",
+	"stackable": true,
+	"codex_entry_id": ""
+}

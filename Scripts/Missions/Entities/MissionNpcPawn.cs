@@ -47,6 +47,7 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 	public string WeaponStatusEffectId { get; private set; } = string.Empty;
 	public float WeaponStatusEffectChance { get; private set; }
 	public string ActiveStatusEffectId { get; private set; } = string.Empty;
+	public List<string> PersonalInventoryItemIDs { get; private set; } = new List<string>();
 	public bool IsDead { get; private set; }
 	public bool IsExtracted { get; private set; }
 	public bool IsMoving => _isMoving;
@@ -242,6 +243,9 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 		UsesMeleeWeapon = AttackRange <= 1;
 		WeaponStatusEffectId = string.Empty;
 		WeaponStatusEffectChance = 0f;
+		PersonalInventoryItemIDs = (definition.PersonalInventoryItemIDs ?? new Godot.Collections.Array<string>())
+			.Where(itemId => !string.IsNullOrWhiteSpace(itemId))
+			.ToList();
 		ApplyEquipmentDefinitions(definition);
 
 		if (_visualSprite != null)
@@ -341,12 +345,15 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 		_isMoving = false;
 	}
 
-	public void ApplySavedRuntimeState(int currentHp, int currentShields, int currentActions, string activeStatusEffectId, bool isDead, bool isConsumed, bool isExtracted)
+	public void ApplySavedRuntimeState(int currentHp, int currentShields, int currentActions, string activeStatusEffectId, bool isDead, bool isConsumed, bool isExtracted, IReadOnlyList<string> personalInventoryItemIds = null)
 	{
 		CurrentHP = Mathf.Clamp(currentHp, 0, MaxHP);
 		CurrentShields = Mathf.Clamp(currentShields, 0, MaxShields);
 		CurrentActions = Mathf.Clamp(currentActions, 0, MaxActions);
 		ActiveStatusEffectId = activeStatusEffectId ?? string.Empty;
+		PersonalInventoryItemIDs = (personalInventoryItemIds ?? new List<string>())
+			.Where(itemId => !string.IsNullOrWhiteSpace(itemId))
+			.ToList();
 		IsConsumed = isConsumed;
 		IsExtracted = isExtracted;
 		IsDead = isDead || CurrentHP <= 0;

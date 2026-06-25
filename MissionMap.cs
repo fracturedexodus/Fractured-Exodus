@@ -28,6 +28,9 @@ public partial class MissionMap : Node2D
 	private const float AmbientFloorDiamondWidthFactor = 0.42f;
 	private const float AmbientFloorDiamondHeightFactor = 0.24f;
 	private const string MedicalBedHealPropId = "medical_bed_heal";
+	private const string EnemyLootDropPropId = "enemy_loot_drop";
+	private const string EnemyLootDropScenePath = "res://Scenes/Missions/Props/LootCrateProp.tscn";
+	private const string EnemyLootDropSpritePath = "res://Assets/Missions/BlackSiteRelay/GeminiSheetSet/props/crate_medium.png";
 	private const string MissionMusicPath = "res://Sounds/Strike_the_Shield.mp3";
 	private const string MissionHitSoundPath = "res://Sounds/795468__aulix24__grunt-3.ogg";
 	private const string MissionPlayerShieldHitSoundPath = "res://Sounds/465541__steaq__sci-fi-shield-hit-ogg.ogg";
@@ -223,6 +226,7 @@ public partial class MissionMap : Node2D
 		SpawnMissionNpcs();
 		SpawnMissionOfficers();
 		RestoreSavedMissionStateIfAvailable();
+		FocusCameraOnAwayTeam();
 		UpdateFogOfWar();
 		WireUi();
 		WireDialogue();
@@ -589,12 +593,36 @@ public partial class MissionMap : Node2D
 	{
 		if (_camera != null)
 		{
+			ApplyZoom(MaxZoom);
+		}
+	}
+
+	private void FocusCameraOnAwayTeam()
+	{
+		if (_camera == null)
+		{
+			return;
+		}
+
+		List<OfficerPawn> officers = GetAliveOfficers().ToList();
+		if (officers.Count == 0)
+		{
 			Vector2 roomCenter = _roomBuilder != null
 				? _isoWorld.ToGlobal(_roomBuilder.GetRoomCenterWorldPosition())
 				: Vector2.Zero;
 			_camera.Position = roomCenter;
-			ApplyZoom(DefaultZoom);
+			ApplyZoom(MaxZoom);
+			return;
 		}
+
+		Vector2 focusPosition = Vector2.Zero;
+		foreach (OfficerPawn officer in officers)
+		{
+			focusPosition += officer.GlobalPosition;
+		}
+
+		_camera.Position = focusPosition / officers.Count;
+		ApplyZoom(MaxZoom);
 	}
 
 	private void EnsureBackgroundNodes()
@@ -2482,6 +2510,7 @@ public partial class MissionMap : Node2D
 					CurrentShields = npc.CurrentShields,
 					CurrentActions = npc.CurrentActions,
 					ActiveStatusEffectId = npc.ActiveStatusEffectId,
+					PersonalInventoryItemIDs = npc.PersonalInventoryItemIDs.ToList(),
 					IsDead = npc.IsDead,
 					IsConsumed = npc.IsConsumed,
 					IsExtracted = npc.IsExtracted
@@ -2493,7 +2522,9 @@ public partial class MissionMap : Node2D
 				.Select(prop => new MissionPropSaveData
 				{
 					PropInstanceId = prop.PropInstanceId,
-					IsConsumed = prop.IsConsumed
+					Cell = Vector2ISaveData.FromVector2I(GetPropCell(prop)),
+					IsConsumed = prop.IsConsumed,
+					RewardOfficerItemIds = GetLootDropRewardItemIds(prop).ToList()
 				})
 				.ToList(),
 			Doors = (_roomBuilder?.GetDoorIds() ?? Enumerable.Empty<string>())
@@ -2583,6 +2614,11 @@ public partial class MissionMap : Node2D
 			}
 
 			MissionProp prop = _missionPropsByCell.Values.FirstOrDefault(candidate => candidate != null && candidate.PropInstanceId == propState.PropInstanceId);
+			if (prop == null && IsEnemyLootDropPropInstanceId(propState.PropInstanceId) && propState.Cell != null)
+			{
+				prop = SpawnEnemyLootDropProp(propState.Cell.ToVector2I(), propState.RewardOfficerItemIds, propState.PropInstanceId);
+			}
+
 			prop?.ApplySavedConsumptionState(propState.IsConsumed);
 		}
 	}
@@ -2637,7 +2673,8 @@ public partial class MissionMap : Node2D
 				npcState.ActiveStatusEffectId,
 				npcState.IsDead,
 				npcState.IsConsumed,
-				npcState.IsExtracted);
+				npcState.IsExtracted,
+				npcState.PersonalInventoryItemIDs);
 		}
 
 		ReindexMissionNpcCells();
@@ -3454,7 +3491,8 @@ public partial class MissionMap : Node2D
 				MissionTitle = missionTitle,
 				RescuedOnTurn = Mathf.Max(1, _globalData?.CurrentTurn ?? 1),
 				PortraitPath = npc.PortraitPath,
-				DefinitionPath = npc.DefinitionResourcePath
+				DefinitionPath = npc.DefinitionResourcePath,
+				PersonalInventoryItemIDs = npc.PersonalInventoryItemIDs.ToList()
 			})
 			.ToList();
 	}
@@ -5009,6 +5047,7 @@ public partial class MissionMap : Node2D
 
 		if (_missionPropsByCell.TryGetValue(buildCell, out MissionProp prop)
 			&& prop != null
+			&& prop.Definition?.BlocksMovement != false
 			&& (string.IsNullOrWhiteSpace(ignoredPropInstanceId) || prop.PropInstanceId != ignoredPropInstanceId))
 		{
 			return true;
@@ -5020,6 +5059,215 @@ public partial class MissionMap : Node2D
 	private bool TryGetMissionPropAtMovementCell(Vector2I movementCell, out MissionProp prop)
 	{
 		return _missionPropsByCell.TryGetValue(GetBuildCell(movementCell), out prop) && prop != null && !prop.IsConsumed;
+	}
+
+	private MissionProp SpawnEnemyLootDropProp(Vector2I buildCell, IReadOnlyCollection<string> itemIds, string propInstanceId = null)
+	{
+		if (_isoWorld == null || _roomBuilder == null)
+		{
+			return null;
+		}
+
+		List<string> rewardItemIds = (itemIds ?? Array.Empty<string>())
+			.Where(itemId => !string.IsNullOrWhiteSpace(itemId))
+			.ToList();
+		if (rewardItemIds.Count == 0)
+		{
+			return null;
+		}
+
+		Node2D runtimePropLayer = _isoWorld.GetNodeOrNull<Node2D>("RuntimePropLayer");
+		if (runtimePropLayer == null)
+		{
+			runtimePropLayer = new Node2D
+			{
+				Name = "RuntimePropLayer",
+				ZIndex = 6
+			};
+			_isoWorld.AddChild(runtimePropLayer);
+		}
+
+		PackedScene propScene = GD.Load<PackedScene>(EnemyLootDropScenePath);
+		if (propScene == null)
+		{
+			return null;
+		}
+
+		if (_missionPropsByCell.TryGetValue(buildCell, out MissionProp existingProp) && existingProp != null)
+		{
+			if (IsEnemyLootDropProp(existingProp))
+			{
+				foreach (string itemId in rewardItemIds)
+				{
+					if (!string.IsNullOrWhiteSpace(itemId))
+					{
+						existingProp.Definition.RewardOfficerItemIds.Add(itemId);
+					}
+				}
+
+				existingProp.Definition.Description = BuildEnemyLootDropDescription(existingProp.Definition.RewardOfficerItemIds);
+				return existingProp;
+			}
+
+			return null;
+		}
+
+		MissionProp prop = propScene.Instantiate<MissionProp>();
+		if (prop == null)
+		{
+			return null;
+		}
+
+		prop.Definition = BuildEnemyLootDropDefinition(rewardItemIds);
+		prop.Name = $"{EnemyLootDropPropId}_{buildCell.X}_{buildCell.Y}";
+		prop.PropInstanceId = string.IsNullOrWhiteSpace(propInstanceId)
+			? $"{EnemyLootDropPropId}:{buildCell.X},{buildCell.Y}:{Guid.NewGuid():N}"
+			: propInstanceId;
+		prop.Position = _roomBuilder.GetCellWorldPosition(buildCell.X, buildCell.Y);
+		runtimePropLayer.AddChild(prop);
+		_missionPropsByCell[buildCell] = prop;
+		return prop;
+	}
+
+	private static PropDefinition BuildEnemyLootDropDefinition(IReadOnlyCollection<string> itemIds)
+	{
+		PropDefinition definition = new PropDefinition
+		{
+			PropId = EnemyLootDropPropId,
+			DisplayName = "Dropped Supplies",
+			Description = BuildEnemyLootDropDescription(itemIds),
+			InteractionType = PropInteractionType.Loot,
+			ScenePath = EnemyLootDropScenePath,
+			SpriteTexturePath = EnemyLootDropSpritePath,
+			InteractionRange = 0,
+			OneShot = true,
+			HideWhenConsumed = true,
+			BlocksMovement = false,
+			SuccessMessage = "Recovered supplies secured."
+		};
+		foreach (string itemId in itemIds ?? Array.Empty<string>())
+		{
+			if (!string.IsNullOrWhiteSpace(itemId))
+			{
+				definition.RewardOfficerItemIds.Add(itemId);
+			}
+		}
+
+		return definition;
+	}
+
+	private static string BuildEnemyLootDropDescription(IEnumerable<string> itemIds)
+	{
+		List<string> displayNames = (itemIds ?? Array.Empty<string>())
+			.Where(itemId => !string.IsNullOrWhiteSpace(itemId))
+			.Select(itemId => CampaignItemRegistry.GetItem(itemId)?.DisplayName ?? itemId)
+			.Distinct(StringComparer.Ordinal)
+			.OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+			.ToList();
+		return displayNames.Count == 0
+			? "Recovered gear and mission salvage."
+			: $"Recovered gear: {string.Join(", ", displayNames)}.";
+	}
+
+	private static bool IsEnemyLootDropProp(MissionProp prop)
+	{
+		return string.Equals(prop?.Definition?.PropId, EnemyLootDropPropId, StringComparison.Ordinal);
+	}
+
+	private static bool IsEnemyLootDropPropInstanceId(string propInstanceId)
+	{
+		return !string.IsNullOrWhiteSpace(propInstanceId)
+			&& propInstanceId.StartsWith($"{EnemyLootDropPropId}:", StringComparison.Ordinal);
+	}
+
+	private static IReadOnlyList<string> GetLootDropRewardItemIds(MissionProp prop)
+	{
+		return IsEnemyLootDropProp(prop)
+			? (prop.Definition?.RewardOfficerItemIds ?? new Godot.Collections.Array<string>())
+				.Where(itemId => !string.IsNullOrWhiteSpace(itemId))
+				.ToList()
+			: Array.Empty<string>();
+	}
+
+	private bool TryCollectLootAtCurrentCell(OfficerPawn officer)
+	{
+		if (officer == null || !TryGetOfficerState(officer, out OfficerState officerState))
+		{
+			return false;
+		}
+
+		return TryCollectLootAtBuildCell(
+			GetBuildCell(officer.CurrentCell),
+			officer.OfficerName,
+			items =>
+			{
+				officerState.PersonalInventoryItemIDs ??= new List<string>();
+				officerState.PersonalInventoryItemIDs.AddRange(items);
+			});
+	}
+
+	private bool TryCollectLootAtCurrentCell(MissionNpcPawn survivor)
+	{
+		if (!IsActiveEscortSurvivor(survivor))
+		{
+			return false;
+		}
+
+		return TryCollectLootAtBuildCell(
+			GetBuildCell(survivor.CurrentCell),
+			survivor.DisplayName,
+			items => survivor.PersonalInventoryItemIDs.AddRange(items));
+	}
+
+	private bool TryCollectLootAtBuildCell(Vector2I buildCell, string collectorName, Action<List<string>> assignItems)
+	{
+		if (!_missionPropsByCell.TryGetValue(buildCell, out MissionProp prop) || !IsEnemyLootDropProp(prop) || prop.IsConsumed)
+		{
+			return false;
+		}
+
+		List<string> itemIds = GetLootDropRewardItemIds(prop).ToList();
+		if (itemIds.Count == 0)
+		{
+			prop.ApplySavedConsumptionState(true);
+			return false;
+		}
+
+		assignItems?.Invoke(itemIds);
+		prop.ApplySavedConsumptionState(true);
+		if (_missionPropsByCell.TryGetValue(buildCell, out MissionProp currentProp) && currentProp == prop)
+		{
+			_missionPropsByCell.Remove(buildCell);
+		}
+
+		AppendLootCollectionLog(collectorName, itemIds);
+		UpdateSelectedOfficerDisplay();
+		UpdateMissionCompletionActions();
+		RefreshCombatHud();
+		return true;
+	}
+
+	private void AppendLootCollectionLog(string collectorName, IReadOnlyCollection<string> itemIds)
+	{
+		List<string> displayNames = (itemIds ?? Array.Empty<string>())
+			.Where(itemId => !string.IsNullOrWhiteSpace(itemId))
+			.Select(itemId => CampaignItemRegistry.GetItem(itemId)?.DisplayName ?? itemId)
+			.ToList();
+		if (displayNames.Count == 0)
+		{
+			return;
+		}
+
+		string itemSummary = string.Join(", ", displayNames);
+		string message = $"{collectorName} recovers {itemSummary} from the battlefield.";
+		if (_combatActive)
+		{
+			AppendCombatLog(message);
+		}
+		else
+		{
+			AppendActionLog(message);
+		}
 	}
 
 	private bool TryGetStaticInteractionAtMovementCell(Vector2I movementCell, out MissionRoomBuilder.MarkerPlacement interaction)
@@ -5494,18 +5742,22 @@ public partial class MissionMap : Node2D
 			return false;
 		}
 
-		if (!string.IsNullOrWhiteSpace(officer.ShipName)
-			&& _globalData.ShipOfficers.TryGetValue(officer.ShipName, out officerState)
-			&& officerState != null)
-		{
-			return true;
-		}
-
 		if (!string.IsNullOrWhiteSpace(officer.OfficerID))
 		{
 			officerState = _globalData.ShipOfficers.Values.FirstOrDefault(candidate =>
 				candidate != null
 				&& string.Equals(candidate.OfficerID, officer.OfficerID, StringComparison.Ordinal));
+			if (officerState != null)
+			{
+				return true;
+			}
+		}
+
+		if (!string.IsNullOrWhiteSpace(officer.ShipName)
+			&& _globalData.ShipOfficers.TryGetValue(officer.ShipName, out officerState)
+			&& officerState != null)
+		{
+			return true;
 		}
 
 		return officerState != null;
@@ -5562,18 +5814,8 @@ public partial class MissionMap : Node2D
 			return options;
 		}
 
-		List<string> ownedWeaponIds = (officerState.OwnedMissionWeaponIds ?? new List<string>())
-			.Where(weaponId => MissionEquipmentRegistry.GetWeapon(weaponId) != null)
-			.Distinct()
-			.ToList();
-		if (ownedWeaponIds.Count == 0)
-		{
-			string fallbackWeaponId = MissionEquipmentRegistry.GetDefaultWeaponIdForSpecialty(officerState.Specialty);
-			if (!string.IsNullOrWhiteSpace(fallbackWeaponId))
-			{
-				ownedWeaponIds.Add(fallbackWeaponId);
-			}
-		}
+		IReadOnlyList<string> ownedWeaponIds = OfficerMissionLoadoutService.GetOwnedWeaponIds(officerState);
+		string equippedWeaponId = officerState.EquippedMissionWeaponId;
 
 		foreach (string weaponId in ownedWeaponIds)
 		{
@@ -5583,7 +5825,7 @@ public partial class MissionMap : Node2D
 				continue;
 			}
 
-			bool equipped = string.Equals(officer.WeaponId, weapon.WeaponId, StringComparison.Ordinal);
+			bool equipped = string.Equals(equippedWeaponId, weapon.WeaponId, StringComparison.Ordinal);
 			string stance = weapon.IsMelee ? "Melee" : "Ranged";
 			options.Add(new MissionCombatWeaponOption
 			{
@@ -6210,7 +6452,8 @@ public partial class MissionMap : Node2D
 		officer.SpendActions(CombatAttackActionCost);
 		officer.RefreshEquippedWeaponFromLoadout();
 		_selectedCombatActionMode = MissionPlayerCombatActionMode.Attack;
-		AppendCombatLog($"{officer.OfficerName} swaps to {weapon.DisplayName.ToLowerInvariant()}, spending {CombatAttackActionCost} AP to rearm.");
+		string attackMode = weapon.IsMelee ? "melee" : "ranged";
+		AppendCombatLog($"{officer.OfficerName} swaps to {weapon.DisplayName.ToLowerInvariant()}, spending {CombatAttackActionCost} AP to ready a {attackMode} attack.");
 		RefreshCombatHud();
 
 		if (officer.CurrentActions <= 0)
@@ -6484,8 +6727,11 @@ public partial class MissionMap : Node2D
 			? $" {enemy.DisplayName} is afflicted with {attackProfile.StatusEffectId}."
 			: string.Empty;
 		PlayAttackEffects(officer, enemy, attackProfile, result);
+		string attackLog = attackProfile.IsMelee
+			? $"{officer.OfficerName} strikes {enemy.DisplayName} with {attackProfile.WeaponName.ToLowerInvariant()}"
+			: $"{officer.OfficerName} fires {attackProfile.WeaponName.ToLowerInvariant()} at {enemy.DisplayName}";
 		AppendCombatLog(BuildDamageLog(
-			$"{officer.OfficerName} fires {attackProfile.WeaponName.ToLowerInvariant()} at {enemy.DisplayName}",
+			attackLog,
 			result,
 			statusText));
 		_focusedEnemy = enemy;
@@ -7909,6 +8155,14 @@ public partial class MissionMap : Node2D
 		if (pawn != null && !string.IsNullOrWhiteSpace(pawn.NpcId) && pawn.IsHostile)
 		{
 			_engagedEnemyIds.Remove(pawn.NpcId);
+			if (pawn.PersonalInventoryItemIDs.Count > 0)
+			{
+				if (SpawnEnemyLootDropProp(GetBuildCell(pawn.CurrentCell), pawn.PersonalInventoryItemIDs) != null)
+				{
+					AppendCombatLog($"{pawn.DisplayName} drops recoverable supplies where they fell.");
+					pawn.PersonalInventoryItemIDs.Clear();
+				}
+			}
 		}
 
 		if (pawn != null && !string.IsNullOrWhiteSpace(pawn.NpcId))
@@ -7932,6 +8186,7 @@ public partial class MissionMap : Node2D
 	private void OnMissionNpcEnteredCell(MissionNpcPawn pawn, Vector2I cell)
 	{
 		ReindexMissionNpcCells();
+		TryCollectLootAtCurrentCell(pawn);
 	}
 
 	private void OnMissionNpcReachedCell(MissionNpcPawn pawn, Vector2I cell)
@@ -8048,13 +8303,12 @@ public partial class MissionMap : Node2D
 		}
 
 		List<string> sections = new List<string>();
-		string equippedWeaponId = !string.IsNullOrWhiteSpace(officer.WeaponId)
-			? officer.WeaponId
-			: officerState.EquippedMissionWeaponId;
+		OfficerMissionLoadoutService.EnsureOfficerLoadout(officerState);
+		string equippedWeaponId = officerState.EquippedMissionWeaponId;
 		string equippedShieldId = officerState.EquippedMissionShieldId;
 
 		List<string> weaponLines = BuildNamedInventoryLines(
-			officerState.OwnedMissionWeaponIds,
+			OfficerMissionLoadoutService.GetOwnedWeaponIds(officerState),
 			equippedWeaponId,
 			weaponId => MissionEquipmentRegistry.GetWeapon(weaponId)?.DisplayName);
 		if (weaponLines.Count == 0 && !string.IsNullOrWhiteSpace(officer.WeaponName))
@@ -8063,7 +8317,7 @@ public partial class MissionMap : Node2D
 		}
 
 		List<string> shieldLines = BuildNamedInventoryLines(
-			officerState.OwnedMissionShieldIds,
+			OfficerMissionLoadoutService.GetOwnedShieldIds(officerState),
 			equippedShieldId,
 			shieldId => MissionEquipmentRegistry.GetShield(shieldId)?.DisplayName);
 		if (shieldLines.Count == 0 && !string.IsNullOrWhiteSpace(officer.ShieldName))
@@ -8155,6 +8409,7 @@ public partial class MissionMap : Node2D
 			Subtitle = enemy.IsHostile ? "Hostile Contact" : IsEscortSurvivor(enemy) ? $"Escort {CampaignText.RemnantsLabel.TrimEnd('s')}" : "Mission Contact",
 			WeaponName = enemy.WeaponName,
 			ShieldName = enemy.ShieldName,
+			InventoryText = BuildSurvivorInventoryText(enemy),
 			Icon = icon,
 			CurrentHP = enemy.CurrentHP,
 			MaxHP = enemy.MaxHP,
@@ -8169,6 +8424,26 @@ public partial class MissionMap : Node2D
 				? BuildCombatantNotes(enemy.InitiativeBonus, enemy.ShieldRechargePerTurn, enemy.BonusShieldDamage, enemy.ShieldPiercingDamage, enemy.WeaponStatusEffectId, enemy.WeaponStatusEffectChance, enemy.ActiveStatusEffectId)
 				: "Non-hostile contact"
 		};
+	}
+
+	private static string BuildSurvivorInventoryText(MissionNpcPawn npc)
+	{
+		if (npc == null)
+		{
+			return string.Empty;
+		}
+
+		List<string> itemLines = BuildStackedInventoryLines(
+			npc.PersonalInventoryItemIDs,
+			itemId => CampaignItemRegistry.GetItem(itemId)?.DisplayName);
+		if (itemLines.Count == 0)
+		{
+			return string.Empty;
+		}
+
+		List<string> sections = new List<string>();
+		AppendInventorySection(sections, "ITEMS", itemLines);
+		return string.Join("\n\n", sections);
 	}
 
 	private Texture2D LoadPortraitTexture(string resourcePath)
@@ -8386,6 +8661,7 @@ public partial class MissionMap : Node2D
 	{
 		UpdateFogOfWar();
 		UpdateMissionCompletionActions();
+		TryCollectLootAtCurrentCell(pawn);
 		CheckEnterTriggers(pawn);
 	}
 

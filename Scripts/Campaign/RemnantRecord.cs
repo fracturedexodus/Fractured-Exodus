@@ -11,6 +11,7 @@ public class RemnantRecord
 	public int RescuedOnTurn { get; set; }
 	public string PortraitPath { get; set; } = string.Empty;
 	public string DefinitionPath { get; set; } = string.Empty;
+	public System.Collections.Generic.List<string> PersonalInventoryItemIDs { get; set; } = new System.Collections.Generic.List<string>();
 
 	public RemnantRecord Clone()
 	{
@@ -24,7 +25,8 @@ public class RemnantRecord
 			MissionTitle = MissionTitle,
 			RescuedOnTurn = RescuedOnTurn,
 			PortraitPath = PortraitPath,
-			DefinitionPath = DefinitionPath
+			DefinitionPath = DefinitionPath,
+			PersonalInventoryItemIDs = new System.Collections.Generic.List<string>(PersonalInventoryItemIDs ?? new System.Collections.Generic.List<string>())
 		};
 	}
 
@@ -40,7 +42,8 @@ public class RemnantRecord
 			{ "MissionTitle", MissionTitle },
 			{ "RescuedOnTurn", RescuedOnTurn },
 			{ "PortraitPath", PortraitPath },
-			{ "DefinitionPath", DefinitionPath }
+			{ "DefinitionPath", DefinitionPath },
+			{ "PersonalInventoryItemIDs", CampaignSaveData.ToVariantArray(PersonalInventoryItemIDs ?? new System.Collections.Generic.List<string>()) }
 		};
 	}
 
@@ -56,7 +59,8 @@ public class RemnantRecord
 			MissionTitle = dict.ContainsKey("MissionTitle") ? (string)dict["MissionTitle"] : string.Empty,
 			RescuedOnTurn = dict.ContainsKey("RescuedOnTurn") ? (int)dict["RescuedOnTurn"] : 0,
 			PortraitPath = dict.ContainsKey("PortraitPath") ? (string)dict["PortraitPath"] : string.Empty,
-			DefinitionPath = dict.ContainsKey("DefinitionPath") ? (string)dict["DefinitionPath"] : string.Empty
+			DefinitionPath = dict.ContainsKey("DefinitionPath") ? (string)dict["DefinitionPath"] : string.Empty,
+			PersonalInventoryItemIDs = CampaignSaveData.FromStringArray(dict.ContainsKey("PersonalInventoryItemIDs") ? (Godot.Collections.Array)dict["PersonalInventoryItemIDs"] : new Godot.Collections.Array())
 		};
 	}
 }

@@ -23,3 +23,4 @@ AttackDamage = 5
 InitiativeBonus = 0
 WeaponName = "Shock Maul"
 Notes = "Hostile melee bruiser for black site combat."
+PersonalInventoryItemIDs = PackedStringArray("shock_maul_capacitor")
