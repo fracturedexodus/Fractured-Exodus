@@ -146,6 +146,7 @@ public partial class OfficerPawn : Node2D
 		if (_nameLabel != null)
 		{
 			_nameLabel.Text = officer.DisplayName;
+			_nameLabel.Visible = false;
 		}
 
 		Color accentColor = GetSpecialtyColor(officer.Specialty);
@@ -395,7 +396,7 @@ public partial class OfficerPawn : Node2D
 
 		if (_nameLabel != null)
 		{
-			_nameLabel.Visible = !occluded && !IsDead;
+			_nameLabel.Visible = false;
 		}
 	}
 
@@ -530,7 +531,8 @@ public partial class OfficerPawn : Node2D
 			Text = OfficerName,
 			HorizontalAlignment = HorizontalAlignment.Center,
 			Position = new Vector2(-90f, 22f),
-			Size = new Vector2(180f, 30f)
+			Size = new Vector2(180f, 30f),
+			Visible = false
 		};
 		_nameLabel.ZAsRelative = false;
 		_nameLabel.ZIndex = NameLabelZIndex;

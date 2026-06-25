@@ -110,7 +110,8 @@ public partial class MissionMap : Node2D
 	private Node2D _combatEffectLayer;
 	private SelectionBox _selectionBox;
 	private Polygon2D _movementCursorFill;
-	private Line2D _movementCursorOutline;
+	private Node2D _movementCursorOutlineRoot;
+	private readonly List<Polygon2D> _movementCursorOutlineSegments = new List<Polygon2D>();
 	private readonly List<OfficerPawn> _officerPawns = new List<OfficerPawn>();
 	private readonly List<MissionNpcPawn> _missionNpcs = new List<MissionNpcPawn>();
 	private readonly Dictionary<Vector2I, MissionNpcPawn> _missionNpcsByCell = new Dictionary<Vector2I, MissionNpcPawn>();
@@ -863,6 +864,14 @@ public partial class MissionMap : Node2D
 			new Vector2(0f, movementTileStep.Y * 0.5f),
 			new Vector2(-movementTileStep.X * 0.5f, 0f)
 		};
+		Vector2[] diamondOutlinePoints =
+		{
+			diamondPoints[0],
+			diamondPoints[1],
+			diamondPoints[2],
+			diamondPoints[3],
+			diamondPoints[0]
+		};
 
 		foreach (Vector2I buildCell in _roomBuilder.GetFloorCells())
 		{
@@ -871,8 +880,8 @@ public partial class MissionMap : Node2D
 				Line2D outline = new Line2D
 				{
 					Name = $"MovementGrid_{movementCell.X}_{movementCell.Y}",
-					Points = diamondPoints,
-					Closed = true,
+					Points = diamondOutlinePoints,
+					Closed = false,
 					Width = 1.15f,
 					DefaultColor = new Color(0.24f, 0.72f, 1.00f, 0.24f),
 					Position = _roomBuilder.GetMovementCellWorldPosition(movementCell.X, movementCell.Y),
@@ -947,19 +956,19 @@ public partial class MissionMap : Node2D
 		}
 		_movementCursorFill.Polygon = diamondPoints;
 
-		if (_movementCursorOutline == null)
+		if (_movementCursorOutlineRoot == null)
 		{
-			_movementCursorOutline = new Line2D
+			_movementCursorOutlineRoot = new Node2D
 			{
 				Name = "MovementCursorOutline",
-				Closed = true,
-				Width = 3.1f,
-				DefaultColor = new Color(0.56f, 0.92f, 1.00f, 0.88f),
 				Visible = false
 			};
-			_movementCursorLayer.AddChild(_movementCursorOutline);
+			_movementCursorLayer.AddChild(_movementCursorOutlineRoot);
 		}
-		_movementCursorOutline.Points = diamondPoints;
+
+		EnsureMovementCursorOutlineSegments();
+		UpdateMovementCursorOutlineGeometry(diamondPoints, 3.1f);
+		SetMovementCursorOutlineColor(new Color(0.56f, 0.92f, 1.00f, 0.88f));
 	}
 
 	private void EnsureMovementCursorLayer()
@@ -989,7 +998,7 @@ public partial class MissionMap : Node2D
 
 	private void UpdateMovementCursorHighlight()
 	{
-		if (_movementCursorFill == null || _movementCursorOutline == null || _roomBuilder == null || _isoWorld == null)
+		if (_movementCursorFill == null || _movementCursorOutlineRoot == null || _roomBuilder == null || _isoWorld == null)
 		{
 			return;
 		}
@@ -997,7 +1006,7 @@ public partial class MissionMap : Node2D
 		if (_missionGameOver || (_dialogueUi?.IsConversationOpen ?? false) || (_missionUi?.IsStoryEventVisible ?? false))
 		{
 			_movementCursorFill.Visible = false;
-			_movementCursorOutline.Visible = false;
+			_movementCursorOutlineRoot.Visible = false;
 			return;
 		}
 
@@ -1006,7 +1015,7 @@ public partial class MissionMap : Node2D
 		if (mousePosition.X < 0f || mousePosition.Y < 0f || mousePosition.X > screenSize.X || mousePosition.Y > screenSize.Y)
 		{
 			_movementCursorFill.Visible = false;
-			_movementCursorOutline.Visible = false;
+			_movementCursorOutlineRoot.Visible = false;
 			return;
 		}
 
@@ -1016,7 +1025,7 @@ public partial class MissionMap : Node2D
 			if (!IsPlayerTurnActive())
 			{
 				_movementCursorFill.Visible = false;
-				_movementCursorOutline.Visible = false;
+				_movementCursorOutlineRoot.Visible = false;
 				return;
 			}
 
@@ -1029,14 +1038,14 @@ public partial class MissionMap : Node2D
 		if (!_roomBuilder.IsWalkableMovementCell(hoveredCell))
 		{
 			_movementCursorFill.Visible = false;
-			_movementCursorOutline.Visible = false;
+			_movementCursorOutlineRoot.Visible = false;
 			return;
 		}
 
 		if (_combatActive && !_visibleCells.Contains(hoveredCell))
 		{
 			_movementCursorFill.Visible = false;
-			_movementCursorOutline.Visible = false;
+			_movementCursorOutlineRoot.Visible = false;
 			return;
 		}
 
@@ -1048,26 +1057,80 @@ public partial class MissionMap : Node2D
 			_movementCursorFill.Color = attackMode && hostileTargetCell
 				? new Color(1.00f, 0.42f, 0.26f, 0.22f)
 				: new Color(0.26f, 0.78f, 1.00f, 0.16f);
-			_movementCursorOutline.DefaultColor = attackMode && hostileTargetCell
+			SetMovementCursorOutlineColor(attackMode && hostileTargetCell
 				? new Color(1.00f, 0.72f, 0.48f, 0.96f)
-				: new Color(0.56f, 0.92f, 1.00f, 0.92f);
+				: new Color(0.56f, 0.92f, 1.00f, 0.92f));
 		}
 		else
 		{
 			_movementCursorFill.Color = new Color(0.26f, 0.78f, 1.00f, 0.12f);
-			_movementCursorOutline.DefaultColor = new Color(0.56f, 0.92f, 1.00f, 0.88f);
+			SetMovementCursorOutlineColor(new Color(0.56f, 0.92f, 1.00f, 0.88f));
 		}
 
-		Vector2 hoverPosition = _roomBuilder.GetMovementCellWorldPosition(hoveredCell.X, hoveredCell.Y);
+		Vector2 hoverPosition = _roomBuilder.GetMovementCellWorldPosition(hoveredCell.X, hoveredCell.Y).Round();
 		_movementCursorFill.Position = hoverPosition;
-		_movementCursorOutline.Position = hoverPosition;
-		int cursorZIndex = _roomBuilder.GetCanvasSortOrderForMovementCell(hoveredCell, MovementCursorSortBias);
+		_movementCursorOutlineRoot.Position = hoverPosition;
+		int cursorZIndex = GetMovementOverlayZIndex(hoveredCell, MovementCursorSortBias);
 		_movementCursorFill.ZAsRelative = false;
 		_movementCursorFill.ZIndex = cursorZIndex;
-		_movementCursorOutline.ZAsRelative = false;
-		_movementCursorOutline.ZIndex = cursorZIndex;
+		_movementCursorOutlineRoot.ZAsRelative = false;
+		_movementCursorOutlineRoot.ZIndex = cursorZIndex;
 		_movementCursorFill.Visible = true;
-		_movementCursorOutline.Visible = true;
+		_movementCursorOutlineRoot.Visible = true;
+	}
+
+	private void EnsureMovementCursorOutlineSegments()
+	{
+		if (_movementCursorOutlineRoot == null)
+		{
+			return;
+		}
+
+		while (_movementCursorOutlineSegments.Count < 4)
+		{
+			Polygon2D segment = new Polygon2D
+			{
+				Name = $"MovementCursorOutlineSegment{_movementCursorOutlineSegments.Count}",
+				Color = new Color(0.56f, 0.92f, 1.00f, 0.88f)
+			};
+			_movementCursorOutlineRoot.AddChild(segment);
+			_movementCursorOutlineSegments.Add(segment);
+		}
+	}
+
+	private void UpdateMovementCursorOutlineGeometry(IReadOnlyList<Vector2> diamondPoints, float thickness)
+	{
+		if (diamondPoints == null || diamondPoints.Count < 4 || _movementCursorOutlineSegments.Count < 4)
+		{
+			return;
+		}
+
+		float halfThickness = thickness * 0.5f;
+		for (int i = 0; i < 4; i++)
+		{
+			Vector2 start = diamondPoints[i];
+			Vector2 end = diamondPoints[(i + 1) % 4];
+			Vector2 direction = (end - start).Normalized();
+			Vector2 normal = new Vector2(-direction.Y, direction.X) * halfThickness;
+			_movementCursorOutlineSegments[i].Polygon = new[]
+			{
+				start + normal,
+				end + normal,
+				end - normal,
+				start - normal
+			};
+		}
+	}
+
+	private void SetMovementCursorOutlineColor(Color color)
+	{
+		foreach (Polygon2D segment in _movementCursorOutlineSegments)
+		{
+			if (segment != null)
+			{
+				segment.Color = color;
+			}
+		}
 	}
 
 	private void UpdateMovementGridVisibility()
@@ -3659,7 +3722,10 @@ public partial class MissionMap : Node2D
 			return;
 		}
 
-		if (TrySelectControllableUnitAtMouse())
+		Vector2I clickedMovementCell = _roomBuilder != null && _isoWorld != null
+			? ResolveMovementTargetCell(_roomBuilder.GetNearestMovementCell(_isoWorld.ToLocal(GetGlobalMousePosition())))
+			: Vector2I.Zero;
+		if (TrySelectControllableUnitAtMouse(clickedMovementCell))
 		{
 			return;
 		}
@@ -4893,6 +4959,19 @@ public partial class MissionMap : Node2D
 		return _roomBuilder?.GetMovementCellForBuildCell(buildCell) ?? buildCell;
 	}
 
+	private int GetMovementOverlayZIndex(Vector2I movementCell, int bias = 0)
+	{
+		if (_roomBuilder == null)
+		{
+			return bias;
+		}
+
+		Vector2I buildCell = GetBuildCell(movementCell);
+		return _roomBuilder.GetCanvasSortOrderForBuildCell(
+			buildCell,
+			_roomBuilder.MovementSubdivision + bias);
+	}
+
 	private Vector2I ResolveMovementTargetCell(Vector2I requestedCell)
 	{
 		if (_roomBuilder == null)
@@ -5123,7 +5202,7 @@ public partial class MissionMap : Node2D
 			&& (string.IsNullOrWhiteSpace(ignoredPropInstanceId) || prop.PropInstanceId != ignoredPropInstanceId);
 	}
 
-	private bool TrySelectControllableUnitAtMouse()
+	private bool TrySelectControllableUnitAtMouse(Vector2I clickedMovementCell)
 	{
 		MissionNpcPawn activeCombatSurvivor = GetActiveCombatEscortSurvivor();
 		if (_combatActive && activeCombatSurvivor == null)
@@ -5136,6 +5215,11 @@ public partial class MissionMap : Node2D
 		{
 			Rect2 survivorBounds = new Rect2(activeCombatSurvivor.GlobalPosition + new Vector2(-52f, -72f), new Vector2(104f, 120f));
 			if (!survivorBounds.HasPoint(mousePosition))
+			{
+				return false;
+			}
+
+			if (ShouldTreatClickAsMovementOrder(activeCombatSurvivor, clickedMovementCell))
 			{
 				return false;
 			}
@@ -5158,6 +5242,11 @@ public partial class MissionMap : Node2D
 				continue;
 			}
 
+			if (ShouldTreatClickAsMovementOrder(pawn, clickedMovementCell))
+			{
+				return false;
+			}
+
 			SelectOfficer(i);
 			return true;
 		}
@@ -5170,11 +5259,44 @@ public partial class MissionMap : Node2D
 				continue;
 			}
 
+			if (ShouldTreatClickAsMovementOrder(survivor, clickedMovementCell))
+			{
+				return false;
+			}
+
 			SelectEscortSurvivor(survivor);
 			return true;
 		}
 
 		return false;
+	}
+
+	private bool ShouldTreatClickAsMovementOrder(object clickedUnit, Vector2I clickedMovementCell)
+	{
+		if (_roomBuilder == null || !_roomBuilder.IsWalkableMovementCell(clickedMovementCell))
+		{
+			return false;
+		}
+
+		if (_combatActive && !_visibleCells.Contains(clickedMovementCell))
+		{
+			return false;
+		}
+
+		List<object> selectedUnits = GetSelectedFriendlyUnits();
+		if (selectedUnits.Count == 0 || !selectedUnits.Contains(clickedUnit))
+		{
+			return false;
+		}
+
+		Vector2I currentCell = clickedUnit switch
+		{
+			OfficerPawn officer => officer.CurrentCell,
+			MissionNpcPawn survivor => survivor.CurrentCell,
+			_ => Vector2I.Zero
+		};
+
+		return currentCell != clickedMovementCell;
 	}
 
 	private void CheckEnterTriggers(OfficerPawn officer)
@@ -5367,11 +5489,26 @@ public partial class MissionMap : Node2D
 	private bool TryGetOfficerState(OfficerPawn officer, out OfficerState officerState)
 	{
 		officerState = null;
-		return officer != null
-			&& _globalData?.ShipOfficers != null
-			&& !string.IsNullOrWhiteSpace(officer.ShipName)
+		if (officer == null || _globalData?.ShipOfficers == null)
+		{
+			return false;
+		}
+
+		if (!string.IsNullOrWhiteSpace(officer.ShipName)
 			&& _globalData.ShipOfficers.TryGetValue(officer.ShipName, out officerState)
-			&& officerState != null;
+			&& officerState != null)
+		{
+			return true;
+		}
+
+		if (!string.IsNullOrWhiteSpace(officer.OfficerID))
+		{
+			officerState = _globalData.ShipOfficers.Values.FirstOrDefault(candidate =>
+				candidate != null
+				&& string.Equals(candidate.OfficerID, officer.OfficerID, StringComparison.Ordinal));
+		}
+
+		return officerState != null;
 	}
 
 	private string GetCombatActionPromptText(OfficerPawn activeOfficer)
@@ -7888,6 +8025,7 @@ public partial class MissionMap : Node2D
 			Subtitle = $"{officer.Specialty} | {officer.ShipName}",
 			WeaponName = officer.WeaponName,
 			ShieldName = officer.ShieldName,
+			InventoryText = BuildOfficerInventoryText(officer),
 			Icon = icon,
 			CurrentHP = officer.CurrentHP,
 			MaxHP = officer.MaxHP,
@@ -7900,6 +8038,102 @@ public partial class MissionMap : Node2D
 			AttackMaxDamage = officer.AttackDamage,
 			Notes = BuildCombatantNotes(officer.InitiativeBonus, officer.ShieldRechargePerTurn, officer.BonusShieldDamage, officer.ShieldPiercingDamage, officer.WeaponStatusEffectId, officer.WeaponStatusEffectChance, officer.ActiveStatusEffectId)
 		};
+	}
+
+	private string BuildOfficerInventoryText(OfficerPawn officer)
+	{
+		if (officer == null || !TryGetOfficerState(officer, out OfficerState officerState))
+		{
+			return string.Empty;
+		}
+
+		List<string> sections = new List<string>();
+		string equippedWeaponId = !string.IsNullOrWhiteSpace(officer.WeaponId)
+			? officer.WeaponId
+			: officerState.EquippedMissionWeaponId;
+		string equippedShieldId = officerState.EquippedMissionShieldId;
+
+		List<string> weaponLines = BuildNamedInventoryLines(
+			officerState.OwnedMissionWeaponIds,
+			equippedWeaponId,
+			weaponId => MissionEquipmentRegistry.GetWeapon(weaponId)?.DisplayName);
+		if (weaponLines.Count == 0 && !string.IsNullOrWhiteSpace(officer.WeaponName))
+		{
+			weaponLines.Add($"- {officer.WeaponName} (equipped)");
+		}
+
+		List<string> shieldLines = BuildNamedInventoryLines(
+			officerState.OwnedMissionShieldIds,
+			equippedShieldId,
+			shieldId => MissionEquipmentRegistry.GetShield(shieldId)?.DisplayName);
+		if (shieldLines.Count == 0 && !string.IsNullOrWhiteSpace(officer.ShieldName))
+		{
+			shieldLines.Add($"- {officer.ShieldName} (equipped)");
+		}
+
+		List<string> itemLines = BuildStackedInventoryLines(
+			officerState.PersonalInventoryItemIDs,
+			itemId => CampaignItemRegistry.GetItem(itemId)?.DisplayName);
+
+		AppendInventorySection(sections, "WEAPONS", weaponLines);
+		AppendInventorySection(sections, "SHIELDS", shieldLines);
+		AppendInventorySection(sections, "ITEMS", itemLines);
+		return string.Join("\n\n", sections);
+	}
+
+	private static List<string> BuildNamedInventoryLines(IEnumerable<string> ids, string equippedId, Func<string, string> resolveName)
+	{
+		List<string> lines = new List<string>();
+		HashSet<string> seenIds = new HashSet<string>(StringComparer.Ordinal);
+		foreach (string id in ids ?? Enumerable.Empty<string>())
+		{
+			if (string.IsNullOrWhiteSpace(id) || !seenIds.Add(id))
+			{
+				continue;
+			}
+
+			string displayName = resolveName?.Invoke(id);
+			if (string.IsNullOrWhiteSpace(displayName))
+			{
+				displayName = id;
+			}
+
+			bool equipped = !string.IsNullOrWhiteSpace(equippedId) && string.Equals(id, equippedId, StringComparison.Ordinal);
+			lines.Add(equipped ? $"- {displayName} (equipped)" : $"- {displayName}");
+		}
+
+		return lines;
+	}
+
+	private static List<string> BuildStackedInventoryLines(IEnumerable<string> ids, Func<string, string> resolveName)
+	{
+		return (ids ?? Enumerable.Empty<string>())
+			.Where(id => !string.IsNullOrWhiteSpace(id))
+			.GroupBy(id => id, StringComparer.Ordinal)
+			.Select(group =>
+			{
+				string displayName = resolveName?.Invoke(group.Key);
+				if (string.IsNullOrWhiteSpace(displayName))
+				{
+					displayName = group.Key;
+				}
+
+				return group.Count() > 1
+					? $"- {displayName} x{group.Count()}"
+					: $"- {displayName}";
+			})
+			.OrderBy(line => line, StringComparer.OrdinalIgnoreCase)
+			.ToList();
+	}
+
+	private static void AppendInventorySection(List<string> sections, string title, List<string> lines)
+	{
+		if (sections == null || string.IsNullOrWhiteSpace(title) || lines == null || lines.Count == 0)
+		{
+			return;
+		}
+
+		sections.Add($"{title}\n{string.Join("\n", lines)}");
 	}
 
 	private MissionCombatantSummary BuildEnemySummary(MissionNpcPawn enemy)

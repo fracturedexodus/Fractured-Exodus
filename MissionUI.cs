@@ -14,6 +14,7 @@ public sealed class MissionCombatantSummary
 	public string Subtitle { get; init; } = string.Empty;
 	public string WeaponName { get; init; } = string.Empty;
 	public string ShieldName { get; init; } = string.Empty;
+	public string InventoryText { get; init; } = string.Empty;
 	public Texture2D Icon { get; init; }
 	public int CurrentHP { get; init; }
 	public int MaxHP { get; init; }
@@ -68,6 +69,7 @@ public sealed class MissionInfoPanelRefs
 	public TextureRect Icon { get; init; }
 	public Label Header { get; init; }
 	public Label Info { get; init; }
+	public Label Inventory { get; init; }
 }
 
 public partial class MissionUI : CanvasLayer
@@ -77,10 +79,10 @@ public partial class MissionUI : CanvasLayer
 	private static readonly Color HudAccentBorder = new Color(0.24f, 0.64f, 0.78f, 0.82f);
 	private const string ActionLogReadyHeader = "[color=gray]--- ACTION LOG READY ---[/color]";
 
-	private const float ExplorationSelectionMinimumWidth = 372f;
+	private const float ExplorationSelectionMinimumWidth = 564f;
 	private const float ExplorationSelectionMaximumWidth = 1812f;
 	private const float ExplorationCardSpacing = 12f;
-	private const float ExplorationCardWidth = 348f;
+	private const float ExplorationCardWidth = 540f;
 	private const float ExplorationCardHeight = 340f;
 	private const string ExtractionOutcomeMetaKey = "mission_ui_extraction_outcome_id";
 	private const string InteractionActionMetaKey = "mission_ui_interaction_action_id";
@@ -449,12 +451,12 @@ public partial class MissionUI : CanvasLayer
 
 	public void SetPlayerCombatInfo(MissionCombatantSummary summary)
 	{
-		UpdateCombatInfoPanel(summary, _playerCombatInfoPanel, _playerCombatIcon, _playerCombatHeaderLabel, _playerCombatInfoLabel, "UNIT");
+		UpdateCombatInfoPanel(summary, _playerCombatInfoPanel, _playerCombatIcon, _playerCombatHeaderLabel, _playerCombatInfoLabel, null, "UNIT");
 	}
 
 	public void SetEnemyCombatInfo(MissionCombatantSummary summary)
 	{
-		UpdateCombatInfoPanel(summary, _enemyCombatInfoPanel, _enemyCombatIcon, _enemyCombatHeaderLabel, _enemyCombatInfoLabel, "ENEMY");
+		UpdateCombatInfoPanel(summary, _enemyCombatInfoPanel, _enemyCombatIcon, _enemyCombatHeaderLabel, _enemyCombatInfoLabel, null, "ENEMY");
 	}
 
 	public void SetExplorationSelectionInfo(IReadOnlyList<MissionCombatantSummary> summaries, bool visible)
@@ -482,6 +484,7 @@ public partial class MissionUI : CanvasLayer
 				card.Icon,
 				card.Header,
 				card.Info,
+				card.Inventory,
 				"UNIT");
 		}
 	}
@@ -952,8 +955,8 @@ public partial class MissionUI : CanvasLayer
 		_combatEndTurnButton.Pressed += OnCombatEndTurnButtonPressed;
 		_initiativeRoot.AddChild(_combatEndTurnButton);
 
-		_playerCombatInfoPanel = BuildCombatInfoPanel(new Vector2(20f, 760f), out _playerCombatIcon, out _playerCombatHeaderLabel, out _playerCombatInfoLabel);
-		_enemyCombatInfoPanel = BuildCombatInfoPanel(new Vector2(1500f, 760f), out _enemyCombatIcon, out _enemyCombatHeaderLabel, out _enemyCombatInfoLabel);
+		_playerCombatInfoPanel = BuildCombatInfoPanel(new Vector2(20f, 760f), out _playerCombatIcon, out _playerCombatHeaderLabel, out _playerCombatInfoLabel, out _);
+		_enemyCombatInfoPanel = BuildCombatInfoPanel(new Vector2(1500f, 760f), out _enemyCombatIcon, out _enemyCombatHeaderLabel, out _enemyCombatInfoLabel, out _);
 		_playerCombatInfoPanel.Visible = false;
 		_enemyCombatInfoPanel.Visible = false;
 		_uiRoot.AddChild(_playerCombatInfoPanel);
@@ -1550,12 +1553,16 @@ public partial class MissionUI : CanvasLayer
 		content.AddChild(_gameOverReturnButton);
 	}
 
-	private PanelContainer BuildCombatInfoPanel(Vector2 position, out TextureRect iconRect, out Label headerLabel, out Label infoLabel, Vector2? sizeOverride = null, Vector2? iconSizeOverride = null)
+	private PanelContainer BuildCombatInfoPanel(Vector2 position, out TextureRect iconRect, out Label headerLabel, out Label infoLabel, out Label inventoryLabel, Vector2? sizeOverride = null, Vector2? iconSizeOverride = null)
 	{
+		Vector2 panelSize = sizeOverride ?? new Vector2(392f, 262f);
 		PanelContainer panel = new PanelContainer
 		{
 			Position = position,
-			Size = sizeOverride ?? new Vector2(392f, 262f)
+			Size = panelSize,
+			CustomMinimumSize = panelSize,
+			SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin,
+			SizeFlagsVertical = Control.SizeFlags.ShrinkCenter
 		};
 		panel.AddThemeStyleboxOverride("panel", CreateHudPanelStyle());
 
@@ -1578,25 +1585,45 @@ public partial class MissionUI : CanvasLayer
 		headerLabel.AddThemeFontSizeOverride("font_size", 17);
 		content.AddChild(headerLabel);
 
+		HBoxContainer bodyRow = new HBoxContainer();
+		bodyRow.AddThemeConstantOverride("separation", 12);
+		bodyRow.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+		bodyRow.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
+		content.AddChild(bodyRow);
+
 		iconRect = new TextureRect
 		{
 			CustomMinimumSize = iconSizeOverride ?? new Vector2(120f, 88f),
 			ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
-			StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered
+			StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
+			SizeFlagsVertical = Control.SizeFlags.ShrinkCenter
 		};
-		content.AddChild(iconRect);
+		bodyRow.AddChild(iconRect);
 
 		infoLabel = new Label
 		{
-			AutowrapMode = TextServer.AutowrapMode.Off,
-			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+			AutowrapMode = TextServer.AutowrapMode.WordSmart,
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+			SizeFlagsVertical = Control.SizeFlags.ShrinkCenter,
+			CustomMinimumSize = new Vector2(150f, 0f)
 		};
 		infoLabel.AddThemeFontSizeOverride("font_size", 15);
-		content.AddChild(infoLabel);
+		bodyRow.AddChild(infoLabel);
+
+		inventoryLabel = new Label
+		{
+			AutowrapMode = TextServer.AutowrapMode.WordSmart,
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+			SizeFlagsVertical = Control.SizeFlags.ShrinkCenter,
+			Visible = false,
+			CustomMinimumSize = new Vector2(160f, 0f)
+		};
+		inventoryLabel.AddThemeFontSizeOverride("font_size", 14);
+		bodyRow.AddChild(inventoryLabel);
 		return panel;
 	}
 
-	private void UpdateCombatInfoPanel(MissionCombatantSummary summary, PanelContainer panel, TextureRect iconRect, Label headerLabel, Label infoLabel, string emptyTitle)
+	private void UpdateCombatInfoPanel(MissionCombatantSummary summary, PanelContainer panel, TextureRect iconRect, Label headerLabel, Label infoLabel, Label inventoryLabel, string emptyTitle)
 	{
 		if (panel == null || iconRect == null || headerLabel == null || infoLabel == null)
 		{
@@ -1614,6 +1641,11 @@ public partial class MissionUI : CanvasLayer
 		headerLabel.Text = $"== {summary.DisplayName.ToUpperInvariant()} ==";
 		string subtitleLine = string.IsNullOrWhiteSpace(summary.Subtitle) ? string.Empty : $"{summary.Subtitle}\n";
 		infoLabel.Text = $"{emptyTitle}: {summary.DisplayName}\n{subtitleLine}WEAPON: {summary.WeaponName}\nSHIELD: {summary.ShieldName}\nHP: {summary.CurrentHP}/{summary.MaxHP}\nSHIELDS: {summary.CurrentShields}/{summary.MaxShields}\nAP: {summary.CurrentAP}/{summary.MaxAP}\nRANGE: {summary.AttackRange} | DMG: {summary.AttackMinDamage}-{summary.AttackMaxDamage}";
+		if (inventoryLabel != null)
+		{
+			inventoryLabel.Visible = !string.IsNullOrWhiteSpace(summary.InventoryText);
+			inventoryLabel.Text = summary.InventoryText;
+		}
 	}
 
 	private void UpdateExplorationSelectionPanelWidth(int visibleCardCount)
@@ -1642,18 +1674,20 @@ public partial class MissionUI : CanvasLayer
 				out TextureRect icon,
 				out Label header,
 				out Label info,
+				out Label inventory,
 				new Vector2(ExplorationCardWidth, ExplorationCardHeight),
 				new Vector2(156f, 132f));
 			panel.Position = Vector2.Zero;
 			panel.Visible = false;
-			panel.AddThemeStyleboxOverride("panel", CreateTransparentPanelStyle());
+			panel.AddThemeStyleboxOverride("panel", CreateHudPanelStyle(0.88f, true));
 			_explorationSelectionRow.AddChild(panel);
 			_explorationInfoCards.Add(new MissionInfoPanelRefs
 			{
 				Panel = panel,
 				Icon = icon,
 				Header = header,
-				Info = info
+				Info = info,
+				Inventory = inventory
 			});
 		}
 	}

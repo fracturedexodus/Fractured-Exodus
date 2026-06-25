@@ -97,6 +97,7 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 		{
 			_nameLabel.ZAsRelative = false;
 			_nameLabel.ZIndex = NameLabelZIndex;
+			_nameLabel.Visible = false;
 		}
 		_shadow = GetNodeOrNull<Polygon2D>(ShadowPath);
 		_coverGhostSprite = new Sprite2D
@@ -259,7 +260,7 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 		if (_nameLabel != null)
 		{
 			_nameLabel.Text = DisplayName;
-			_nameLabel.Visible = definition.ShowNameLabel;
+			_nameLabel.Visible = false;
 		}
 
 		if (_shadow != null)
@@ -406,7 +407,7 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 		Visible = !IsDead && !IsExtracted && isVisible;
 		if (_nameLabel != null && _definition != null)
 		{
-			_nameLabel.Visible = !IsDead && !IsExtracted && isVisible && _definition.ShowNameLabel;
+			_nameLabel.Visible = false;
 		}
 	}
 
@@ -439,7 +440,7 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 
 		if (_nameLabel != null && _definition != null)
 		{
-			_nameLabel.Visible = !occluded && !IsDead && !IsExtracted && _definition.ShowNameLabel;
+			_nameLabel.Visible = false;
 		}
 	}
 
