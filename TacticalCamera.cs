@@ -46,6 +46,11 @@ public partial class TacticalCamera : Camera2D
 	public override void _Process(double delta)
 	{
 		if (_map == null || _map.IsJumping || _map.UI == null) return;
+		if (_map.IsMapInteractionModalVisible())
+		{
+			CancelSelectionDrag();
+			return;
+		}
 
 		Vector2 panDirection = Vector2.Zero;
 		
@@ -76,6 +81,11 @@ public partial class TacticalCamera : Camera2D
 	public override void _UnhandledInput(InputEvent @event)
 	{
 		if (_map == null || _map.IsJumping || _map.UI == null) return;
+		if (_map.IsMapInteractionModalVisible())
+		{
+			CancelSelectionDrag();
+			return;
+		}
 
 		if (@event is InputEventKey keyEvent && keyEvent.Pressed && !keyEvent.Echo)
 		{
@@ -315,6 +325,16 @@ public partial class TacticalCamera : Camera2D
 				_map.UI.InfoPanel.Visible = true;
 			}
 			else _map.UI.InfoPanel.Visible = false; 
+		}
+	}
+
+	private void CancelSelectionDrag()
+	{
+		_isDragging = false;
+		if (_selectionBox != null)
+		{
+			_selectionBox.IsDragging = false;
+			_selectionBox.QueueRedraw();
 		}
 	}
 

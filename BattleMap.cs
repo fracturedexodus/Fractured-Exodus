@@ -2377,21 +2377,21 @@ public partial class BattleMap : Node2D
 			return;
 		}
 
-		if (_officerSwapMenuWrapper != null && _officerSwapMenuWrapper.Visible)
-		{
-			if (@event is InputEventKey swapMenuEscape && swapMenuEscape.Pressed && !swapMenuEscape.Echo && swapMenuEscape.Keycode == Key.Escape)
-			{
-				HideOfficerSwapMenu();
-				GetViewport().SetInputAsHandled();
-			}
-			return;
-		}
-
 		if (_officerInventoryOverlay != null && _officerInventoryOverlay.Visible)
 		{
 			if (@event is InputEventKey inventoryEscape && inventoryEscape.Pressed && !inventoryEscape.Echo && inventoryEscape.Keycode == Key.Escape)
 			{
 				HideOfficerInventory();
+				GetViewport().SetInputAsHandled();
+			}
+			return;
+		}
+
+		if (_officerSwapMenuWrapper != null && _officerSwapMenuWrapper.Visible)
+		{
+			if (@event is InputEventKey swapMenuEscape && swapMenuEscape.Pressed && !swapMenuEscape.Echo && swapMenuEscape.Keycode == Key.Escape)
+			{
+				HideOfficerSwapMenu();
 				GetViewport().SetInputAsHandled();
 			}
 			return;
@@ -2416,8 +2416,11 @@ public partial class BattleMap : Node2D
 
 		if (_pauseMenuWrapper != null && _pauseMenuWrapper.Visible) return;
 		if (_loadMenuWrapper != null && _loadMenuWrapper.Visible) return;
+		if (_deleteSaveConfirmWrapper != null && _deleteSaveConfirmWrapper.Visible) return;
 		if (_savePromptWrapper != null && _savePromptWrapper.Visible) return;
+		if (_missionPromptWrapper != null && _missionPromptWrapper.Visible) return;
 		if (_replacementPromptWrapper != null && _replacementPromptWrapper.Visible) return;
+		if (_officerInventoryOverlay != null && _officerInventoryOverlay.Visible) return;
 		if (_officerSwapMenuWrapper != null && _officerSwapMenuWrapper.Visible) return;
 		if (_strandedMenuWrapper != null && _strandedMenuWrapper.Visible) return;
 		if (_shopMenuWrapper != null && _shopMenuWrapper.Visible) return; 
@@ -2693,6 +2696,17 @@ public partial class BattleMap : Node2D
 		
 		if (IsFleetMoving) Fog.UpdateVisibility();
 
+		if (IsMapInteractionModalVisible())
+		{
+			HideMapCursorFeedback();
+			UpdateEnvironmentAnimation((float)delta);
+			Hazards.ProcessHazards(delta);
+			UpdateJumpButton();
+			UpdateAttackButton();
+			UpdateMissileButton();
+			return;
+		}
+
 		Vector2 globalMousePos = GetGlobalMousePosition();
 		_currentHoveredHex = HexMath.PixelToHex(globalMousePos, HexSize);
 		UpdateHoverPresentation();
@@ -2704,6 +2718,44 @@ public partial class BattleMap : Node2D
 		UpdateJumpButton();
 		UpdateAttackButton();
 		UpdateMissileButton();
+	}
+
+	internal bool IsMapInteractionModalVisible()
+	{
+		return (_pauseMenuWrapper?.Visible ?? false)
+			|| (_loadMenuWrapper?.Visible ?? false)
+			|| (_deleteSaveConfirmWrapper?.Visible ?? false)
+			|| (_savePromptWrapper?.Visible ?? false)
+			|| (_missionPromptWrapper?.Visible ?? false)
+			|| (_replacementPromptWrapper?.Visible ?? false)
+			|| (_officerSwapMenuWrapper?.Visible ?? false)
+			|| (_officerInventoryOverlay?.Visible ?? false)
+			|| (_strandedMenuWrapper?.Visible ?? false)
+			|| (_shopMenuWrapper?.Visible ?? false)
+			|| (_equipMenuWrapper?.Visible ?? false);
+	}
+
+	private void HideMapCursorFeedback()
+	{
+		if (_radarHighlight != null)
+		{
+			_radarHighlight.Visible = false;
+		}
+
+		if (_hoverHighlight != null)
+		{
+			_hoverHighlight.Visible = false;
+		}
+
+		if (_hoverTooltip != null)
+		{
+			_hoverTooltip.Visible = false;
+		}
+
+		if (UI?.InfoPanel != null)
+		{
+			UI.InfoPanel.Visible = false;
+		}
 	}
 
 	private void UpdateHoverPresentation()
@@ -3000,11 +3052,8 @@ public partial class BattleMap : Node2D
 			return;
 		}
 
-		Control uiRoot = UI.GetNodeOrNull<Control>("UIRoot");
-		if (uiRoot == null)
-		{
-			return;
-		}
+		CanvasLayer inventoryLayer = new CanvasLayer { Layer = 220 };
+		AddChild(inventoryLayer);
 
 		_officerInventoryOverlay = new ColorRect
 		{
@@ -3014,7 +3063,7 @@ public partial class BattleMap : Node2D
 		};
 		_officerInventoryOverlay.SetAnchorsPreset(Control.LayoutPreset.FullRect);
 		_officerInventoryOverlay.GuiInput += OnOfficerInventoryOverlayGuiInput;
-		uiRoot.AddChild(_officerInventoryOverlay);
+		inventoryLayer.AddChild(_officerInventoryOverlay);
 
 		_officerInventoryPanel = new PanelContainer
 		{
@@ -3443,6 +3492,96 @@ public partial class BattleMap : Node2D
 		};
 	}
 
+	private MissionOfficerInventoryPanelData BuildRemnantInventoryPanelData(RemnantRecord remnant)
+	{
+		if (remnant == null)
+		{
+			return null;
+		}
+
+		if (remnant.StoredOfficerState != null)
+		{
+			OfficerState reserveOfficer = remnant.StoredOfficerState.ToRuntime();
+			OfficerMissionLoadoutService.EnsureOfficerLoadout(reserveOfficer);
+			OfficerInventoryCombatProfile profile = BuildOfficerInventoryCombatProfile(reserveOfficer);
+			List<MissionInventoryEntry> loadoutEntries = new List<MissionInventoryEntry>
+			{
+				new MissionInventoryEntry
+				{
+					Title = profile.WeaponName,
+					Detail = BuildWeaponDetailText(OfficerMissionLoadoutService.GetEquippedWeapon(reserveOfficer), profile),
+					Highlighted = true
+				},
+				new MissionInventoryEntry
+				{
+					Title = profile.ShieldName,
+					Detail = BuildShieldDetailText(OfficerMissionLoadoutService.GetEquippedShield(reserveOfficer), profile),
+					Highlighted = true
+				},
+				new MissionInventoryEntry
+				{
+					Title = string.IsNullOrWhiteSpace(profile.CombatAbilityId) ? "Combat Discipline" : profile.CombatAbilityId,
+					Detail = string.IsNullOrWhiteSpace(profile.WeaponStatusEffectId)
+						? "Reserve loadout remains stable and ready for reassignment."
+						: $"Loadout effect: {profile.WeaponStatusEffectId.Replace('_', ' ')}."
+				}
+			};
+
+			return new MissionOfficerInventoryPanelData
+			{
+				OfficerId = remnant.RecordId,
+				DisplayName = string.IsNullOrWhiteSpace(reserveOfficer.DisplayName) ? remnant.DisplayName : reserveOfficer.DisplayName,
+				ShipName = "Reserve Roster",
+				Specialty = string.IsNullOrWhiteSpace(reserveOfficer.Specialty) ? "Reserve Officer" : reserveOfficer.Specialty,
+				Portrait = LoadPortraitTexture(string.IsNullOrWhiteSpace(reserveOfficer.PortraitPath) ? remnant.PortraitPath : reserveOfficer.PortraitPath),
+				SummaryText = BuildOfficerInventorySummaryText(reserveOfficer, profile),
+				VitalStatsText = BuildOfficerVitalStatsText(reserveOfficer, profile),
+				FooterText = "Reserve dossiers are read-only here. Assign this remnant to a ship to change their tactical loadout.",
+				LoadoutEntries = loadoutEntries,
+				WeaponEntries = BuildWeaponInventoryEntries(reserveOfficer, profile, false),
+				ShieldEntries = BuildShieldInventoryEntries(reserveOfficer, profile, false),
+				ItemEntries = BuildItemInventoryEntries(reserveOfficer.PersonalInventoryItemIDs)
+			};
+		}
+
+		int carriedItems = remnant.PersonalInventoryItemIDs?.Count ?? 0;
+		List<MissionInventoryEntry> reserveEntries = new List<MissionInventoryEntry>
+		{
+			new MissionInventoryEntry
+			{
+				Title = "Pending Commission",
+				Detail = "This rescued remnant has not yet been commissioned into a tactical officer role.",
+				Highlighted = true
+			}
+		};
+		if (!string.IsNullOrWhiteSpace(remnant.MissionTitle))
+		{
+			reserveEntries.Add(new MissionInventoryEntry
+			{
+				Title = remnant.MissionTitle,
+				Detail = "Mission of recovery recorded in the reserve manifest."
+			});
+		}
+
+		return new MissionOfficerInventoryPanelData
+		{
+			OfficerId = remnant.RecordId,
+			DisplayName = remnant.DisplayName,
+			ShipName = "Reserve Roster",
+			Specialty = "Awaiting Commission",
+			Portrait = LoadPortraitTexture(remnant.PortraitPath),
+			SummaryText = BuildOfficerBiographyFromRemnant(remnant),
+			VitalStatsText = BuildRemnantVitalStatsText(remnant),
+			FooterText = carriedItems == 0
+				? "No tracked gear is currently being carried by this remnant."
+				: $"Recovered gear manifest shows {carriedItems} carried item{(carriedItems == 1 ? string.Empty : "s")}.",
+			LoadoutEntries = reserveEntries,
+			WeaponEntries = Array.Empty<MissionInventoryEntry>(),
+			ShieldEntries = Array.Empty<MissionInventoryEntry>(),
+			ItemEntries = BuildItemInventoryEntries(remnant.PersonalInventoryItemIDs)
+		};
+	}
+
 	private static string BuildOfficerInventorySummaryText(OfficerState officerState, OfficerInventoryCombatProfile profile)
 	{
 		List<string> notes = new List<string>();
@@ -3500,7 +3639,20 @@ public partial class BattleMap : Node2D
 		return string.Join("\n", lines);
 	}
 
-	private static List<MissionInventoryEntry> BuildWeaponInventoryEntries(OfficerState officerState, OfficerInventoryCombatProfile profile)
+	private static string BuildRemnantVitalStatsText(RemnantRecord remnant)
+	{
+		List<string> lines = new List<string>
+		{
+			"STATUS    Reserve Remnant",
+			$"RECOVERED {(string.IsNullOrWhiteSpace(remnant?.MissionTitle) ? "Unknown Source" : remnant.MissionTitle)}",
+			$"TURN      {(remnant?.RescuedOnTurn > 0 ? remnant.RescuedOnTurn.ToString() : "Unknown")}",
+			$"CARRIED   {remnant?.PersonalInventoryItemIDs?.Count ?? 0}"
+		};
+
+		return string.Join("\n", lines);
+	}
+
+	private static List<MissionInventoryEntry> BuildWeaponInventoryEntries(OfficerState officerState, OfficerInventoryCombatProfile profile, bool canActivate = true)
 	{
 		List<MissionInventoryEntry> entries = OfficerMissionLoadoutService.GetOwnedWeaponIds(officerState)
 			.Where(weaponId => !string.IsNullOrWhiteSpace(weaponId))
@@ -3515,7 +3667,7 @@ public partial class BattleMap : Node2D
 					Title = definition?.DisplayName ?? weaponId,
 					Detail = BuildWeaponDetailText(definition, profile),
 					Highlighted = isEquipped,
-					CanActivate = true,
+					CanActivate = canActivate,
 					ActionText = isEquipped ? "EQUIPPED" : "EQUIP"
 				};
 			})
@@ -3530,7 +3682,7 @@ public partial class BattleMap : Node2D
 				Title = profile.WeaponName,
 				Detail = BuildWeaponDetailText(null, profile),
 				Highlighted = true,
-				CanActivate = true,
+				CanActivate = canActivate,
 				ActionText = "EQUIPPED"
 			});
 		}
@@ -3538,7 +3690,7 @@ public partial class BattleMap : Node2D
 		return entries;
 	}
 
-	private static List<MissionInventoryEntry> BuildShieldInventoryEntries(OfficerState officerState, OfficerInventoryCombatProfile profile)
+	private static List<MissionInventoryEntry> BuildShieldInventoryEntries(OfficerState officerState, OfficerInventoryCombatProfile profile, bool canActivate = true)
 	{
 		List<MissionInventoryEntry> entries = OfficerMissionLoadoutService.GetOwnedShieldIds(officerState)
 			.Where(shieldId => !string.IsNullOrWhiteSpace(shieldId))
@@ -3553,7 +3705,7 @@ public partial class BattleMap : Node2D
 					Title = definition?.DisplayName ?? shieldId,
 					Detail = BuildShieldDetailText(definition, profile),
 					Highlighted = isEquipped,
-					CanActivate = true,
+					CanActivate = canActivate,
 					ActionText = isEquipped ? "EQUIPPED" : "EQUIP"
 				};
 			})
@@ -3568,7 +3720,7 @@ public partial class BattleMap : Node2D
 				Title = profile.ShieldName,
 				Detail = BuildShieldDetailText(null, profile),
 				Highlighted = true,
-				CanActivate = true,
+				CanActivate = canActivate,
 				ActionText = "EQUIPPED"
 			});
 		}
@@ -3578,7 +3730,12 @@ public partial class BattleMap : Node2D
 
 	private static List<MissionInventoryEntry> BuildItemInventoryEntries(OfficerState officerState)
 	{
-		return (officerState?.PersonalInventoryItemIDs ?? new List<string>())
+		return BuildItemInventoryEntries(officerState?.PersonalInventoryItemIDs);
+	}
+
+	private static List<MissionInventoryEntry> BuildItemInventoryEntries(IEnumerable<string> itemIds)
+	{
+		return (itemIds ?? Enumerable.Empty<string>())
 			.Where(itemId => !string.IsNullOrWhiteSpace(itemId))
 			.GroupBy(itemId => itemId, StringComparer.Ordinal)
 			.Select(group =>
@@ -4970,7 +5127,8 @@ public partial class BattleMap : Node2D
 			$"[center]Current officer: [color=cyan]{currentOfficerName}[/color][/center]\n" +
 			$"[center]{currentOfficerSpecialty}[/center]\n\n" +
 			$"Select a saved {CampaignText.RemnantsLabel.TrimEnd('s').ToLowerInvariant()} to assign to this ship. " +
-			$"If an officer is already posted here, they will move into the reserve roster and can be reassigned later.";
+			$"If an officer is already posted here, they will move into the reserve roster and can be reassigned later.\n\n" +
+			$"[center]Right-click a portrait to inspect that reserve dossier and carried gear.[/center]";
 
 		List<RemnantRecord> candidates = (_globalData.RescuedRemnants ?? new List<RemnantRecord>())
 			.Where(remnant => remnant != null && !string.IsNullOrWhiteSpace(remnant.RecordId))
@@ -5012,49 +5170,72 @@ public partial class BattleMap : Node2D
 		row.AddThemeConstantOverride("separation", 12);
 		margin.AddChild(row);
 
-		VBoxContainer textColumn = new VBoxContainer
+		string remnantRecordId = remnant.RecordId;
+		VBoxContainer identityColumn = new VBoxContainer
 		{
-			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+			Alignment = BoxContainer.AlignmentMode.Center
 		};
-		textColumn.AddThemeConstantOverride("separation", 6);
-		row.AddChild(textColumn);
+		identityColumn.AddThemeConstantOverride("separation", 8);
+		row.AddChild(identityColumn);
+
+		PanelContainer portraitFrame = new PanelContainer
+		{
+			CustomMinimumSize = new Vector2(108f, 132f),
+			SizeFlagsVertical = Control.SizeFlags.ShrinkCenter,
+			TooltipText = "Right-click to inspect this reserve remnant."
+		};
+		portraitFrame.AddThemeStyleboxOverride("panel", CreateInventorySlotStyle(remnant.StoredOfficerState != null, false));
+		identityColumn.AddChild(portraitFrame);
+
+		TextureRect portrait = new TextureRect
+		{
+			ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+			StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
+			Texture = LoadPortraitTexture(remnant.StoredOfficerState?.PortraitPath ?? remnant.PortraitPath),
+			MouseFilter = Control.MouseFilterEnum.Stop,
+			TooltipText = "Right-click to inspect this reserve remnant."
+		};
+		portrait.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+		portrait.GuiInput += @event =>
+		{
+			if (@event is not InputEventMouseButton mouseButton
+				|| !mouseButton.Pressed
+				|| mouseButton.ButtonIndex != MouseButton.Right)
+			{
+				return;
+			}
+
+			MissionOfficerInventoryPanelData data = BuildRemnantInventoryPanelData(remnant);
+			if (data != null)
+			{
+				ShowOfficerInventory(data);
+				portrait.AcceptEvent();
+				GetViewport().SetInputAsHandled();
+			}
+		};
+		portraitFrame.AddChild(portrait);
 
 		Label nameLabel = new Label
 		{
-			Text = string.IsNullOrWhiteSpace(remnant.DisplayName) ? "UNNAMED REMNANT" : remnant.DisplayName.ToUpperInvariant()
+			Text = string.IsNullOrWhiteSpace(remnant.DisplayName) ? "UNNAMED REMNANT" : remnant.DisplayName.ToUpperInvariant(),
+			AutowrapMode = TextServer.AutowrapMode.WordSmart,
+			HorizontalAlignment = HorizontalAlignment.Center,
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+			CustomMinimumSize = new Vector2(220f, 0f)
 		};
 		nameLabel.AddThemeFontSizeOverride("font_size", 18);
 		nameLabel.AddThemeColorOverride("font_color", Colors.White);
-		textColumn.AddChild(nameLabel);
-
-		string reserveTag = remnant.StoredOfficerState != null ? "Reserve Officer" : CampaignText.RemnantsLabel.TrimEnd('s');
-		string subtitle = remnant.StoredOfficerState != null
-			? $"{reserveTag} | {remnant.StoredOfficerState.Specialty} | Approval {remnant.StoredOfficerState.Approval}"
-			: $"{reserveTag} | {BuildRemnantCommissionSummary(remnant)}";
-		Label subtitleLabel = new Label
-		{
-			Text = subtitle,
-			AutowrapMode = TextServer.AutowrapMode.WordSmart
-		};
-		subtitleLabel.AddThemeColorOverride("font_color", new Color(0.84f, 0.92f, 1f));
-		textColumn.AddChild(subtitleLabel);
-
-		Label bodyLabel = new Label
-		{
-			Text = BuildRemnantSwapDescription(remnant),
-			AutowrapMode = TextServer.AutowrapMode.WordSmart
-		};
-		bodyLabel.AddThemeColorOverride("font_color", new Color(0.82f, 0.86f, 0.92f));
-		textColumn.AddChild(bodyLabel);
+		identityColumn.AddChild(nameLabel);
 
 		Button assignButton = new Button
 		{
 			Text = "ASSIGN",
 			CustomMinimumSize = new Vector2(140f, 42f),
-			SizeFlagsHorizontal = Control.SizeFlags.ShrinkCenter
+			SizeFlagsHorizontal = Control.SizeFlags.ShrinkCenter,
+			SizeFlagsVertical = Control.SizeFlags.ShrinkCenter
 		};
-		string recordId = remnant.RecordId;
-		assignButton.Pressed += () => AssignRemnantToShip(shipName, recordId);
+		assignButton.Pressed += () => AssignRemnantToShip(shipName, remnantRecordId);
 		row.AddChild(assignButton);
 
 		return card;
