@@ -77,6 +77,17 @@ public partial class BattleMap : Node2D
 	// --- NEW: EQUIP GEAR UI ---
 	private Button _btnEquip;
 	private CenterContainer _equipMenuWrapper;
+	private TextureRect _equipShipPortrait;
+	private Label _equipShipNameLabel;
+	private Label _equipShipRoleLabel;
+	private Label _equipShipStatsLabel;
+	private Label _equipSummaryLabel;
+	private Label _equipFooterLabel;
+	private VBoxContainer _equipActiveLoadoutStack;
+	private VBoxContainer _equipWeaponStack;
+	private VBoxContainer _equipShieldStack;
+	private VBoxContainer _equipArmorStack;
+	private VBoxContainer _equipMissileStack;
 	private VBoxContainer _equipItemList;
 	private Button _btnMission;
 	private Button _btnOfficerSwap;
@@ -1679,63 +1690,255 @@ public partial class BattleMap : Node2D
 		_equipMenuWrapper.Visible = false;
 		equipLayer.AddChild(_equipMenuWrapper);
 
-		PanelContainer equipPanel = new PanelContainer();
-		StyleBoxFlat style = new StyleBoxFlat();
-		style.BgColor = new Color(0.05f, 0.05f, 0.1f, 0.95f);
-		style.BorderWidthTop = 2; style.BorderWidthBottom = 2; style.BorderWidthLeft = 2; style.BorderWidthRight = 2;
-		style.BorderColor = new Color(1f, 0.6f, 0f, 0.8f);
-		style.ContentMarginLeft = 25; style.ContentMarginRight = 25; style.ContentMarginTop = 20; style.ContentMarginBottom = 20;
-		equipPanel.AddThemeStyleboxOverride("panel", style);
+		PanelContainer equipPanel = new PanelContainer
+		{
+			CustomMinimumSize = new Vector2(1240f, 780f)
+		};
+		equipPanel.AddThemeStyleboxOverride("panel", CreateInventoryWindowStyle());
 		_equipMenuWrapper.AddChild(equipPanel);
 
-		VBoxContainer mainVBox = new VBoxContainer();
-		mainVBox.AddThemeConstantOverride("separation", 15);
-		equipPanel.AddChild(mainVBox);
+		MarginContainer outerMargin = new MarginContainer();
+		outerMargin.AddThemeConstantOverride("margin_left", 20);
+		outerMargin.AddThemeConstantOverride("margin_top", 20);
+		outerMargin.AddThemeConstantOverride("margin_right", 20);
+		outerMargin.AddThemeConstantOverride("margin_bottom", 20);
+		equipPanel.AddChild(outerMargin);
 
-		Label title = new Label();
-		title.Text = "=== FLEET UPGRADES & LOADOUT ===";
-		title.HorizontalAlignment = HorizontalAlignment.Center;
-		title.AddThemeColorOverride("font_color", new Color(1f, 0.6f, 0f));
-		title.AddThemeFontSizeOverride("font_size", 18);
-		mainVBox.AddChild(title);
+		VBoxContainer layout = new VBoxContainer();
+		layout.AddThemeConstantOverride("separation", 16);
+		outerMargin.AddChild(layout);
 
-		ScrollContainer scroll = new ScrollContainer();
-		scroll.CustomMinimumSize = new Vector2(500, 350);
-		mainVBox.AddChild(scroll);
+		HBoxContainer headerRow = new HBoxContainer();
+		headerRow.AddThemeConstantOverride("separation", 14);
+		layout.AddChild(headerRow);
 
-		_equipItemList = new VBoxContainer();
-		_equipItemList.AddThemeConstantOverride("separation", 15);
-		scroll.AddChild(_equipItemList);
+		VBoxContainer rail = new VBoxContainer();
+		rail.CustomMinimumSize = new Vector2(76f, 0f);
+		rail.AddThemeConstantOverride("separation", 10);
+		headerRow.AddChild(rail);
+		rail.AddChild(BuildInventoryRailTag("LOADOUT", true));
+		rail.AddChild(BuildInventoryRailTag("BATTLE", false));
+		rail.AddChild(BuildInventoryRailTag("CARGO", false));
 
-		Button closeBtn = new Button();
-		closeBtn.Text = "CLOSE TERMINAL";
-		closeBtn.CustomMinimumSize = new Vector2(0, 40);
+		VBoxContainer mainColumn = new VBoxContainer
+		{
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+			SizeFlagsVertical = Control.SizeFlags.ExpandFill
+		};
+		mainColumn.AddThemeConstantOverride("separation", 14);
+		headerRow.AddChild(mainColumn);
+
+		HBoxContainer titleRow = new HBoxContainer();
+		titleRow.Alignment = BoxContainer.AlignmentMode.Center;
+		titleRow.AddThemeConstantOverride("separation", 12);
+		mainColumn.AddChild(titleRow);
+
+		Control leftSpacer = new Control
+		{
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+		};
+		titleRow.AddChild(leftSpacer);
+
+		PanelContainer titlePlaque = new PanelContainer
+		{
+			CustomMinimumSize = new Vector2(520f, 74f)
+		};
+		titlePlaque.AddThemeStyleboxOverride("panel", CreateInventoryBannerStyle());
+		titleRow.AddChild(titlePlaque);
+
+		Label titleLabel = new Label
+		{
+			Text = "FLEET LOADOUT",
+			HorizontalAlignment = HorizontalAlignment.Center,
+			VerticalAlignment = VerticalAlignment.Center
+		};
+		titleLabel.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+		titleLabel.AddThemeFontSizeOverride("font_size", 34);
+		titleLabel.AddThemeColorOverride("font_color", new Color(0.93f, 0.90f, 0.84f));
+		titlePlaque.AddChild(titleLabel);
+
+		Control rightSpacer = new Control
+		{
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+		};
+		titleRow.AddChild(rightSpacer);
+
+		Button closeBtn = new Button
+		{
+			Text = "CLOSE",
+			CustomMinimumSize = new Vector2(120f, 44f)
+		};
+		closeBtn.AddThemeStyleboxOverride("normal", CreateInventoryButtonStyle());
+		closeBtn.AddThemeStyleboxOverride("hover", CreateInventoryButtonStyle(true));
+		closeBtn.AddThemeStyleboxOverride("pressed", CreateInventoryButtonStyle(true));
 		closeBtn.Pressed += () => _equipMenuWrapper.Visible = false;
-		mainVBox.AddChild(closeBtn);
+		titleRow.AddChild(closeBtn);
+
+		PanelContainer identityPanel = new PanelContainer();
+		identityPanel.AddThemeStyleboxOverride("panel", CreateInventorySectionStyle(true));
+		mainColumn.AddChild(identityPanel);
+
+		MarginContainer identityMargin = new MarginContainer();
+		identityMargin.AddThemeConstantOverride("margin_left", 18);
+		identityMargin.AddThemeConstantOverride("margin_top", 14);
+		identityMargin.AddThemeConstantOverride("margin_right", 18);
+		identityMargin.AddThemeConstantOverride("margin_bottom", 14);
+		identityPanel.AddChild(identityMargin);
+
+		VBoxContainer identityContent = new VBoxContainer();
+		identityContent.AddThemeConstantOverride("separation", 6);
+		identityMargin.AddChild(identityContent);
+
+		_equipShipNameLabel = new Label
+		{
+			HorizontalAlignment = HorizontalAlignment.Center
+		};
+		_equipShipNameLabel.AddThemeFontSizeOverride("font_size", 30);
+		identityContent.AddChild(_equipShipNameLabel);
+
+		_equipShipRoleLabel = new Label
+		{
+			HorizontalAlignment = HorizontalAlignment.Center
+		};
+		_equipShipRoleLabel.AddThemeFontSizeOverride("font_size", 16);
+		_equipShipRoleLabel.AddThemeColorOverride("font_color", new Color(0.88f, 0.78f, 0.62f));
+		identityContent.AddChild(_equipShipRoleLabel);
+
+		HBoxContainer bodyRow = new HBoxContainer();
+		bodyRow.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
+		bodyRow.AddThemeConstantOverride("separation", 14);
+		mainColumn.AddChild(bodyRow);
+
+		PanelContainer portraitPanel = new PanelContainer
+		{
+			CustomMinimumSize = new Vector2(280f, 0f),
+			SizeFlagsVertical = Control.SizeFlags.ExpandFill
+		};
+		portraitPanel.AddThemeStyleboxOverride("panel", CreateInventorySectionStyle());
+		bodyRow.AddChild(portraitPanel);
+
+		MarginContainer portraitMargin = new MarginContainer();
+		portraitMargin.AddThemeConstantOverride("margin_left", 14);
+		portraitMargin.AddThemeConstantOverride("margin_top", 14);
+		portraitMargin.AddThemeConstantOverride("margin_right", 14);
+		portraitMargin.AddThemeConstantOverride("margin_bottom", 14);
+		portraitPanel.AddChild(portraitMargin);
+
+		VBoxContainer portraitContent = new VBoxContainer();
+		portraitContent.AddThemeConstantOverride("separation", 12);
+		portraitMargin.AddChild(portraitContent);
+
+		_equipShipPortrait = new TextureRect
+		{
+			CustomMinimumSize = new Vector2(0f, 240f),
+			StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
+			ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize
+		};
+		portraitContent.AddChild(_equipShipPortrait);
+
+		_equipShipStatsLabel = new Label
+		{
+			AutowrapMode = TextServer.AutowrapMode.WordSmart
+		};
+		_equipShipStatsLabel.AddThemeFontSizeOverride("font_size", 15);
+		portraitContent.AddChild(_equipShipStatsLabel);
+
+		VBoxContainer centerColumn = new VBoxContainer
+		{
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+			SizeFlagsVertical = Control.SizeFlags.ExpandFill
+		};
+		centerColumn.AddThemeConstantOverride("separation", 14);
+		bodyRow.AddChild(centerColumn);
+
+		PanelContainer summaryPanel = new PanelContainer();
+		summaryPanel.AddThemeStyleboxOverride("panel", CreateInventorySectionStyle());
+		centerColumn.AddChild(summaryPanel);
+
+		MarginContainer summaryMargin = new MarginContainer();
+		summaryMargin.AddThemeConstantOverride("margin_left", 14);
+		summaryMargin.AddThemeConstantOverride("margin_top", 14);
+		summaryMargin.AddThemeConstantOverride("margin_right", 14);
+		summaryMargin.AddThemeConstantOverride("margin_bottom", 14);
+		summaryPanel.AddChild(summaryMargin);
+
+		VBoxContainer summaryContent = new VBoxContainer();
+		summaryContent.AddThemeConstantOverride("separation", 10);
+		summaryMargin.AddChild(summaryContent);
+		summaryContent.AddChild(BuildInventorySectionHeader("TACTICAL DOSSIER"));
+
+		_equipSummaryLabel = new Label
+		{
+			AutowrapMode = TextServer.AutowrapMode.WordSmart
+		};
+		_equipSummaryLabel.AddThemeFontSizeOverride("font_size", 15);
+		summaryContent.AddChild(_equipSummaryLabel);
+
+		PanelContainer loadoutPanel = BuildInventorySectionCard("ACTIVE GEAR", out _equipActiveLoadoutStack);
+		loadoutPanel.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
+		centerColumn.AddChild(loadoutPanel);
+
+		VBoxContainer rightColumn = new VBoxContainer
+		{
+			CustomMinimumSize = new Vector2(360f, 0f),
+			SizeFlagsVertical = Control.SizeFlags.ExpandFill
+		};
+		rightColumn.AddThemeConstantOverride("separation", 14);
+		bodyRow.AddChild(rightColumn);
+
+		rightColumn.AddChild(BuildInventorySectionCard("WEAPON LOCKER", out _equipWeaponStack));
+		rightColumn.AddChild(BuildInventorySectionCard("SHIELD ARRAY", out _equipShieldStack));
+		rightColumn.AddChild(BuildInventorySectionCard("ARMOR BAY", out _equipArmorStack));
+		rightColumn.AddChild(BuildInventorySectionCard("MISSILE HOLD", out _equipMissileStack));
+
+		PanelContainer cargoPanel = new PanelContainer
+		{
+			SizeFlagsVertical = Control.SizeFlags.ExpandFill
+		};
+		cargoPanel.AddThemeStyleboxOverride("panel", CreateInventorySectionStyle());
+		rightColumn.AddChild(cargoPanel);
+
+		MarginContainer cargoMargin = new MarginContainer();
+		cargoMargin.AddThemeConstantOverride("margin_left", 14);
+		cargoMargin.AddThemeConstantOverride("margin_top", 14);
+		cargoMargin.AddThemeConstantOverride("margin_right", 14);
+		cargoMargin.AddThemeConstantOverride("margin_bottom", 14);
+		cargoPanel.AddChild(cargoMargin);
+
+		VBoxContainer cargoContent = new VBoxContainer
+		{
+			SizeFlagsVertical = Control.SizeFlags.ExpandFill
+		};
+		cargoContent.AddThemeConstantOverride("separation", 10);
+		cargoMargin.AddChild(cargoContent);
+		cargoContent.AddChild(BuildInventorySectionHeader("CARGO HOLD"));
+
+		_equipItemList = new VBoxContainer
+		{
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+			SizeFlagsVertical = Control.SizeFlags.ExpandFill
+		};
+		_equipItemList.AddThemeConstantOverride("separation", 8);
+		cargoContent.AddChild(_equipItemList);
+
+		_equipFooterLabel = new Label
+		{
+			AutowrapMode = TextServer.AutowrapMode.WordSmart,
+			HorizontalAlignment = HorizontalAlignment.Center
+		};
+		_equipFooterLabel.AddThemeFontSizeOverride("font_size", 14);
+		_equipFooterLabel.AddThemeColorOverride("font_color", new Color(0.84f, 0.76f, 0.65f));
+		mainColumn.AddChild(_equipFooterLabel);
 	}
 
 	private void OpenEquipMenu()
 	{
-		if (_inventoryService == null || _terminalMenuPresenterService == null || CurrentlyViewedShip == null) return;
+		if (_inventoryService == null || CurrentlyViewedShip == null) return;
 		string shipName = CurrentlyViewedShip.Name;
 
 		ShipLoadout loadout = _inventoryService.GetOrCreateLoadout(shipName);
 		if (loadout == null) return;
-		
-		string wpn = _inventoryService.GetEquippedItemName(loadout.WeaponID);
-		string shld = _inventoryService.GetEquippedItemName(loadout.ShieldID);
-		string armr = _inventoryService.GetEquippedItemName(loadout.ArmorID);
-		string missile = _inventoryService.GetActiveMissileName(shipName);
-		_terminalMenuPresenterService.PopulateEquipMenu(
-			_equipItemList,
-			shipName,
-			wpn,
-			shld,
-			armr,
-			missile,
-			_inventoryService.GetGroupedEquippableInventory(),
-			itemId => EquipItem(shipName, itemId));
-		
+		PopulateFleetLoadoutPanel(shipName, loadout, _inventoryService.GetGroupedEquippableInventory());
 		_equipMenuWrapper.Visible = true;
 	}
 
@@ -1743,6 +1946,248 @@ public partial class BattleMap : Node2D
 	{
 		MapEntity outpost = CurrentlyViewedShip == null ? null : _shipContextService?.GetAdjacentOutpost(CurrentlyViewedShip, HexContents);
 		return string.IsNullOrEmpty(outpost?.Name) ? "Nearest Outpost" : outpost.Name;
+	}
+
+	private void PopulateFleetLoadoutPanel(string shipName, ShipLoadout loadout, IReadOnlyList<InventoryStack> inventoryStacks)
+	{
+		if (_equipShipNameLabel == null
+			|| _equipShipRoleLabel == null
+			|| _equipShipStatsLabel == null
+			|| _equipSummaryLabel == null
+			|| _equipFooterLabel == null)
+		{
+			return;
+		}
+
+		MapEntity ship = CurrentlyViewedShip;
+		OfficerState assignedOfficer = ResolveOfficerStateForShip(shipName);
+		string weaponName = _inventoryService?.GetActiveWeaponName(shipName) ?? FleetInventoryService.DefaultWeaponName;
+		string shieldName = _inventoryService?.GetActiveShieldName(shipName) ?? FleetInventoryService.DefaultShieldName;
+		string armorName = _inventoryService?.GetActiveHullName(shipName) ?? FleetInventoryService.DefaultHullName;
+		string missileName = _inventoryService?.GetActiveMissileName(shipName) ?? FleetInventoryService.DefaultMissileName;
+
+		_equipShipNameLabel.Text = shipName.ToUpperInvariant();
+		_equipShipRoleLabel.Text = $"{(assignedOfficer?.DisplayName ?? "UNASSIGNED OFFICER").ToUpperInvariant()}  |  {(assignedOfficer?.Specialty ?? "NO SPECIALTY").ToUpperInvariant()}";
+		_equipShipPortrait.Texture = LoadPortraitTexture(Database.GetShipTexturePath(shipName));
+		_equipShipStatsLabel.Text = BuildFleetLoadoutStatsText(ship, assignedOfficer);
+		_equipSummaryLabel.Text = BuildFleetLoadoutSummaryText(shipName, assignedOfficer, ship);
+
+		List<MissionInventoryEntry> activeEntries = new List<MissionInventoryEntry>
+		{
+			BuildFleetActiveLoadoutEntry(GameConstants.EquipmentCategories.Weapon, weaponName, loadout?.WeaponID),
+			BuildFleetActiveLoadoutEntry(GameConstants.EquipmentCategories.Shield, shieldName, loadout?.ShieldID),
+			BuildFleetActiveLoadoutEntry(GameConstants.EquipmentCategories.Armor, armorName, loadout?.ArmorID),
+			BuildFleetActiveLoadoutEntry(GameConstants.EquipmentCategories.Missile, missileName, loadout?.MissileID)
+		};
+
+		List<InventoryStack> stacks = (inventoryStacks ?? Array.Empty<InventoryStack>()).ToList();
+		List<MissionInventoryEntry> weaponEntries = BuildFleetLockerEntries(stacks, GameConstants.EquipmentCategories.Weapon, loadout?.WeaponID, FleetInventoryService.DefaultWeaponName);
+		List<MissionInventoryEntry> shieldEntries = BuildFleetLockerEntries(stacks, GameConstants.EquipmentCategories.Shield, loadout?.ShieldID, FleetInventoryService.DefaultShieldName);
+		List<MissionInventoryEntry> armorEntries = BuildFleetLockerEntries(stacks, GameConstants.EquipmentCategories.Armor, loadout?.ArmorID, FleetInventoryService.DefaultHullName);
+		List<MissionInventoryEntry> missileEntries = BuildFleetLockerEntries(stacks, GameConstants.EquipmentCategories.Missile, loadout?.MissileID, FleetInventoryService.DefaultMissileName);
+		List<MissionInventoryEntry> cargoEntries = BuildFleetCargoEntries(stacks);
+
+		PopulateInventoryEntryStack(_equipActiveLoadoutStack, activeEntries, "No active fleet gear.");
+		PopulateInteractiveInventoryEntryStack(_equipWeaponStack, weaponEntries, "No reserve weapons in cargo.", itemId => EquipItem(shipName, itemId));
+		PopulateInteractiveInventoryEntryStack(_equipShieldStack, shieldEntries, "No reserve shields in cargo.", itemId => EquipItem(shipName, itemId));
+		PopulateInteractiveInventoryEntryStack(_equipArmorStack, armorEntries, "No spare armor plating in cargo.", itemId => EquipItem(shipName, itemId));
+		PopulateInteractiveInventoryEntryStack(_equipMissileStack, missileEntries, "No missile payloads in cargo.", itemId => EquipItem(shipName, itemId));
+		PopulateInventoryItemStack(_equipItemList, cargoEntries, "No unequipped fleet gear in cargo.");
+
+		int cargoCount = stacks.Sum(stack => Mathf.Max(0, stack.Count));
+		_equipFooterLabel.Text = cargoCount == 0
+			? "Cargo hold is clear. Acquire more upgrades from salvage or trade."
+			: $"Cargo hold contains {cargoCount} unequipped upgrade{(cargoCount == 1 ? string.Empty : "s")}. Click a locker entry to refit this ship.";
+	}
+
+	private static string BuildFleetLoadoutStatsText(MapEntity ship, OfficerState officer)
+	{
+		if (ship == null)
+		{
+			return "No tactical data available.";
+		}
+
+		List<string> lines = new List<string>
+		{
+			$"HULL      {ship.CurrentHP}/{ship.MaxHP}",
+			$"SHIELDS   {ship.CurrentShields}/{ship.MaxShields}",
+			$"ACTIONS   {ship.CurrentActions}/{ship.MaxActions}",
+			$"RANGE     {ship.AttackRange}",
+			$"DAMAGE    0-{ship.AttackDamage}",
+			$"OFFICER   {(string.IsNullOrWhiteSpace(officer?.DisplayName) ? "None" : officer.DisplayName)}"
+		};
+
+		if (!string.IsNullOrWhiteSpace(officer?.Specialty))
+		{
+			lines.Add($"SPECIALTY {officer.Specialty}");
+		}
+
+		return string.Join("\n", lines);
+	}
+
+	private static string BuildFleetLoadoutSummaryText(string shipName, OfficerState officer, MapEntity ship)
+	{
+		List<string> notes = new List<string>
+		{
+			$"{shipName} is ready for refit. Assign cargo upgrades into its primary combat slots to reshape survivability and strike profile."
+		};
+
+		if (officer != null)
+		{
+			notes.Add($"{officer.DisplayName} currently commands this hull as a {officer.Specialty} specialist.");
+			if (!string.IsNullOrWhiteSpace(officer.Biography))
+			{
+				notes.Add(officer.Biography.Trim());
+			}
+		}
+		else
+		{
+			notes.Add("No officer is currently assigned to this ship.");
+		}
+
+		if (ship != null)
+		{
+			notes.Add($"Current tactical envelope: {ship.AttackRange} hex range with up to {ship.AttackDamage} damage output.");
+		}
+
+		return string.Join("\n\n", notes.Where(note => !string.IsNullOrWhiteSpace(note)));
+	}
+
+	private MissionInventoryEntry BuildFleetActiveLoadoutEntry(string category, string displayName, string equippedItemId)
+	{
+		EquipmentData equipment = _inventoryService?.GetEquipment(equippedItemId);
+		return new MissionInventoryEntry
+		{
+			Title = string.IsNullOrWhiteSpace(displayName) ? category : displayName,
+			Detail = BuildFleetEquipmentDetailText(category, equipment, true),
+			Highlighted = true
+		};
+	}
+
+	private List<MissionInventoryEntry> BuildFleetLockerEntries(
+		IReadOnlyList<InventoryStack> inventoryStacks,
+		string category,
+		string equippedItemId,
+		string defaultName)
+	{
+		List<MissionInventoryEntry> entries = new List<MissionInventoryEntry>();
+		EquipmentData equippedItem = _inventoryService?.GetEquipment(equippedItemId);
+		entries.Add(new MissionInventoryEntry
+		{
+			Title = !string.IsNullOrWhiteSpace(equippedItem?.Name) ? equippedItem.Name : defaultName,
+			Detail = BuildFleetEquipmentDetailText(category, equippedItem, true),
+			Highlighted = true,
+			CanActivate = false,
+			ActionText = "EQUIPPED"
+		});
+
+		foreach (InventoryStack stack in (inventoryStacks ?? Array.Empty<InventoryStack>())
+			.Where(stack => stack?.Item != null && string.Equals(stack.Item.Category, category, StringComparison.Ordinal))
+			.OrderBy(stack => stack.Item.Name, StringComparer.OrdinalIgnoreCase))
+		{
+			entries.Add(new MissionInventoryEntry
+			{
+				EntryId = stack.ItemID,
+				Title = stack.Item.Name,
+				Detail = BuildFleetEquipmentDetailText(category, stack.Item),
+				QuantityText = stack.Count > 1 ? $"x{stack.Count}" : string.Empty,
+				CanActivate = true,
+				ActionText = "EQUIP"
+			});
+		}
+
+		return entries;
+	}
+
+	private List<MissionInventoryEntry> BuildFleetCargoEntries(IReadOnlyList<InventoryStack> inventoryStacks)
+	{
+		return (inventoryStacks ?? Array.Empty<InventoryStack>())
+			.Where(stack => stack?.Item != null)
+			.OrderBy(stack => stack.Item.Category, StringComparer.OrdinalIgnoreCase)
+			.ThenBy(stack => stack.Item.Name, StringComparer.OrdinalIgnoreCase)
+			.Select(stack => new MissionInventoryEntry
+			{
+				Title = stack.Item.Name,
+				Detail = $"{stack.Item.Category} | {BuildFleetEquipmentDetailText(stack.Item.Category, stack.Item)}",
+				QuantityText = stack.Count > 1 ? $"x{stack.Count}" : string.Empty
+			})
+			.ToList();
+	}
+
+	private void PopulateInventoryItemStack(VBoxContainer container, IReadOnlyList<MissionInventoryEntry> entries, string emptyText)
+	{
+		if (container == null)
+		{
+			return;
+		}
+
+		ClearContainerChildren(container);
+		int visibleCount = 0;
+		foreach (MissionInventoryEntry entry in entries ?? Array.Empty<MissionInventoryEntry>())
+		{
+			if (entry == null)
+			{
+				continue;
+			}
+
+			container.AddChild(BuildInventoryItemCell(entry));
+			visibleCount++;
+		}
+
+		if (visibleCount == 0)
+		{
+			container.AddChild(BuildInventoryPlaceholder(emptyText));
+			return;
+		}
+
+		for (int slotIndex = visibleCount; slotIndex < 4; slotIndex++)
+		{
+			container.AddChild(BuildInventoryEmptyCell());
+		}
+	}
+
+	private static string BuildFleetEquipmentDetailText(string category, EquipmentData equipment, bool activeSlot = false)
+	{
+		if (equipment == null)
+		{
+			return category switch
+			{
+				GameConstants.EquipmentCategories.Weapon => activeSlot ? "Standard issue emitter. No bonus damage package installed." : "Standard issue emitter.",
+				GameConstants.EquipmentCategories.Shield => activeSlot ? "Standard shield lattice. No bonus capacity installed." : "Standard shield lattice.",
+				GameConstants.EquipmentCategories.Armor => activeSlot ? "Standard hull plating. No armor bonus installed." : "Standard hull plating.",
+				GameConstants.EquipmentCategories.Missile => "No missile payload equipped.",
+				_ => "No equipment telemetry available."
+			};
+		}
+
+		List<string> parts = new List<string>();
+		switch (category)
+		{
+			case GameConstants.EquipmentCategories.Weapon:
+				parts.Add($"+{equipment.BonusStat} dmg");
+				break;
+			case GameConstants.EquipmentCategories.Shield:
+				parts.Add($"+{equipment.BonusStat} shields");
+				break;
+			case GameConstants.EquipmentCategories.Armor:
+				parts.Add($"+{equipment.BonusStat} hull");
+				break;
+			case GameConstants.EquipmentCategories.Missile:
+				parts.Add($"DMG {equipment.MissileDamage}");
+				parts.Add($"Range {equipment.MissileRange}");
+				if (!string.IsNullOrWhiteSpace(equipment.MissileAbility))
+				{
+					parts.Add(equipment.MissileAbility.Replace('_', ' '));
+				}
+				break;
+		}
+
+		if (!string.IsNullOrWhiteSpace(equipment.Description))
+		{
+			parts.Add(equipment.Description);
+		}
+
+		return string.Join(" | ", parts.Where(part => !string.IsNullOrWhiteSpace(part)));
 	}
 
 	private void EquipItem(string shipName, string itemID)
@@ -1947,6 +2392,16 @@ public partial class BattleMap : Node2D
 			if (@event is InputEventKey inventoryEscape && inventoryEscape.Pressed && !inventoryEscape.Echo && inventoryEscape.Keycode == Key.Escape)
 			{
 				HideOfficerInventory();
+				GetViewport().SetInputAsHandled();
+			}
+			return;
+		}
+
+		if (_equipMenuWrapper != null && _equipMenuWrapper.Visible)
+		{
+			if (@event is InputEventKey equipEscape && equipEscape.Pressed && !equipEscape.Echo && equipEscape.Keycode == Key.Escape)
+			{
+				_equipMenuWrapper.Visible = false;
 				GetViewport().SetInputAsHandled();
 			}
 			return;
@@ -2373,6 +2828,10 @@ public partial class BattleMap : Node2D
 		{
 			HideOfficerInventory();
 			HideOfficerSwapMenu();
+			if (_equipMenuWrapper != null)
+			{
+				_equipMenuWrapper.Visible = false;
+			}
 		}
 		Tween tween = CreateTween();
 		float targetX = expand ? GetExpandedShipMenuX() : GetCollapsedShipMenuX();
