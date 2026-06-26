@@ -35,6 +35,10 @@ public partial class GalacticMap : Control
 	private PanelContainer _regionSelectionMenu;
 	private PanelContainer _regionInfoPanel;
 	private RichTextLabel _regionInfoText;
+	private PanelContainer _startingSystemCalloutPanel;
+	private Button _startingSystemCalloutButton;
+	private Line2D _startingSystemCalloutLine;
+	private Polygon2D _startingSystemCalloutArrow;
 
 	// --- HOVER PANELS (System Info & FTL Jump) ---
 	private PanelContainer _jumpInfoPanel;
@@ -55,14 +59,14 @@ public partial class GalacticMap : Control
 	// --- REGION LORE DICTIONARY (From World Bible) ---
 	private Dictionary<string, string> regionLore = new Dictionary<string, string>()
 	{
-		{ "Far Silence", "Voidbound seekers and the Pale Assembly probe the dead edge of Eidralune for signals no one can name. Start here for isolation, cosmic mystery, and the sense that the dark is listening." },
-		{ "Verdant Shroud", "The Verdant Pact and the Broken Banner clash over rare living worlds beneath dormant biosphere machines. Start here for frontier survival, contested colonies, and beauty under pressure." },
-		{ "Core Spindle", "The Cipher Remnant, Spindle Vanguard, and ruin-chasers dive into the shattered heart of the Aetherweb. Start here for rogue god-AIs, unstable space, and high-risk relic hunting." },
-		{ "Luminous Verge", "The Celestial Accord, Chorus of Light, and Null Weavers circle radiant anomalies at the galactic rim. Start here for wonder, prophecy, and danger wrapped in sacred light." },
-		{ "Ember Wastes", "The Pyric Consortium and Furnace Kin strip scorched terraform ruins while chemical storms and old weapons keep burning. Start here for brutal salvage, constant pressure, and survival by grit." },
-		{ "Shattered Reach", "The Riven Concord, Echoed Path, and Code Flayers haunt broken systems full of ghost signals and ruined colonies. Start here for desperate scavenging, haunted beauty, and collapse held together by hope." },
-		{ "Obsidian Belt", "The Iridium Veil and Ciphered Kin trade contraband, sealed memories, and forbidden AI relics through the dark ring. Start here for smuggler politics, dangerous bargains, and noir tension." },
-		{ "Echo Spiral", "The Continuum Fracture and Paradox Choir stalk a spiral arm shredded by failed time experiments. Start here for looping hazards, fractured identities, and a campaign steeped in paradox." }
+		{ "Far Silence", "Voidbound seekers and the Pale Assembly probe the dead edge of Eidralune for signals no one can name. A region of isolation, cosmic mystery, and the sense that the dark is listening." },
+		{ "Verdant Shroud", "The Verdant Pact and the Broken Banner clash over rare living worlds beneath dormant biosphere machines. A region of frontier survival, contested colonies, and beauty under pressure." },
+		{ "Core Spindle", "The Cipher Remnant, Spindle Vanguard, and ruin-chasers dive into the shattered heart of the Aetherweb. A region of rogue god-AIs, unstable space, and high-risk relic hunting." },
+		{ "Luminous Verge", "The Celestial Accord, Chorus of Light, and Null Weavers circle radiant anomalies at the galactic rim. A region of wonder, prophecy, and danger wrapped in sacred light." },
+		{ "Ember Wastes", "The Pyric Consortium and Furnace Kin strip scorched terraform ruins while chemical storms and old weapons keep burning. A region of brutal salvage, constant pressure, and survival by grit." },
+		{ "Shattered Reach", "The Riven Concord, Echoed Path, and Code Flayers haunt broken systems full of ghost signals and ruined colonies. A region of desperate scavenging, haunted beauty, and collapse held together by hope." },
+		{ "Obsidian Belt", "The Iridium Veil and Ciphered Kin trade contraband, sealed memories, and forbidden AI relics through the dark ring. A region of smuggler politics, dangerous bargains, and noir tension." },
+		{ "Echo Spiral", "The Continuum Fracture and Paradox Choir stalk a spiral arm shredded by failed time experiments. A region of looping hazards, fractured identities, and paradox." }
 	};
 
 	// --- COLOR DEFINITIONS FOR YOUR REGIONS ---
@@ -119,6 +123,7 @@ public partial class GalacticMap : Control
 		if (string.IsNullOrEmpty(_globalData.SavedSystem))
 		{
 			BuildRegionSelectionUI();
+			UpdateStartingSystemCallout();
 		}
 		else
 		{
@@ -127,6 +132,7 @@ public partial class GalacticMap : Control
 			
 			if (randomizeBtn != null) randomizeBtn.Visible = false;
 			if (menuBtn != null) menuBtn.Visible = false;
+			SetStartingSystemCalloutVisible(false);
 		}
 	}
 
@@ -382,11 +388,19 @@ public partial class GalacticMap : Control
 		_regionSelectionMenu.AddChild(menuContainer);
 
 		Label titleLabel = new Label();
-		titleLabel.Text = "=== CHOOSE STARTING REGION ===";
+		titleLabel.Text = "=== REGIONAL BRIEFING ===";
 		titleLabel.HorizontalAlignment = HorizontalAlignment.Center;
 		titleLabel.AddThemeColorOverride("font_color", new Color(0f, 1f, 1f)); 
 		titleLabel.AddThemeFontSizeOverride("font_size", 14); 
 		menuContainer.AddChild(titleLabel);
+
+		Label subtitleLabel = new Label();
+		subtitleLabel.Text = "Hover a region to review its briefing. Click STARTING SYSTEM on the map to begin at the easternmost star.";
+		subtitleLabel.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+		subtitleLabel.HorizontalAlignment = HorizontalAlignment.Center;
+		subtitleLabel.AddThemeColorOverride("font_color", new Color(0.82f, 0.90f, 0.98f));
+		subtitleLabel.AddThemeFontSizeOverride("font_size", 12);
+		menuContainer.AddChild(subtitleLabel);
 
 		_regionInfoPanel = new PanelContainer();
 		_regionInfoPanel.ZIndex = 200;
@@ -417,7 +431,7 @@ public partial class GalacticMap : Control
 		foreach (string regionName in regionColors.Keys)
 		{
 			Button btn = new Button();
-			btn.Text = $"START IN: {regionName.ToUpper()}";
+			btn.Text = regionName.ToUpper();
 			
 			btn.CustomMinimumSize = new Vector2(225, 38);
 			btn.AddThemeFontSizeOverride("font_size", 13); 
@@ -425,12 +439,131 @@ public partial class GalacticMap : Control
 			btn.AddThemeColorOverride("font_color", regionColors[regionName]); 
 			
 			string targetRegion = regionName; 
-			btn.Pressed += () => StartGameInRegion(targetRegion);
-
 			btn.MouseEntered += () => ShowRegionLore(targetRegion);
 			btn.MouseExited += () => HideRegionLore();
 			
 			menuContainer.AddChild(btn);
+		}
+	}
+
+	private void UpdateStartingSystemCallout()
+	{
+		if (_globalData == null || !string.IsNullOrEmpty(_globalData.SavedSystem))
+		{
+			SetStartingSystemCalloutVisible(false);
+			return;
+		}
+
+		StarMapData startingStar = ResolveDefaultStartingStar();
+		if (startingStar == null)
+		{
+			SetStartingSystemCalloutVisible(false);
+			return;
+		}
+
+		EnsureStartingSystemCallout();
+
+		Vector2 starPosition = startingStar.MapPosition;
+		Vector2 labelPosition = new Vector2(
+			Mathf.Max(32f, starPosition.X - 230f),
+			Mathf.Max(32f, starPosition.Y - 92f));
+		_startingSystemCalloutPanel.Position = labelPosition;
+
+		Vector2 labelSize = _startingSystemCalloutPanel.Size;
+		if (labelSize == Vector2.Zero)
+		{
+			labelSize = _startingSystemCalloutPanel.CustomMinimumSize;
+		}
+
+		Vector2 lineStart = labelPosition + new Vector2(labelSize.X, labelSize.Y * 0.5f);
+		Vector2 lineEnd = starPosition + new Vector2(-18f, -6f);
+		_startingSystemCalloutLine.ClearPoints();
+		_startingSystemCalloutLine.AddPoint(lineStart);
+		_startingSystemCalloutLine.AddPoint(lineEnd);
+		_startingSystemCalloutArrow.Position = lineEnd;
+		_startingSystemCalloutArrow.Rotation = (starPosition - lineStart).Angle();
+		SetStartingSystemCalloutVisible(true);
+	}
+
+	private void EnsureStartingSystemCallout()
+	{
+		if (IsInstanceValid(_startingSystemCalloutPanel)
+			&& IsInstanceValid(_startingSystemCalloutButton)
+			&& IsInstanceValid(_startingSystemCalloutLine)
+			&& IsInstanceValid(_startingSystemCalloutArrow))
+		{
+			return;
+		}
+
+		_startingSystemCalloutPanel = new PanelContainer();
+		_startingSystemCalloutPanel.ZIndex = 190;
+		_startingSystemCalloutPanel.MouseFilter = MouseFilterEnum.Stop;
+		_startingSystemCalloutPanel.CustomMinimumSize = new Vector2(184f, 48f);
+		StyleBoxFlat calloutStyle = new StyleBoxFlat();
+		calloutStyle.BgColor = new Color(0.06f, 0.08f, 0.14f, 0.92f);
+		calloutStyle.BorderWidthLeft = 2;
+		calloutStyle.BorderWidthTop = 2;
+		calloutStyle.BorderWidthRight = 2;
+		calloutStyle.BorderWidthBottom = 2;
+		calloutStyle.BorderColor = new Color(0.94f, 0.88f, 0.42f, 0.95f);
+		calloutStyle.ContentMarginLeft = 12;
+		calloutStyle.ContentMarginTop = 8;
+		calloutStyle.ContentMarginRight = 12;
+		calloutStyle.ContentMarginBottom = 8;
+		calloutStyle.CornerRadiusTopLeft = 8;
+		calloutStyle.CornerRadiusTopRight = 8;
+		calloutStyle.CornerRadiusBottomLeft = 8;
+		calloutStyle.CornerRadiusBottomRight = 8;
+		_startingSystemCalloutPanel.AddThemeStyleboxOverride("panel", calloutStyle);
+		AddChild(_startingSystemCalloutPanel);
+
+		_startingSystemCalloutButton = new Button();
+		_startingSystemCalloutButton.Text = "STARTING SYSTEM";
+		_startingSystemCalloutButton.MouseDefaultCursorShape = CursorShape.PointingHand;
+		_startingSystemCalloutButton.SetAnchorsPreset(LayoutPreset.FullRect);
+		_startingSystemCalloutButton.AddThemeFontSizeOverride("font_size", 16);
+		_startingSystemCalloutButton.AddThemeColorOverride("font_color", new Color(1f, 0.96f, 0.72f));
+		_startingSystemCalloutButton.AddThemeStyleboxOverride("normal", new StyleBoxEmpty());
+		_startingSystemCalloutButton.AddThemeStyleboxOverride("hover", new StyleBoxEmpty());
+		_startingSystemCalloutButton.AddThemeStyleboxOverride("pressed", new StyleBoxEmpty());
+		_startingSystemCalloutButton.AddThemeStyleboxOverride("focus", new StyleBoxEmpty());
+		_startingSystemCalloutButton.Pressed += StartGameAtDefaultSystem;
+		_startingSystemCalloutPanel.AddChild(_startingSystemCalloutButton);
+
+		_startingSystemCalloutLine = new Line2D();
+		_startingSystemCalloutLine.ZIndex = 189;
+		_startingSystemCalloutLine.Width = 3f;
+		_startingSystemCalloutLine.DefaultColor = new Color(0.94f, 0.88f, 0.42f, 0.95f);
+		_startingSystemCalloutLine.Antialiased = true;
+		AddChild(_startingSystemCalloutLine);
+
+		_startingSystemCalloutArrow = new Polygon2D();
+		_startingSystemCalloutArrow.ZIndex = 190;
+		_startingSystemCalloutArrow.Color = new Color(0.94f, 0.88f, 0.42f, 0.98f);
+		_startingSystemCalloutArrow.Polygon = new[]
+		{
+			new Vector2(0f, 0f),
+			new Vector2(-18f, -8f),
+			new Vector2(-18f, 8f)
+		};
+		AddChild(_startingSystemCalloutArrow);
+	}
+
+	private void SetStartingSystemCalloutVisible(bool visible)
+	{
+		if (IsInstanceValid(_startingSystemCalloutPanel))
+		{
+			_startingSystemCalloutPanel.Visible = visible;
+		}
+
+		if (IsInstanceValid(_startingSystemCalloutLine))
+		{
+			_startingSystemCalloutLine.Visible = visible;
+		}
+
+		if (IsInstanceValid(_startingSystemCalloutArrow))
+		{
+			_startingSystemCalloutArrow.Visible = visible;
 		}
 	}
 
@@ -453,28 +586,33 @@ public partial class GalacticMap : Control
 		}
 	}
 
-	private void StartGameInRegion(string targetRegion)
+	private StarMapData ResolveDefaultStartingStar()
 	{
-		if (_globalData == null || _globalData.CurrentSectorStars.Count == 0) return;
-
-		List<StarMapData> starsInRegion = _globalData.CurrentSectorStars
-			.Where(star => star.Region == targetRegion)
-			.ToList();
-
-		if (starsInRegion.Count == 0)
+		if (_globalData == null || _globalData.CurrentSectorStars == null || _globalData.CurrentSectorStars.Count == 0)
 		{
-			GD.PrintErr($"No stars generated in {targetRegion}! Falling back to a completely random system.");
-			starsInRegion = _globalData.CurrentSectorStars;
+			return null;
 		}
 
-		RandomNumberGenerator rng = new RandomNumberGenerator();
-		rng.Randomize();
-		StarMapData startingStar = starsInRegion[rng.RandiRange(0, starsInRegion.Count - 1)];
+		return _globalData.CurrentSectorStars
+			.Where(star => star != null)
+			.OrderByDescending(star => star.MapPosition.X)
+			.ThenBy(star => star.MapPosition.Y)
+			.FirstOrDefault();
+	}
+
+	private void StartGameAtDefaultSystem()
+	{
+		StarMapData startingStar = ResolveDefaultStartingStar();
+		if (startingStar == null)
+		{
+			return;
+		}
 
 		_globalData.SavedSystem = startingStar.SystemName;
 		_globalData.JustJumped = false; 
+		SetStartingSystemCalloutVisible(false);
 		
-		GD.Print($"Starting new campaign in {targetRegion}. Randomly picked {startingStar.SystemName}.");
+		GD.Print($"Starting new campaign at the easternmost system on the map: {startingStar.SystemName}.");
 
 		var transitioner = GetNodeOrNull<SceneTransition>("/root/SceneTransition");
 		if (transitioner != null) 
@@ -797,6 +935,7 @@ public partial class GalacticMap : Control
 		GenerateAndSaveSector(40);
 		
 		BuildRegionSelectionUI();
+		UpdateStartingSystemCallout();
 	}
 
 	public void _on_close_button_pressed()
