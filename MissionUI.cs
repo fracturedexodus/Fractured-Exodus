@@ -1,4 +1,5 @@
 using Godot;
+using System;
 using System.Collections.Generic;
 
 public sealed class MissionExtractionOption
@@ -61,6 +62,34 @@ public sealed class MissionExplorationOfficerOption
 	public string Subtitle { get; init; } = string.Empty;
 	public Texture2D Icon { get; init; }
 	public bool Selected { get; init; }
+	public bool CanInspectInventory { get; init; }
+}
+
+public sealed class MissionInventoryEntry
+{
+	public string EntryId { get; init; } = string.Empty;
+	public string Title { get; init; } = string.Empty;
+	public string Detail { get; init; } = string.Empty;
+	public string QuantityText { get; init; } = string.Empty;
+	public bool Highlighted { get; init; }
+	public bool CanActivate { get; init; }
+	public string ActionText { get; init; } = string.Empty;
+}
+
+public sealed class MissionOfficerInventoryPanelData
+{
+	public string OfficerId { get; init; } = string.Empty;
+	public string DisplayName { get; init; } = string.Empty;
+	public string ShipName { get; init; } = string.Empty;
+	public string Specialty { get; init; } = string.Empty;
+	public Texture2D Portrait { get; init; }
+	public string SummaryText { get; init; } = string.Empty;
+	public string VitalStatsText { get; init; } = string.Empty;
+	public string FooterText { get; init; } = string.Empty;
+	public IReadOnlyList<MissionInventoryEntry> LoadoutEntries { get; init; } = Array.Empty<MissionInventoryEntry>();
+	public IReadOnlyList<MissionInventoryEntry> WeaponEntries { get; init; } = Array.Empty<MissionInventoryEntry>();
+	public IReadOnlyList<MissionInventoryEntry> ShieldEntries { get; init; } = Array.Empty<MissionInventoryEntry>();
+	public IReadOnlyList<MissionInventoryEntry> ItemEntries { get; init; } = Array.Empty<MissionInventoryEntry>();
 }
 
 public sealed class MissionInfoPanelRefs
@@ -106,6 +135,18 @@ public partial class MissionUI : CanvasLayer
 	public delegate void ExplorationOfficerChosenEventHandler(string officerId);
 
 	[Signal]
+	public delegate void ExplorationOfficerInventoryRequestedEventHandler(string officerId);
+
+	[Signal]
+	public delegate void ExplorationUnitFocusRequestedEventHandler(string unitId);
+
+	[Signal]
+	public delegate void OfficerInventoryWeaponEquipRequestedEventHandler(string officerId, string weaponId);
+
+	[Signal]
+	public delegate void OfficerInventoryShieldEquipRequestedEventHandler(string officerId, string shieldId);
+
+	[Signal]
 	public delegate void MissionSaveConfirmedEventHandler(string saveName);
 
 	[Signal]
@@ -129,6 +170,7 @@ public partial class MissionUI : CanvasLayer
 	public bool IsConfirmationVisible => _confirmationPromptPanel?.Visible ?? false;
 	public bool IsMissionSavePromptVisible => _savePromptPanel?.Visible ?? false;
 	public bool IsInteractionMenuVisible => _interactionMenuPanel?.Visible ?? false;
+	public bool IsOfficerInventoryVisible => _officerInventoryOverlay?.Visible ?? false;
 
 	private Control _uiRoot;
 	private PanelContainer _topLeftPanel;
@@ -191,6 +233,20 @@ public partial class MissionUI : CanvasLayer
 	private Label _savePromptStatusLabel;
 	private Button _savePromptCancelButton;
 	private Button _savePromptConfirmButton;
+	private ColorRect _officerInventoryOverlay;
+	private PanelContainer _officerInventoryPanel;
+	private TextureRect _officerInventoryPortrait;
+	private Label _officerInventoryNameLabel;
+	private Label _officerInventoryRoleLabel;
+	private Label _officerInventoryStatsLabel;
+	private Label _officerInventorySummaryLabel;
+	private Label _officerInventoryFooterLabel;
+	private Button _officerInventoryCloseButton;
+	private VBoxContainer _officerInventoryLoadoutStack;
+	private VBoxContainer _officerInventoryWeaponStack;
+	private VBoxContainer _officerInventoryShieldStack;
+	private VBoxContainer _officerInventoryItemStack;
+	private string _activeOfficerInventoryId = string.Empty;
 	private ColorRect _gameOverPanel;
 	private Label _gameOverLabel;
 	private Button _gameOverReturnButton;
@@ -241,6 +297,7 @@ public partial class MissionUI : CanvasLayer
 		BuildStoryEventPanel();
 		BuildConfirmationPrompt();
 		BuildMissionSavePrompt();
+		BuildOfficerInventoryPanel();
 		BuildGameOverPanel();
 		ApplyBattlemapLabelStyling();
 	}
@@ -288,6 +345,11 @@ public partial class MissionUI : CanvasLayer
 		if (_savePromptConfirmButton != null)
 		{
 			_savePromptConfirmButton.Pressed -= ConfirmMissionSavePrompt;
+		}
+
+		if (_officerInventoryCloseButton != null)
+		{
+			_officerInventoryCloseButton.Pressed -= HideOfficerInventory;
 		}
 	}
 
@@ -385,6 +447,11 @@ public partial class MissionUI : CanvasLayer
 		if (_explorationSelectionPanel != null && visible)
 		{
 			_explorationSelectionPanel.Visible = false;
+		}
+
+		if (visible)
+		{
+			HideOfficerInventory();
 		}
 	}
 
@@ -603,7 +670,9 @@ public partial class MissionUI : CanvasLayer
 				Text = string.IsNullOrWhiteSpace(officer.Subtitle)
 					? officer.DisplayName
 					: $"{officer.DisplayName}\n{officer.Subtitle}",
-				TooltipText = officer.DisplayName,
+				TooltipText = officer.CanInspectInventory
+					? $"{officer.DisplayName}\nRight-click to inspect inventory."
+					: officer.DisplayName,
 				Icon = officer.Icon,
 				ExpandIcon = true,
 				IconAlignment = HorizontalAlignment.Left,
@@ -615,9 +684,79 @@ public partial class MissionUI : CanvasLayer
 			button.AddThemeFontSizeOverride("font_size", 13);
 			ApplyExplorationOfficerButtonState(button, officer.Selected);
 			string officerId = officer.OfficerId;
+			bool canInspectInventory = officer.CanInspectInventory;
 			button.Pressed += () => EmitSignal(SignalName.ExplorationOfficerChosen, officerId);
+			button.GuiInput += @event =>
+			{
+				if (@event is not InputEventMouseButton mouseButton || !mouseButton.Pressed)
+				{
+					return;
+				}
+
+				if (mouseButton.ButtonIndex == MouseButton.Left && mouseButton.DoubleClick)
+				{
+					EmitSignal(SignalName.ExplorationUnitFocusRequested, officerId);
+					button.AcceptEvent();
+					return;
+				}
+
+				if (canInspectInventory && mouseButton.ButtonIndex == MouseButton.Right)
+				{
+					EmitSignal(SignalName.ExplorationOfficerInventoryRequested, officerId);
+					button.AcceptEvent();
+				}
+			};
 			_explorationOfficerButtonStack.AddChild(button);
 		}
+	}
+
+	public void ShowOfficerInventory(MissionOfficerInventoryPanelData data)
+	{
+		if (_officerInventoryOverlay == null
+			|| _officerInventoryPortrait == null
+			|| _officerInventoryNameLabel == null
+			|| _officerInventoryRoleLabel == null
+			|| _officerInventoryStatsLabel == null
+			|| _officerInventorySummaryLabel == null
+			|| _officerInventoryFooterLabel == null
+			|| data == null)
+		{
+			return;
+		}
+
+		_officerInventoryPortrait.Texture = data.Portrait;
+		_activeOfficerInventoryId = data.OfficerId ?? string.Empty;
+		_officerInventoryNameLabel.Text = string.IsNullOrWhiteSpace(data.DisplayName)
+			? "AWAY TEAM OPERATIVE"
+			: data.DisplayName.ToUpperInvariant();
+		_officerInventoryRoleLabel.Text = $"{data.Specialty.ToUpperInvariant()}  |  {data.ShipName.ToUpperInvariant()}";
+		_officerInventoryStatsLabel.Text = data.VitalStatsText ?? string.Empty;
+		_officerInventorySummaryLabel.Text = data.SummaryText ?? string.Empty;
+		_officerInventoryFooterLabel.Text = data.FooterText ?? "Right-click another portrait to inspect a different operative.";
+
+		PopulateInventoryEntryStack(_officerInventoryLoadoutStack, data.LoadoutEntries, "No active loadout data.");
+		PopulateInteractiveInventoryEntryStack(
+			_officerInventoryWeaponStack,
+			data.WeaponEntries,
+			"No owned weapons.",
+			weaponId => EmitSignal(SignalName.OfficerInventoryWeaponEquipRequested, _activeOfficerInventoryId, weaponId));
+		PopulateInteractiveInventoryEntryStack(
+			_officerInventoryShieldStack,
+			data.ShieldEntries,
+			"No owned shields.",
+			shieldId => EmitSignal(SignalName.OfficerInventoryShieldEquipRequested, _activeOfficerInventoryId, shieldId));
+		PopulateInventoryItemStack(data.ItemEntries);
+		_officerInventoryOverlay.Visible = true;
+	}
+
+	public void HideOfficerInventory()
+	{
+		if (_officerInventoryOverlay != null)
+		{
+			_officerInventoryOverlay.Visible = false;
+		}
+
+		_activeOfficerInventoryId = string.Empty;
 	}
 
 	public void ShowMissionGameOver()
@@ -1553,6 +1692,265 @@ public partial class MissionUI : CanvasLayer
 		content.AddChild(_gameOverReturnButton);
 	}
 
+	private void BuildOfficerInventoryPanel()
+	{
+		if (_uiRoot == null)
+		{
+			return;
+		}
+
+		_officerInventoryOverlay = new ColorRect
+		{
+			Visible = false,
+			Color = new Color(0.04f, 0.02f, 0.01f, 0.80f),
+			MouseFilter = Control.MouseFilterEnum.Stop
+		};
+		_officerInventoryOverlay.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+		_officerInventoryOverlay.GuiInput += OnOfficerInventoryOverlayGuiInput;
+		_uiRoot.AddChild(_officerInventoryOverlay);
+
+		_officerInventoryPanel = new PanelContainer
+		{
+			CustomMinimumSize = new Vector2(1180f, 760f)
+		};
+		_officerInventoryPanel.SetAnchorsPreset(Control.LayoutPreset.Center);
+		_officerInventoryPanel.OffsetLeft = -590f;
+		_officerInventoryPanel.OffsetTop = -380f;
+		_officerInventoryPanel.OffsetRight = 590f;
+		_officerInventoryPanel.OffsetBottom = 380f;
+		_officerInventoryPanel.AddThemeStyleboxOverride("panel", CreateInventoryWindowStyle());
+		_officerInventoryOverlay.AddChild(_officerInventoryPanel);
+
+		MarginContainer outerMargin = new MarginContainer();
+		outerMargin.AddThemeConstantOverride("margin_left", 20);
+		outerMargin.AddThemeConstantOverride("margin_top", 20);
+		outerMargin.AddThemeConstantOverride("margin_right", 20);
+		outerMargin.AddThemeConstantOverride("margin_bottom", 20);
+		_officerInventoryPanel.AddChild(outerMargin);
+
+		VBoxContainer layout = new VBoxContainer();
+		layout.AddThemeConstantOverride("separation", 16);
+		outerMargin.AddChild(layout);
+
+		HBoxContainer headerRow = new HBoxContainer();
+		headerRow.AddThemeConstantOverride("separation", 14);
+		layout.AddChild(headerRow);
+
+		VBoxContainer rail = new VBoxContainer();
+		rail.CustomMinimumSize = new Vector2(76f, 0f);
+		rail.AddThemeConstantOverride("separation", 10);
+		headerRow.AddChild(rail);
+		rail.AddChild(BuildInventoryRailTag("LOADOUT", true));
+		rail.AddChild(BuildInventoryRailTag("STATUS", false));
+		rail.AddChild(BuildInventoryRailTag("PACK", false));
+
+		VBoxContainer mainColumn = new VBoxContainer();
+		mainColumn.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+		mainColumn.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
+		mainColumn.AddThemeConstantOverride("separation", 14);
+		headerRow.AddChild(mainColumn);
+
+		HBoxContainer titleRow = new HBoxContainer();
+		titleRow.Alignment = BoxContainer.AlignmentMode.Center;
+		titleRow.AddThemeConstantOverride("separation", 12);
+		mainColumn.AddChild(titleRow);
+
+		Control leftSpacer = new Control
+		{
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+		};
+		titleRow.AddChild(leftSpacer);
+
+		PanelContainer titlePlaque = new PanelContainer
+		{
+			CustomMinimumSize = new Vector2(460f, 74f)
+		};
+		titlePlaque.AddThemeStyleboxOverride("panel", CreateInventoryBannerStyle());
+		titleRow.AddChild(titlePlaque);
+
+		Label titleLabel = new Label
+		{
+			Text = "INVENTORY",
+			HorizontalAlignment = HorizontalAlignment.Center,
+			VerticalAlignment = VerticalAlignment.Center
+		};
+		titleLabel.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+		titleLabel.AddThemeFontSizeOverride("font_size", 34);
+		titleLabel.AddThemeColorOverride("font_color", new Color(0.93f, 0.90f, 0.84f));
+		titlePlaque.AddChild(titleLabel);
+
+		Control rightSpacer = new Control
+		{
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+		};
+		titleRow.AddChild(rightSpacer);
+
+		_officerInventoryCloseButton = new Button
+		{
+			Text = "CLOSE",
+			CustomMinimumSize = new Vector2(120f, 44f)
+		};
+		_officerInventoryCloseButton.AddThemeStyleboxOverride("normal", CreateInventoryButtonStyle());
+		_officerInventoryCloseButton.AddThemeStyleboxOverride("hover", CreateInventoryButtonStyle(true));
+		_officerInventoryCloseButton.AddThemeStyleboxOverride("pressed", CreateInventoryButtonStyle(true));
+		_officerInventoryCloseButton.Pressed += HideOfficerInventory;
+		titleRow.AddChild(_officerInventoryCloseButton);
+
+		PanelContainer identityPanel = new PanelContainer();
+		identityPanel.AddThemeStyleboxOverride("panel", CreateInventorySectionStyle(true));
+		mainColumn.AddChild(identityPanel);
+
+		MarginContainer identityMargin = new MarginContainer();
+		identityMargin.AddThemeConstantOverride("margin_left", 18);
+		identityMargin.AddThemeConstantOverride("margin_top", 14);
+		identityMargin.AddThemeConstantOverride("margin_right", 18);
+		identityMargin.AddThemeConstantOverride("margin_bottom", 14);
+		identityPanel.AddChild(identityMargin);
+
+		VBoxContainer identityContent = new VBoxContainer();
+		identityContent.AddThemeConstantOverride("separation", 6);
+		identityMargin.AddChild(identityContent);
+
+		_officerInventoryNameLabel = new Label
+		{
+			HorizontalAlignment = HorizontalAlignment.Center
+		};
+		_officerInventoryNameLabel.AddThemeFontSizeOverride("font_size", 30);
+		identityContent.AddChild(_officerInventoryNameLabel);
+
+		_officerInventoryRoleLabel = new Label
+		{
+			HorizontalAlignment = HorizontalAlignment.Center
+		};
+		_officerInventoryRoleLabel.AddThemeFontSizeOverride("font_size", 16);
+		_officerInventoryRoleLabel.AddThemeColorOverride("font_color", new Color(0.88f, 0.78f, 0.62f));
+		identityContent.AddChild(_officerInventoryRoleLabel);
+
+		HBoxContainer bodyRow = new HBoxContainer();
+		bodyRow.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
+		bodyRow.AddThemeConstantOverride("separation", 14);
+		mainColumn.AddChild(bodyRow);
+
+		PanelContainer portraitPanel = new PanelContainer
+		{
+			CustomMinimumSize = new Vector2(270f, 0f),
+			SizeFlagsVertical = Control.SizeFlags.ExpandFill
+		};
+		portraitPanel.AddThemeStyleboxOverride("panel", CreateInventorySectionStyle());
+		bodyRow.AddChild(portraitPanel);
+
+		MarginContainer portraitMargin = new MarginContainer();
+		portraitMargin.AddThemeConstantOverride("margin_left", 14);
+		portraitMargin.AddThemeConstantOverride("margin_top", 14);
+		portraitMargin.AddThemeConstantOverride("margin_right", 14);
+		portraitMargin.AddThemeConstantOverride("margin_bottom", 14);
+		portraitPanel.AddChild(portraitMargin);
+
+		VBoxContainer portraitContent = new VBoxContainer();
+		portraitContent.AddThemeConstantOverride("separation", 12);
+		portraitMargin.AddChild(portraitContent);
+
+		_officerInventoryPortrait = new TextureRect
+		{
+			CustomMinimumSize = new Vector2(0f, 250f),
+			StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
+			ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize
+		};
+		portraitContent.AddChild(_officerInventoryPortrait);
+
+		_officerInventoryStatsLabel = new Label
+		{
+			AutowrapMode = TextServer.AutowrapMode.WordSmart
+		};
+		_officerInventoryStatsLabel.AddThemeFontSizeOverride("font_size", 15);
+		portraitContent.AddChild(_officerInventoryStatsLabel);
+
+		VBoxContainer centerColumn = new VBoxContainer
+		{
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+			SizeFlagsVertical = Control.SizeFlags.ExpandFill
+		};
+		centerColumn.AddThemeConstantOverride("separation", 14);
+		bodyRow.AddChild(centerColumn);
+
+		PanelContainer summaryPanel = new PanelContainer();
+		summaryPanel.AddThemeStyleboxOverride("panel", CreateInventorySectionStyle());
+		centerColumn.AddChild(summaryPanel);
+
+		MarginContainer summaryMargin = new MarginContainer();
+		summaryMargin.AddThemeConstantOverride("margin_left", 14);
+		summaryMargin.AddThemeConstantOverride("margin_top", 14);
+		summaryMargin.AddThemeConstantOverride("margin_right", 14);
+		summaryMargin.AddThemeConstantOverride("margin_bottom", 14);
+		summaryPanel.AddChild(summaryMargin);
+
+		VBoxContainer summaryContent = new VBoxContainer();
+		summaryContent.AddThemeConstantOverride("separation", 10);
+		summaryMargin.AddChild(summaryContent);
+		summaryContent.AddChild(BuildInventorySectionHeader("OPERATIVE DOSSIER"));
+
+		_officerInventorySummaryLabel = new Label
+		{
+			AutowrapMode = TextServer.AutowrapMode.WordSmart
+		};
+		_officerInventorySummaryLabel.AddThemeFontSizeOverride("font_size", 15);
+		summaryContent.AddChild(_officerInventorySummaryLabel);
+
+		PanelContainer loadoutPanel = BuildInventorySectionCard("ACTIVE GEAR", out _officerInventoryLoadoutStack);
+		loadoutPanel.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
+		centerColumn.AddChild(loadoutPanel);
+
+		VBoxContainer rightColumn = new VBoxContainer
+		{
+			CustomMinimumSize = new Vector2(360f, 0f),
+			SizeFlagsVertical = Control.SizeFlags.ExpandFill
+		};
+		rightColumn.AddThemeConstantOverride("separation", 14);
+		bodyRow.AddChild(rightColumn);
+
+		rightColumn.AddChild(BuildInventorySectionCard("WEAPONS LOCKER", out _officerInventoryWeaponStack));
+		rightColumn.AddChild(BuildInventorySectionCard("SHIELD RACK", out _officerInventoryShieldStack));
+
+		PanelContainer itemPanel = new PanelContainer
+		{
+			SizeFlagsVertical = Control.SizeFlags.ExpandFill
+		};
+		itemPanel.AddThemeStyleboxOverride("panel", CreateInventorySectionStyle());
+		rightColumn.AddChild(itemPanel);
+
+		MarginContainer itemMargin = new MarginContainer();
+		itemMargin.AddThemeConstantOverride("margin_left", 14);
+		itemMargin.AddThemeConstantOverride("margin_top", 14);
+		itemMargin.AddThemeConstantOverride("margin_right", 14);
+		itemMargin.AddThemeConstantOverride("margin_bottom", 14);
+		itemPanel.AddChild(itemMargin);
+
+		VBoxContainer itemContent = new VBoxContainer
+		{
+			SizeFlagsVertical = Control.SizeFlags.ExpandFill
+		};
+		itemContent.AddThemeConstantOverride("separation", 10);
+		itemMargin.AddChild(itemContent);
+		itemContent.AddChild(BuildInventorySectionHeader("FIELD PACK"));
+
+		_officerInventoryItemStack = new VBoxContainer
+		{
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+			SizeFlagsVertical = Control.SizeFlags.ExpandFill
+		};
+		_officerInventoryItemStack.AddThemeConstantOverride("separation", 8);
+		itemContent.AddChild(_officerInventoryItemStack);
+
+		_officerInventoryFooterLabel = new Label
+		{
+			AutowrapMode = TextServer.AutowrapMode.WordSmart,
+			HorizontalAlignment = HorizontalAlignment.Center
+		};
+		_officerInventoryFooterLabel.AddThemeFontSizeOverride("font_size", 14);
+		_officerInventoryFooterLabel.AddThemeColorOverride("font_color", new Color(0.84f, 0.76f, 0.65f));
+		mainColumn.AddChild(_officerInventoryFooterLabel);
+	}
+
 	private PanelContainer BuildCombatInfoPanel(Vector2 position, out TextureRect iconRect, out Label headerLabel, out Label infoLabel, out Label inventoryLabel, Vector2? sizeOverride = null, Vector2? iconSizeOverride = null)
 	{
 		Vector2 panelSize = sizeOverride ?? new Vector2(392f, 262f);
@@ -1738,6 +2136,462 @@ public partial class MissionUI : CanvasLayer
 	private static StyleBoxEmpty CreateTransparentPanelStyle()
 	{
 		return new StyleBoxEmpty();
+	}
+
+	private PanelContainer BuildInventoryRailTag(string text, bool active)
+	{
+		PanelContainer tag = new PanelContainer
+		{
+			CustomMinimumSize = new Vector2(0f, 70f)
+		};
+		tag.AddThemeStyleboxOverride("panel", CreateInventoryRailStyle(active));
+
+		Label label = new Label
+		{
+			Text = text,
+			HorizontalAlignment = HorizontalAlignment.Center,
+			VerticalAlignment = VerticalAlignment.Center
+		};
+		label.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+		label.AddThemeFontSizeOverride("font_size", 12);
+		label.AddThemeColorOverride("font_color", active ? new Color(0.96f, 0.90f, 0.80f) : new Color(0.72f, 0.68f, 0.62f));
+		tag.AddChild(label);
+		return tag;
+	}
+
+	private PanelContainer BuildInventorySectionCard(string title, out VBoxContainer body)
+	{
+		PanelContainer panel = new PanelContainer();
+		panel.AddThemeStyleboxOverride("panel", CreateInventorySectionStyle());
+
+		MarginContainer margin = new MarginContainer();
+		margin.AddThemeConstantOverride("margin_left", 14);
+		margin.AddThemeConstantOverride("margin_top", 14);
+		margin.AddThemeConstantOverride("margin_right", 14);
+		margin.AddThemeConstantOverride("margin_bottom", 14);
+		panel.AddChild(margin);
+
+		VBoxContainer content = new VBoxContainer();
+		content.AddThemeConstantOverride("separation", 10);
+		margin.AddChild(content);
+		content.AddChild(BuildInventorySectionHeader(title));
+
+		body = new VBoxContainer();
+		body.AddThemeConstantOverride("separation", 8);
+		content.AddChild(body);
+		return panel;
+	}
+
+	private Label BuildInventorySectionHeader(string title)
+	{
+		Label header = new Label
+		{
+			Text = title,
+			HorizontalAlignment = HorizontalAlignment.Center
+		};
+		header.AddThemeFontSizeOverride("font_size", 17);
+		header.AddThemeColorOverride("font_color", new Color(0.92f, 0.86f, 0.74f));
+		return header;
+	}
+
+	private void PopulateInventoryEntryStack(VBoxContainer container, IReadOnlyList<MissionInventoryEntry> entries, string emptyText)
+	{
+		if (container == null)
+		{
+			return;
+		}
+
+		ClearContainerChildren(container);
+		if (entries == null || entries.Count == 0)
+		{
+			container.AddChild(BuildInventoryPlaceholder(emptyText));
+			return;
+		}
+
+		foreach (MissionInventoryEntry entry in entries)
+		{
+			if (entry == null)
+			{
+				continue;
+			}
+
+			container.AddChild(BuildInventoryEntryCard(entry));
+		}
+	}
+
+	private void PopulateInteractiveInventoryEntryStack(
+		VBoxContainer container,
+		IReadOnlyList<MissionInventoryEntry> entries,
+		string emptyText,
+		Action<string> onActivate)
+	{
+		if (container == null)
+		{
+			return;
+		}
+
+		ClearContainerChildren(container);
+		if (entries == null || entries.Count == 0)
+		{
+			container.AddChild(BuildInventoryPlaceholder(emptyText));
+			return;
+		}
+
+		foreach (MissionInventoryEntry entry in entries)
+		{
+			if (entry == null)
+			{
+				continue;
+			}
+
+			container.AddChild(BuildInventoryEntryCard(entry, onActivate));
+		}
+	}
+
+	private void PopulateInventoryItemStack(IReadOnlyList<MissionInventoryEntry> entries)
+	{
+		if (_officerInventoryItemStack == null)
+		{
+			return;
+		}
+
+		ClearContainerChildren(_officerInventoryItemStack);
+		int visibleCount = 0;
+		foreach (MissionInventoryEntry entry in entries ?? Array.Empty<MissionInventoryEntry>())
+		{
+			if (entry == null)
+			{
+				continue;
+			}
+
+			_officerInventoryItemStack.AddChild(BuildInventoryItemCell(entry));
+			visibleCount++;
+		}
+
+		if (visibleCount == 0)
+		{
+			_officerInventoryItemStack.AddChild(BuildInventoryPlaceholder("No recovered mission salvage."));
+			return;
+		}
+
+		for (int slotIndex = visibleCount; slotIndex < 4; slotIndex++)
+		{
+			_officerInventoryItemStack.AddChild(BuildInventoryEmptyCell());
+		}
+	}
+
+	private Control BuildInventoryEntryCard(MissionInventoryEntry entry, Action<string> onActivate = null)
+	{
+		PanelContainer card = new PanelContainer
+		{
+			TooltipText = entry.Detail,
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+			CustomMinimumSize = new Vector2(0f, 76f)
+		};
+		card.AddThemeStyleboxOverride("panel", CreateInventorySlotStyle(entry.Highlighted, false));
+
+		MarginContainer margin = new MarginContainer();
+		margin.AddThemeConstantOverride("margin_left", 10);
+		margin.AddThemeConstantOverride("margin_top", 8);
+		margin.AddThemeConstantOverride("margin_right", 10);
+		margin.AddThemeConstantOverride("margin_bottom", 8);
+		card.AddChild(margin);
+
+		HBoxContainer row = new HBoxContainer();
+		row.AddThemeConstantOverride("separation", 10);
+		margin.AddChild(row);
+
+		VBoxContainer textColumn = new VBoxContainer
+		{
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+		};
+		textColumn.AddThemeConstantOverride("separation", 2);
+		row.AddChild(textColumn);
+
+		Label title = new Label
+		{
+			Text = entry.Title
+		};
+		title.AddThemeFontSizeOverride("font_size", 15);
+		title.AddThemeColorOverride("font_color", entry.Highlighted ? new Color(0.98f, 0.92f, 0.82f) : Colors.White);
+		textColumn.AddChild(title);
+
+		if (!string.IsNullOrWhiteSpace(entry.Detail))
+		{
+			Label detail = new Label
+			{
+				Text = entry.Detail,
+				AutowrapMode = TextServer.AutowrapMode.WordSmart
+			};
+			detail.AddThemeFontSizeOverride("font_size", 12);
+			detail.AddThemeColorOverride("font_color", new Color(0.83f, 0.79f, 0.72f));
+			textColumn.AddChild(detail);
+		}
+
+		if (!string.IsNullOrWhiteSpace(entry.QuantityText))
+		{
+			Label quantity = new Label
+			{
+				Text = entry.QuantityText,
+				HorizontalAlignment = HorizontalAlignment.Right,
+				VerticalAlignment = VerticalAlignment.Center
+			};
+			quantity.CustomMinimumSize = new Vector2(40f, 0f);
+			quantity.AddThemeFontSizeOverride("font_size", 14);
+			quantity.AddThemeColorOverride("font_color", new Color(0.94f, 0.83f, 0.56f));
+			row.AddChild(quantity);
+		}
+
+		if (entry.CanActivate && !string.IsNullOrWhiteSpace(entry.EntryId))
+		{
+			Button actionButton = new Button
+			{
+				Text = string.IsNullOrWhiteSpace(entry.ActionText) ? "EQUIP" : entry.ActionText,
+				Disabled = entry.Highlighted,
+				CustomMinimumSize = new Vector2(88f, 34f)
+			};
+			actionButton.AddThemeStyleboxOverride("normal", CreateInventoryButtonStyle());
+			actionButton.AddThemeStyleboxOverride("hover", CreateInventoryButtonStyle(true));
+			actionButton.AddThemeStyleboxOverride("pressed", CreateInventoryButtonStyle(true));
+			actionButton.AddThemeStyleboxOverride("disabled", CreateInventoryButtonStyle());
+			actionButton.AddThemeFontSizeOverride("font_size", 12);
+			string entryId = entry.EntryId;
+			actionButton.Pressed += () => onActivate?.Invoke(entryId);
+			row.AddChild(actionButton);
+		}
+
+		return card;
+	}
+
+	private Control BuildInventoryPlaceholder(string text)
+	{
+		PanelContainer card = new PanelContainer
+		{
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+		};
+		card.AddThemeStyleboxOverride("panel", CreateInventorySlotStyle(false, true));
+
+		Label label = new Label
+		{
+			Text = text,
+			AutowrapMode = TextServer.AutowrapMode.WordSmart,
+			HorizontalAlignment = HorizontalAlignment.Center,
+			VerticalAlignment = VerticalAlignment.Center
+		};
+		label.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+		label.AddThemeFontSizeOverride("font_size", 13);
+		label.AddThemeColorOverride("font_color", new Color(0.68f, 0.64f, 0.60f));
+		card.CustomMinimumSize = new Vector2(0f, 64f);
+		card.AddChild(label);
+		return card;
+	}
+
+	private Control BuildInventoryItemCell(MissionInventoryEntry entry)
+	{
+		PanelContainer cell = new PanelContainer
+		{
+			CustomMinimumSize = new Vector2(0f, 92f),
+			TooltipText = entry.Detail,
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+		};
+		cell.AddThemeStyleboxOverride("panel", CreateInventorySlotStyle(entry.Highlighted, false));
+
+		MarginContainer margin = new MarginContainer();
+		margin.AddThemeConstantOverride("margin_left", 10);
+		margin.AddThemeConstantOverride("margin_top", 8);
+		margin.AddThemeConstantOverride("margin_right", 10);
+		margin.AddThemeConstantOverride("margin_bottom", 8);
+		cell.AddChild(margin);
+
+		VBoxContainer content = new VBoxContainer();
+		content.AddThemeConstantOverride("separation", 4);
+		margin.AddChild(content);
+
+		Label title = new Label
+		{
+			Text = entry.Title,
+			AutowrapMode = TextServer.AutowrapMode.WordSmart
+		};
+		title.AddThemeFontSizeOverride("font_size", 14);
+		title.AddThemeColorOverride("font_color", Colors.White);
+		content.AddChild(title);
+
+		Label detail = new Label
+		{
+			Text = string.IsNullOrWhiteSpace(entry.Detail) ? "Mission salvage slot." : entry.Detail,
+			AutowrapMode = TextServer.AutowrapMode.WordSmart,
+			SizeFlagsVertical = Control.SizeFlags.ExpandFill
+		};
+		detail.AddThemeFontSizeOverride("font_size", 11);
+		detail.AddThemeColorOverride("font_color", new Color(0.82f, 0.77f, 0.70f));
+		content.AddChild(detail);
+
+		if (!string.IsNullOrWhiteSpace(entry.QuantityText))
+		{
+			Label quantity = new Label
+			{
+				Text = entry.QuantityText,
+				HorizontalAlignment = HorizontalAlignment.Right
+			};
+			quantity.AddThemeFontSizeOverride("font_size", 13);
+			quantity.AddThemeColorOverride("font_color", new Color(0.95f, 0.84f, 0.52f));
+			content.AddChild(quantity);
+		}
+
+		return cell;
+	}
+
+	private Control BuildInventoryEmptyCell()
+	{
+		PanelContainer cell = new PanelContainer
+		{
+			CustomMinimumSize = new Vector2(0f, 56f),
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+		};
+		cell.AddThemeStyleboxOverride("panel", CreateInventorySlotStyle(false, true));
+		return cell;
+	}
+
+	private static void ClearContainerChildren(Node container)
+	{
+		if (container == null)
+		{
+			return;
+		}
+
+		foreach (Node child in container.GetChildren())
+		{
+			child.QueueFree();
+		}
+	}
+
+	private void OnOfficerInventoryOverlayGuiInput(InputEvent @event)
+	{
+		if (@event is not InputEventMouseButton mouseButton
+			|| !mouseButton.Pressed
+			|| mouseButton.ButtonIndex != MouseButton.Left)
+		{
+			return;
+		}
+
+		HideOfficerInventory();
+		_officerInventoryOverlay.AcceptEvent();
+	}
+
+	private static StyleBoxFlat CreateInventoryWindowStyle()
+	{
+		return new StyleBoxFlat
+		{
+			BgColor = new Color(0.17f, 0.13f, 0.11f, 0.98f),
+			BorderColor = new Color(0.55f, 0.50f, 0.44f, 1f),
+			BorderWidthLeft = 5,
+			BorderWidthTop = 5,
+			BorderWidthRight = 5,
+			BorderWidthBottom = 5,
+			CornerRadiusTopLeft = 16,
+			CornerRadiusTopRight = 16,
+			CornerRadiusBottomRight = 16,
+			CornerRadiusBottomLeft = 16,
+			ShadowColor = new Color(0f, 0f, 0f, 0.42f),
+			ShadowSize = 12,
+			ContentMarginLeft = 4f,
+			ContentMarginTop = 4f,
+			ContentMarginRight = 4f,
+			ContentMarginBottom = 4f
+		};
+	}
+
+	private static StyleBoxFlat CreateInventoryBannerStyle()
+	{
+		return new StyleBoxFlat
+		{
+			BgColor = new Color(0.31f, 0.24f, 0.18f, 0.98f),
+			BorderColor = new Color(0.68f, 0.60f, 0.45f, 1f),
+			BorderWidthLeft = 4,
+			BorderWidthTop = 4,
+			BorderWidthRight = 4,
+			BorderWidthBottom = 4,
+			CornerRadiusTopLeft = 12,
+			CornerRadiusTopRight = 12,
+			CornerRadiusBottomRight = 12,
+			CornerRadiusBottomLeft = 12
+		};
+	}
+
+	private static StyleBoxFlat CreateInventorySectionStyle(bool highlighted = false)
+	{
+		return new StyleBoxFlat
+		{
+			BgColor = highlighted ? new Color(0.25f, 0.20f, 0.17f, 0.96f) : new Color(0.14f, 0.11f, 0.09f, 0.96f),
+			BorderColor = highlighted ? new Color(0.72f, 0.60f, 0.42f, 1f) : new Color(0.44f, 0.40f, 0.36f, 1f),
+			BorderWidthLeft = 3,
+			BorderWidthTop = 3,
+			BorderWidthRight = 3,
+			BorderWidthBottom = 3,
+			CornerRadiusTopLeft = 10,
+			CornerRadiusTopRight = 10,
+			CornerRadiusBottomRight = 10,
+			CornerRadiusBottomLeft = 10
+		};
+	}
+
+	private static StyleBoxFlat CreateInventorySlotStyle(bool highlighted, bool empty)
+	{
+		return new StyleBoxFlat
+		{
+			BgColor = empty
+				? new Color(0.09f, 0.08f, 0.07f, 0.82f)
+				: highlighted
+					? new Color(0.34f, 0.23f, 0.14f, 0.94f)
+					: new Color(0.18f, 0.15f, 0.12f, 0.94f),
+			BorderColor = empty
+				? new Color(0.24f, 0.22f, 0.20f, 0.82f)
+				: highlighted
+					? new Color(0.86f, 0.70f, 0.42f, 1f)
+					: new Color(0.46f, 0.40f, 0.34f, 1f),
+			BorderWidthLeft = 2,
+			BorderWidthTop = 2,
+			BorderWidthRight = 2,
+			BorderWidthBottom = 2,
+			CornerRadiusTopLeft = 8,
+			CornerRadiusTopRight = 8,
+			CornerRadiusBottomRight = 8,
+			CornerRadiusBottomLeft = 8
+		};
+	}
+
+	private static StyleBoxFlat CreateInventoryRailStyle(bool active)
+	{
+		return new StyleBoxFlat
+		{
+			BgColor = active ? new Color(0.30f, 0.22f, 0.14f, 0.96f) : new Color(0.11f, 0.09f, 0.08f, 0.92f),
+			BorderColor = active ? new Color(0.82f, 0.68f, 0.40f, 1f) : new Color(0.36f, 0.33f, 0.30f, 1f),
+			BorderWidthLeft = 3,
+			BorderWidthTop = 3,
+			BorderWidthRight = 3,
+			BorderWidthBottom = 3,
+			CornerRadiusTopLeft = 10,
+			CornerRadiusTopRight = 10,
+			CornerRadiusBottomRight = 10,
+			CornerRadiusBottomLeft = 10
+		};
+	}
+
+	private static StyleBoxFlat CreateInventoryButtonStyle(bool hover = false)
+	{
+		return new StyleBoxFlat
+		{
+			BgColor = hover ? new Color(0.39f, 0.26f, 0.16f, 0.98f) : new Color(0.24f, 0.18f, 0.12f, 0.96f),
+			BorderColor = hover ? new Color(0.90f, 0.74f, 0.44f, 1f) : new Color(0.62f, 0.50f, 0.30f, 1f),
+			BorderWidthLeft = 3,
+			BorderWidthTop = 3,
+			BorderWidthRight = 3,
+			BorderWidthBottom = 3,
+			CornerRadiusTopLeft = 10,
+			CornerRadiusTopRight = 10,
+			CornerRadiusBottomRight = 10,
+			CornerRadiusBottomLeft = 10
+		};
 	}
 
 	private void ApplyBattlemapLabelStyling()

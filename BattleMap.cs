@@ -79,6 +79,7 @@ public partial class BattleMap : Node2D
 	private CenterContainer _equipMenuWrapper;
 	private VBoxContainer _equipItemList;
 	private Button _btnMission;
+	private Button _btnOfficerSwap;
 	private CenterContainer _savePromptWrapper;
 	private LineEdit _saveNameLineEdit;
 	private Label _savePromptStatusLabel;
@@ -112,6 +113,12 @@ public partial class BattleMap : Node2D
 	private RichTextLabel _replacementPromptBodyLabel;
 	private Label _replacementPromptStatusLabel;
 	private string _activeReplacementShipName = string.Empty;
+	private CenterContainer _officerSwapMenuWrapper;
+	private Label _officerSwapTitleLabel;
+	private RichTextLabel _officerSwapBodyLabel;
+	private VBoxContainer _officerSwapOptionList;
+	private Label _officerSwapStatusLabel;
+	private string _activeOfficerSwapShipName = string.Empty;
 	private FleetInventoryService _inventoryService;
 	private OfficerService _officerService;
 	private ShipContextService _shipContextService;
@@ -137,6 +144,20 @@ public partial class BattleMap : Node2D
 	private Label _officerMenuTitle;
 	private TextureRect _officerPortraitDisplay;
 	private Label _officerDetailsLabel;
+	private ColorRect _officerInventoryOverlay;
+	private PanelContainer _officerInventoryPanel;
+	private TextureRect _officerInventoryPortrait;
+	private Label _officerInventoryNameLabel;
+	private Label _officerInventoryRoleLabel;
+	private Label _officerInventoryStatsLabel;
+	private Label _officerInventorySummaryLabel;
+	private Label _officerInventoryFooterLabel;
+	private VBoxContainer _officerInventoryLoadoutStack;
+	private VBoxContainer _officerInventoryWeaponStack;
+	private VBoxContainer _officerInventoryShieldStack;
+	private VBoxContainer _officerInventoryItemStack;
+	private Button _officerInventoryCloseButton;
+	private string _activeOfficerInventoryShipName = string.Empty;
 	private const string ExplorationMusicPath = "res://Sounds/battle_theme.mp3";
 	private const string CombatMusicPath = "res://Sounds/fractured_combat_theme.wav";
 
@@ -241,7 +262,9 @@ public partial class BattleMap : Node2D
 		BuildLoadGameMenuUI();
 		BuildMissionPromptUI();
 		BuildOfficerReplacementPromptUI();
+		BuildOfficerSwapMenuUI();
 		BuildOfficerPanel();
+		BuildOfficerInventoryPanel();
 		
 		_btnTrade = new Button();
 		_btnTrade.Text = "ACCESS OUTPOST EXCHANGE"; 
@@ -293,6 +316,23 @@ public partial class BattleMap : Node2D
 		else
 		{
 			AddChild(_btnMission);
+		}
+
+		_btnOfficerSwap = new Button();
+		_btnOfficerSwap.Text = "SWAP OFFICER";
+		_btnOfficerSwap.Visible = false;
+		_btnOfficerSwap.CustomMinimumSize = new Vector2(0, 40);
+		_btnOfficerSwap.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+		_btnOfficerSwap.AddThemeColorOverride("font_color", new Color(1f, 0.82f, 0.45f));
+		_btnOfficerSwap.Pressed += OpenOfficerSwapMenu;
+
+		if (UI != null && UI.BtnRepair != null)
+		{
+			UI.BtnRepair.GetParent().AddChild(_btnOfficerSwap);
+		}
+		else
+		{
+			AddChild(_btnOfficerSwap);
 		}
 		
 		MapSpawner.SetupSpaceBackground(_bgLayer, GetViewportRect().Size);
@@ -1098,6 +1138,71 @@ public partial class BattleMap : Node2D
 		buttonRow.AddChild(BuildPauseMenuButton("DECIDE LATER", HideOfficerReplacementPrompt, 180f));
 	}
 
+	private void BuildOfficerSwapMenuUI()
+	{
+		CanvasLayer swapLayer = new CanvasLayer { Layer = 188 };
+		AddChild(swapLayer);
+
+		_officerSwapMenuWrapper = new CenterContainer();
+		_officerSwapMenuWrapper.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+		_officerSwapMenuWrapper.MouseFilter = Control.MouseFilterEnum.Stop;
+		_officerSwapMenuWrapper.Visible = false;
+		swapLayer.AddChild(_officerSwapMenuWrapper);
+
+		PanelContainer panel = new PanelContainer();
+		panel.CustomMinimumSize = new Vector2(760f, 560f);
+		panel.AddThemeStyleboxOverride("panel", CreateOverlayPanelStyle());
+		_officerSwapMenuWrapper.AddChild(panel);
+
+		VBoxContainer content = new VBoxContainer();
+		content.AddThemeConstantOverride("separation", 14);
+		panel.AddChild(content);
+
+		_officerSwapTitleLabel = new Label
+		{
+			Text = "OFFICER TRANSFER",
+			HorizontalAlignment = HorizontalAlignment.Center
+		};
+		_officerSwapTitleLabel.AddThemeColorOverride("font_color", new Color(0.88f, 0.98f, 1f));
+		_officerSwapTitleLabel.AddThemeFontSizeOverride("font_size", 26);
+		content.AddChild(_officerSwapTitleLabel);
+
+		_officerSwapBodyLabel = new RichTextLabel
+		{
+			CustomMinimumSize = new Vector2(0f, 120f),
+			BbcodeEnabled = true,
+			ScrollActive = false,
+			FitContent = true
+		};
+		content.AddChild(_officerSwapBodyLabel);
+
+		ScrollContainer scroll = new ScrollContainer
+		{
+			CustomMinimumSize = new Vector2(0f, 240f),
+			SizeFlagsVertical = Control.SizeFlags.ExpandFill
+		};
+		content.AddChild(scroll);
+
+		_officerSwapOptionList = new VBoxContainer();
+		_officerSwapOptionList.AddThemeConstantOverride("separation", 10);
+		scroll.AddChild(_officerSwapOptionList);
+
+		_officerSwapStatusLabel = new Label
+		{
+			HorizontalAlignment = HorizontalAlignment.Center,
+			AutowrapMode = TextServer.AutowrapMode.WordSmart
+		};
+		_officerSwapStatusLabel.AddThemeColorOverride("font_color", new Color(0.78f, 0.88f, 0.98f));
+		content.AddChild(_officerSwapStatusLabel);
+
+		HBoxContainer buttonRow = new HBoxContainer();
+		buttonRow.Alignment = BoxContainer.AlignmentMode.Center;
+		buttonRow.AddThemeConstantOverride("separation", 18);
+		content.AddChild(buttonRow);
+
+		buttonRow.AddChild(BuildPauseMenuButton("CLOSE", HideOfficerSwapMenu, 180f));
+	}
+
 	private void PopulateMissionOfficerSelection(MissionInteractionContext missionContext)
 	{
 		if (_missionOfficerSelectionList == null || _globalData == null)
@@ -1827,6 +1932,26 @@ public partial class BattleMap : Node2D
 			return;
 		}
 
+		if (_officerSwapMenuWrapper != null && _officerSwapMenuWrapper.Visible)
+		{
+			if (@event is InputEventKey swapMenuEscape && swapMenuEscape.Pressed && !swapMenuEscape.Echo && swapMenuEscape.Keycode == Key.Escape)
+			{
+				HideOfficerSwapMenu();
+				GetViewport().SetInputAsHandled();
+			}
+			return;
+		}
+
+		if (_officerInventoryOverlay != null && _officerInventoryOverlay.Visible)
+		{
+			if (@event is InputEventKey inventoryEscape && inventoryEscape.Pressed && !inventoryEscape.Echo && inventoryEscape.Keycode == Key.Escape)
+			{
+				HideOfficerInventory();
+				GetViewport().SetInputAsHandled();
+			}
+			return;
+		}
+
 		if (@event is InputEventKey escapeEvent && escapeEvent.Pressed && !escapeEvent.Echo && escapeEvent.Keycode == Key.Escape)
 		{
 			TogglePauseMenu();
@@ -1838,6 +1963,7 @@ public partial class BattleMap : Node2D
 		if (_loadMenuWrapper != null && _loadMenuWrapper.Visible) return;
 		if (_savePromptWrapper != null && _savePromptWrapper.Visible) return;
 		if (_replacementPromptWrapper != null && _replacementPromptWrapper.Visible) return;
+		if (_officerSwapMenuWrapper != null && _officerSwapMenuWrapper.Visible) return;
 		if (_strandedMenuWrapper != null && _strandedMenuWrapper.Visible) return;
 		if (_shopMenuWrapper != null && _shopMenuWrapper.Visible) return; 
 		if (_equipMenuWrapper != null && _equipMenuWrapper.Visible) return; // Prevent movement while equipping
@@ -1875,6 +2001,21 @@ public partial class BattleMap : Node2D
 				}
 			}
 			return; 
+		}
+
+		if (@event is InputEventMouseButton officerPortraitMouseEvent
+			&& officerPortraitMouseEvent.Pressed
+			&& _officerPortraitDisplay != null
+			&& _officerPortraitDisplay.Visible
+			&& _officerPortraitDisplay.GetGlobalRect().HasPoint(GetViewport().GetMousePosition()))
+		{
+			if (officerPortraitMouseEvent.ButtonIndex == MouseButton.Right)
+			{
+				OpenViewedShipOfficerInventory();
+			}
+
+			GetViewport().SetInputAsHandled();
+			return;
 		}
 
 		bool isMoveCommand = false;
@@ -2228,6 +2369,11 @@ public partial class BattleMap : Node2D
 	internal void ToggleShipMenu(bool expand, MapEntity ship = null)
 	{
 		if (UI == null) return;
+		if (!expand)
+		{
+			HideOfficerInventory();
+			HideOfficerSwapMenu();
+		}
 		Tween tween = CreateTween();
 		float targetX = expand ? GetExpandedShipMenuX() : GetCollapsedShipMenuX();
 		tween.TweenProperty(UI.ShipMenuPanel, "position:x", targetX, 0.3f).SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.Out);
@@ -2238,6 +2384,7 @@ public partial class BattleMap : Node2D
 		if (_btnTrade != null) _btnTrade.Visible = false;
 		if (_btnEquip != null) _btnEquip.Visible = false; // --- NEW: Hide equip by default ---
 		if (_btnMission != null) _btnMission.Visible = false;
+		if (_btnOfficerSwap != null) _btnOfficerSwap.Visible = false;
 
 		if (expand && ship != null)
 		{
@@ -2265,6 +2412,11 @@ public partial class BattleMap : Node2D
 			{
 				_btnMission.Text = string.IsNullOrEmpty(menuState.MissionText) ? "BLACK SITE MISSION" : menuState.MissionText;
 				_btnMission.Visible = true;
+			}
+
+			if (ship.Type == GameConstants.EntityTypes.PlayerFleet && _btnOfficerSwap != null)
+			{
+				_btnOfficerSwap.Visible = true;
 			}
 		}
 	}
@@ -2315,8 +2467,11 @@ public partial class BattleMap : Node2D
 		{
 			CustomMinimumSize = new Vector2(150, 220),
 			ExpandMode = TextureRect.ExpandModeEnum.FitWidthProportional,
-			StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered
+			StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
+			MouseFilter = Control.MouseFilterEnum.Stop,
+			TooltipText = "Right-click to inspect the captain's inventory."
 		};
+		_officerPortraitDisplay.GuiInput += OnOfficerPortraitGuiInput;
 		layout.AddChild(_officerPortraitDisplay);
 
 		_officerDetailsLabel = new Label
@@ -2357,6 +2512,1294 @@ public partial class BattleMap : Node2D
 		if (_officerMenuPanel == null) return -384f;
 		float panelWidth = _officerMenuPanel.Size.X > 0f ? _officerMenuPanel.Size.X : _officerMenuPanel.CustomMinimumSize.X;
 		return -panelWidth - 24f;
+	}
+
+	private sealed class OfficerInventoryCombatProfile
+	{
+		public int MaxHp { get; set; } = 14;
+		public int MaxShields { get; set; } = 5;
+		public int MaxActions { get; set; } = 2;
+		public int AttackMinDamage { get; set; } = 2;
+		public int AttackRange { get; set; } = 3;
+		public int AttackDamage { get; set; } = 4;
+		public int InitiativeBonus { get; set; } = 1;
+		public int BonusShieldDamage { get; set; }
+		public int ShieldPiercingDamage { get; set; }
+		public int ShieldRechargePerTurn { get; set; } = 1;
+		public bool UsesMeleeWeapon { get; set; }
+		public string WeaponName { get; set; } = "Sidearm";
+		public string ShieldName { get; set; } = "Field Aegis";
+		public string CombatAbilityId { get; set; } = string.Empty;
+		public string WeaponStatusEffectId { get; set; } = string.Empty;
+		public float WeaponStatusEffectChance { get; set; }
+	}
+
+	private void BuildOfficerInventoryPanel()
+	{
+		if (UI == null)
+		{
+			return;
+		}
+
+		Control uiRoot = UI.GetNodeOrNull<Control>("UIRoot");
+		if (uiRoot == null)
+		{
+			return;
+		}
+
+		_officerInventoryOverlay = new ColorRect
+		{
+			Visible = false,
+			Color = new Color(0.04f, 0.02f, 0.01f, 0.80f),
+			MouseFilter = Control.MouseFilterEnum.Stop
+		};
+		_officerInventoryOverlay.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+		_officerInventoryOverlay.GuiInput += OnOfficerInventoryOverlayGuiInput;
+		uiRoot.AddChild(_officerInventoryOverlay);
+
+		_officerInventoryPanel = new PanelContainer
+		{
+			CustomMinimumSize = new Vector2(1180f, 760f)
+		};
+		_officerInventoryPanel.SetAnchorsPreset(Control.LayoutPreset.Center);
+		_officerInventoryPanel.OffsetLeft = -590f;
+		_officerInventoryPanel.OffsetTop = -380f;
+		_officerInventoryPanel.OffsetRight = 590f;
+		_officerInventoryPanel.OffsetBottom = 380f;
+		_officerInventoryPanel.AddThemeStyleboxOverride("panel", CreateInventoryWindowStyle());
+		_officerInventoryOverlay.AddChild(_officerInventoryPanel);
+
+		MarginContainer outerMargin = new MarginContainer();
+		outerMargin.AddThemeConstantOverride("margin_left", 20);
+		outerMargin.AddThemeConstantOverride("margin_top", 20);
+		outerMargin.AddThemeConstantOverride("margin_right", 20);
+		outerMargin.AddThemeConstantOverride("margin_bottom", 20);
+		_officerInventoryPanel.AddChild(outerMargin);
+
+		VBoxContainer layout = new VBoxContainer();
+		layout.AddThemeConstantOverride("separation", 16);
+		outerMargin.AddChild(layout);
+
+		HBoxContainer headerRow = new HBoxContainer();
+		headerRow.AddThemeConstantOverride("separation", 14);
+		layout.AddChild(headerRow);
+
+		VBoxContainer rail = new VBoxContainer();
+		rail.CustomMinimumSize = new Vector2(76f, 0f);
+		rail.AddThemeConstantOverride("separation", 10);
+		headerRow.AddChild(rail);
+		rail.AddChild(BuildInventoryRailTag("LOADOUT", true));
+		rail.AddChild(BuildInventoryRailTag("STATUS", false));
+		rail.AddChild(BuildInventoryRailTag("PACK", false));
+
+		VBoxContainer mainColumn = new VBoxContainer
+		{
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+			SizeFlagsVertical = Control.SizeFlags.ExpandFill
+		};
+		mainColumn.AddThemeConstantOverride("separation", 14);
+		headerRow.AddChild(mainColumn);
+
+		HBoxContainer titleRow = new HBoxContainer();
+		titleRow.Alignment = BoxContainer.AlignmentMode.Center;
+		titleRow.AddThemeConstantOverride("separation", 12);
+		mainColumn.AddChild(titleRow);
+
+		Control leftSpacer = new Control
+		{
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+		};
+		titleRow.AddChild(leftSpacer);
+
+		PanelContainer titlePlaque = new PanelContainer
+		{
+			CustomMinimumSize = new Vector2(460f, 74f)
+		};
+		titlePlaque.AddThemeStyleboxOverride("panel", CreateInventoryBannerStyle());
+		titleRow.AddChild(titlePlaque);
+
+		Label titleLabel = new Label
+		{
+			Text = "INVENTORY",
+			HorizontalAlignment = HorizontalAlignment.Center,
+			VerticalAlignment = VerticalAlignment.Center
+		};
+		titleLabel.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+		titleLabel.AddThemeFontSizeOverride("font_size", 34);
+		titleLabel.AddThemeColorOverride("font_color", new Color(0.93f, 0.90f, 0.84f));
+		titlePlaque.AddChild(titleLabel);
+
+		Control rightSpacer = new Control
+		{
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+		};
+		titleRow.AddChild(rightSpacer);
+
+		_officerInventoryCloseButton = new Button
+		{
+			Text = "CLOSE",
+			CustomMinimumSize = new Vector2(120f, 44f)
+		};
+		_officerInventoryCloseButton.AddThemeStyleboxOverride("normal", CreateInventoryButtonStyle());
+		_officerInventoryCloseButton.AddThemeStyleboxOverride("hover", CreateInventoryButtonStyle(true));
+		_officerInventoryCloseButton.AddThemeStyleboxOverride("pressed", CreateInventoryButtonStyle(true));
+		_officerInventoryCloseButton.Pressed += HideOfficerInventory;
+		titleRow.AddChild(_officerInventoryCloseButton);
+
+		PanelContainer identityPanel = new PanelContainer();
+		identityPanel.AddThemeStyleboxOverride("panel", CreateInventorySectionStyle(true));
+		mainColumn.AddChild(identityPanel);
+
+		MarginContainer identityMargin = new MarginContainer();
+		identityMargin.AddThemeConstantOverride("margin_left", 18);
+		identityMargin.AddThemeConstantOverride("margin_top", 14);
+		identityMargin.AddThemeConstantOverride("margin_right", 18);
+		identityMargin.AddThemeConstantOverride("margin_bottom", 14);
+		identityPanel.AddChild(identityMargin);
+
+		VBoxContainer identityContent = new VBoxContainer();
+		identityContent.AddThemeConstantOverride("separation", 6);
+		identityMargin.AddChild(identityContent);
+
+		_officerInventoryNameLabel = new Label
+		{
+			HorizontalAlignment = HorizontalAlignment.Center
+		};
+		_officerInventoryNameLabel.AddThemeFontSizeOverride("font_size", 30);
+		identityContent.AddChild(_officerInventoryNameLabel);
+
+		_officerInventoryRoleLabel = new Label
+		{
+			HorizontalAlignment = HorizontalAlignment.Center
+		};
+		_officerInventoryRoleLabel.AddThemeFontSizeOverride("font_size", 16);
+		_officerInventoryRoleLabel.AddThemeColorOverride("font_color", new Color(0.88f, 0.78f, 0.62f));
+		identityContent.AddChild(_officerInventoryRoleLabel);
+
+		HBoxContainer bodyRow = new HBoxContainer();
+		bodyRow.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
+		bodyRow.AddThemeConstantOverride("separation", 14);
+		mainColumn.AddChild(bodyRow);
+
+		PanelContainer portraitPanel = new PanelContainer
+		{
+			CustomMinimumSize = new Vector2(270f, 0f),
+			SizeFlagsVertical = Control.SizeFlags.ExpandFill
+		};
+		portraitPanel.AddThemeStyleboxOverride("panel", CreateInventorySectionStyle());
+		bodyRow.AddChild(portraitPanel);
+
+		MarginContainer portraitMargin = new MarginContainer();
+		portraitMargin.AddThemeConstantOverride("margin_left", 14);
+		portraitMargin.AddThemeConstantOverride("margin_top", 14);
+		portraitMargin.AddThemeConstantOverride("margin_right", 14);
+		portraitMargin.AddThemeConstantOverride("margin_bottom", 14);
+		portraitPanel.AddChild(portraitMargin);
+
+		VBoxContainer portraitContent = new VBoxContainer();
+		portraitContent.AddThemeConstantOverride("separation", 12);
+		portraitMargin.AddChild(portraitContent);
+
+		_officerInventoryPortrait = new TextureRect
+		{
+			CustomMinimumSize = new Vector2(0f, 250f),
+			StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
+			ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize
+		};
+		portraitContent.AddChild(_officerInventoryPortrait);
+
+		_officerInventoryStatsLabel = new Label
+		{
+			AutowrapMode = TextServer.AutowrapMode.WordSmart
+		};
+		_officerInventoryStatsLabel.AddThemeFontSizeOverride("font_size", 15);
+		portraitContent.AddChild(_officerInventoryStatsLabel);
+
+		VBoxContainer centerColumn = new VBoxContainer
+		{
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+			SizeFlagsVertical = Control.SizeFlags.ExpandFill
+		};
+		centerColumn.AddThemeConstantOverride("separation", 14);
+		bodyRow.AddChild(centerColumn);
+
+		PanelContainer summaryPanel = new PanelContainer();
+		summaryPanel.AddThemeStyleboxOverride("panel", CreateInventorySectionStyle());
+		centerColumn.AddChild(summaryPanel);
+
+		MarginContainer summaryMargin = new MarginContainer();
+		summaryMargin.AddThemeConstantOverride("margin_left", 14);
+		summaryMargin.AddThemeConstantOverride("margin_top", 14);
+		summaryMargin.AddThemeConstantOverride("margin_right", 14);
+		summaryMargin.AddThemeConstantOverride("margin_bottom", 14);
+		summaryPanel.AddChild(summaryMargin);
+
+		VBoxContainer summaryContent = new VBoxContainer();
+		summaryContent.AddThemeConstantOverride("separation", 10);
+		summaryMargin.AddChild(summaryContent);
+		summaryContent.AddChild(BuildInventorySectionHeader("OPERATIVE DOSSIER"));
+
+		_officerInventorySummaryLabel = new Label
+		{
+			AutowrapMode = TextServer.AutowrapMode.WordSmart
+		};
+		_officerInventorySummaryLabel.AddThemeFontSizeOverride("font_size", 15);
+		summaryContent.AddChild(_officerInventorySummaryLabel);
+
+		PanelContainer loadoutPanel = BuildInventorySectionCard("ACTIVE GEAR", out _officerInventoryLoadoutStack);
+		loadoutPanel.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
+		centerColumn.AddChild(loadoutPanel);
+
+		VBoxContainer rightColumn = new VBoxContainer
+		{
+			CustomMinimumSize = new Vector2(360f, 0f),
+			SizeFlagsVertical = Control.SizeFlags.ExpandFill
+		};
+		rightColumn.AddThemeConstantOverride("separation", 14);
+		bodyRow.AddChild(rightColumn);
+
+		rightColumn.AddChild(BuildInventorySectionCard("WEAPONS LOCKER", out _officerInventoryWeaponStack));
+		rightColumn.AddChild(BuildInventorySectionCard("SHIELD RACK", out _officerInventoryShieldStack));
+
+		PanelContainer itemPanel = new PanelContainer
+		{
+			SizeFlagsVertical = Control.SizeFlags.ExpandFill
+		};
+		itemPanel.AddThemeStyleboxOverride("panel", CreateInventorySectionStyle());
+		rightColumn.AddChild(itemPanel);
+
+		MarginContainer itemMargin = new MarginContainer();
+		itemMargin.AddThemeConstantOverride("margin_left", 14);
+		itemMargin.AddThemeConstantOverride("margin_top", 14);
+		itemMargin.AddThemeConstantOverride("margin_right", 14);
+		itemMargin.AddThemeConstantOverride("margin_bottom", 14);
+		itemPanel.AddChild(itemMargin);
+
+		VBoxContainer itemContent = new VBoxContainer
+		{
+			SizeFlagsVertical = Control.SizeFlags.ExpandFill
+		};
+		itemContent.AddThemeConstantOverride("separation", 10);
+		itemMargin.AddChild(itemContent);
+		itemContent.AddChild(BuildInventorySectionHeader("FIELD PACK"));
+
+		_officerInventoryItemStack = new VBoxContainer
+		{
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+			SizeFlagsVertical = Control.SizeFlags.ExpandFill
+		};
+		_officerInventoryItemStack.AddThemeConstantOverride("separation", 8);
+		itemContent.AddChild(_officerInventoryItemStack);
+
+		_officerInventoryFooterLabel = new Label
+		{
+			AutowrapMode = TextServer.AutowrapMode.WordSmart,
+			HorizontalAlignment = HorizontalAlignment.Center
+		};
+		_officerInventoryFooterLabel.AddThemeFontSizeOverride("font_size", 14);
+		_officerInventoryFooterLabel.AddThemeColorOverride("font_color", new Color(0.84f, 0.76f, 0.65f));
+		mainColumn.AddChild(_officerInventoryFooterLabel);
+	}
+
+	private void OnOfficerPortraitGuiInput(InputEvent @event)
+	{
+		if (@event is not InputEventMouseButton mouseButton || !mouseButton.Pressed)
+		{
+			return;
+		}
+
+		_officerPortraitDisplay?.AcceptEvent();
+		GetViewport().SetInputAsHandled();
+	}
+
+	private void OpenViewedShipOfficerInventory()
+	{
+		if (CurrentlyViewedShip == null
+			|| CurrentlyViewedShip.Type != GameConstants.EntityTypes.PlayerFleet)
+		{
+			return;
+		}
+
+		OfficerState officerState = ResolveOfficerStateForShip(CurrentlyViewedShip.Name);
+		MissionOfficerInventoryPanelData data = BuildOfficerInventoryPanelData(CurrentlyViewedShip.Name, officerState);
+		if (data != null)
+		{
+			ShowOfficerInventory(data);
+		}
+	}
+
+	private OfficerState ResolveOfficerStateForShip(string shipName)
+	{
+		if (_globalData?.ShipOfficers == null || string.IsNullOrWhiteSpace(shipName))
+		{
+			return null;
+		}
+
+		return _globalData.ShipOfficers.TryGetValue(shipName, out OfficerState officerState) ? officerState : null;
+	}
+
+	private void ShowOfficerInventory(MissionOfficerInventoryPanelData data)
+	{
+		if (_officerInventoryOverlay == null
+			|| _officerInventoryPortrait == null
+			|| _officerInventoryNameLabel == null
+			|| _officerInventoryRoleLabel == null
+			|| _officerInventoryStatsLabel == null
+			|| _officerInventorySummaryLabel == null
+			|| _officerInventoryFooterLabel == null
+			|| data == null)
+		{
+			return;
+		}
+
+		_officerInventoryPortrait.Texture = data.Portrait;
+		_activeOfficerInventoryShipName = data.OfficerId ?? string.Empty;
+		_officerInventoryNameLabel.Text = string.IsNullOrWhiteSpace(data.DisplayName)
+			? "FLEET OFFICER"
+			: data.DisplayName.ToUpperInvariant();
+		_officerInventoryRoleLabel.Text = $"{(data.Specialty ?? string.Empty).ToUpperInvariant()}  |  {(data.ShipName ?? string.Empty).ToUpperInvariant()}";
+		_officerInventoryStatsLabel.Text = data.VitalStatsText ?? string.Empty;
+		_officerInventorySummaryLabel.Text = data.SummaryText ?? string.Empty;
+		_officerInventoryFooterLabel.Text = data.FooterText ?? "Right-click another captain portrait to inspect a different officer.";
+
+		PopulateInventoryEntryStack(_officerInventoryLoadoutStack, data.LoadoutEntries, "No active loadout data.");
+		PopulateInteractiveInventoryEntryStack(
+			_officerInventoryWeaponStack,
+			data.WeaponEntries,
+			"No owned weapons.",
+			weaponId => OnOfficerInventoryWeaponEquipRequested(_activeOfficerInventoryShipName, weaponId));
+		PopulateInteractiveInventoryEntryStack(
+			_officerInventoryShieldStack,
+			data.ShieldEntries,
+			"No owned shields.",
+			shieldId => OnOfficerInventoryShieldEquipRequested(_activeOfficerInventoryShipName, shieldId));
+		PopulateInventoryItemStack(data.ItemEntries);
+		_officerInventoryOverlay.Visible = true;
+	}
+
+	private void HideOfficerInventory()
+	{
+		if (_officerInventoryOverlay != null)
+		{
+			_officerInventoryOverlay.Visible = false;
+		}
+
+		_activeOfficerInventoryShipName = string.Empty;
+	}
+
+	private void OnOfficerInventoryWeaponEquipRequested(string shipName, string weaponId)
+	{
+		OfficerState officerState = ResolveOfficerStateForShip(shipName);
+		if (officerState == null || !OfficerMissionLoadoutService.EquipWeapon(officerState, weaponId))
+		{
+			return;
+		}
+
+		MissionWeaponDefinition weapon = MissionEquipmentRegistry.GetWeapon(weaponId);
+		if (UI?.CombatLogPanel != null)
+		{
+			UI.CombatLogPanel.Visible = true;
+			LogCombatMessage($"[color=#d9b572]{officerState.DisplayName} equips {weapon?.DisplayName ?? weaponId}.[/color]");
+		}
+
+		ShowOfficerInventory(BuildOfficerInventoryPanelData(shipName, officerState));
+	}
+
+	private void OnOfficerInventoryShieldEquipRequested(string shipName, string shieldId)
+	{
+		OfficerState officerState = ResolveOfficerStateForShip(shipName);
+		if (officerState == null || !OfficerMissionLoadoutService.EquipShield(officerState, shieldId))
+		{
+			return;
+		}
+
+		MissionShieldDefinition shield = MissionEquipmentRegistry.GetShield(shieldId);
+		if (UI?.CombatLogPanel != null)
+		{
+			UI.CombatLogPanel.Visible = true;
+			LogCombatMessage($"[color=#d9b572]{officerState.DisplayName} equips {shield?.DisplayName ?? shieldId}.[/color]");
+		}
+
+		ShowOfficerInventory(BuildOfficerInventoryPanelData(shipName, officerState));
+	}
+
+	private MissionOfficerInventoryPanelData BuildOfficerInventoryPanelData(string shipName, OfficerState officerState)
+	{
+		if (officerState == null || string.IsNullOrWhiteSpace(shipName))
+		{
+			return null;
+		}
+
+		OfficerMissionLoadoutService.EnsureOfficerLoadout(officerState);
+		OfficerInventoryCombatProfile profile = BuildOfficerInventoryCombatProfile(officerState);
+		List<MissionInventoryEntry> loadoutEntries = new List<MissionInventoryEntry>
+		{
+			new MissionInventoryEntry
+			{
+				Title = profile.WeaponName,
+				Detail = BuildWeaponDetailText(OfficerMissionLoadoutService.GetEquippedWeapon(officerState), profile),
+				Highlighted = true
+			},
+			new MissionInventoryEntry
+			{
+				Title = profile.ShieldName,
+				Detail = BuildShieldDetailText(OfficerMissionLoadoutService.GetEquippedShield(officerState), profile),
+				Highlighted = true
+			},
+			new MissionInventoryEntry
+			{
+				Title = string.IsNullOrWhiteSpace(profile.CombatAbilityId) ? "Combat Discipline" : profile.CombatAbilityId,
+				Detail = string.IsNullOrWhiteSpace(profile.WeaponStatusEffectId)
+					? "Status stable. No active impairments."
+					: $"Loadout effect: {profile.WeaponStatusEffectId.Replace('_', ' ')}."
+			}
+		};
+
+		List<MissionInventoryEntry> weaponEntries = BuildWeaponInventoryEntries(officerState, profile);
+		List<MissionInventoryEntry> shieldEntries = BuildShieldInventoryEntries(officerState, profile);
+		List<MissionInventoryEntry> itemEntries = BuildItemInventoryEntries(officerState);
+		int carriedItems = (officerState.PersonalInventoryItemIDs ?? new List<string>()).Count;
+		string footerText = "Click a locker entry to equip it. Right-click another captain portrait to switch dossiers.";
+		if (weaponEntries.Count <= 1 && shieldEntries.Count <= 1)
+		{
+			footerText = carriedItems == 0
+				? "No extra field gear is stowed on this officer yet."
+				: $"Field pack holds {carriedItems} item{(carriedItems == 1 ? string.Empty : "s")}.";
+		}
+
+		return new MissionOfficerInventoryPanelData
+		{
+			OfficerId = shipName,
+			DisplayName = officerState.DisplayName,
+			ShipName = shipName,
+			Specialty = officerState.Specialty,
+			Portrait = LoadPortraitTexture(officerState.PortraitPath),
+			SummaryText = BuildOfficerInventorySummaryText(officerState, profile),
+			VitalStatsText = BuildOfficerVitalStatsText(officerState, profile),
+			FooterText = footerText,
+			LoadoutEntries = loadoutEntries,
+			WeaponEntries = weaponEntries,
+			ShieldEntries = shieldEntries,
+			ItemEntries = itemEntries
+		};
+	}
+
+	private static string BuildOfficerInventorySummaryText(OfficerState officerState, OfficerInventoryCombatProfile profile)
+	{
+		List<string> notes = new List<string>();
+		if (!string.IsNullOrWhiteSpace(officerState?.Biography))
+		{
+			notes.Add(officerState.Biography.Trim());
+		}
+		else
+		{
+			notes.Add("No formal dossier has been written for this officer yet.");
+		}
+
+		if (!string.IsNullOrWhiteSpace(officerState?.Archetype) || !string.IsNullOrWhiteSpace(officerState?.Ideology))
+		{
+			notes.Add($"Alignment: {officerState.Archetype} with {officerState.Ideology} leanings.");
+		}
+
+		if (!string.IsNullOrWhiteSpace(officerState?.Flaw))
+		{
+			notes.Add($"Watchpoint: {officerState.Flaw}.");
+		}
+
+		if (!string.IsNullOrWhiteSpace(profile?.CombatAbilityId))
+		{
+			notes.Add($"Combat discipline: {profile.CombatAbilityId}.");
+		}
+
+		return string.Join("\n\n", notes.Where(note => !string.IsNullOrWhiteSpace(note)));
+	}
+
+	private static string BuildOfficerVitalStatsText(OfficerState officerState, OfficerInventoryCombatProfile profile)
+	{
+		if (profile == null)
+		{
+			return string.Empty;
+		}
+
+		List<string> lines = new List<string>
+		{
+			$"HP        {profile.MaxHp}/{profile.MaxHp}",
+			$"SHIELDS   {profile.MaxShields}/{profile.MaxShields}",
+			$"ACTIONS   {profile.MaxActions}/{profile.MaxActions}",
+			$"RANGE     {profile.AttackRange}",
+			$"DAMAGE    {profile.AttackMinDamage}-{profile.AttackDamage}",
+			$"INIT      +{profile.InitiativeBonus}",
+			$"APPROVAL  {officerState?.Approval ?? 0}",
+			$"STRESS    {officerState?.Stress ?? 0}"
+		};
+
+		if (profile.ShieldRechargePerTurn > 0)
+		{
+			lines.Add($"RECHARGE  +{profile.ShieldRechargePerTurn}/turn");
+		}
+
+		return string.Join("\n", lines);
+	}
+
+	private static List<MissionInventoryEntry> BuildWeaponInventoryEntries(OfficerState officerState, OfficerInventoryCombatProfile profile)
+	{
+		List<MissionInventoryEntry> entries = OfficerMissionLoadoutService.GetOwnedWeaponIds(officerState)
+			.Where(weaponId => !string.IsNullOrWhiteSpace(weaponId))
+			.Distinct(StringComparer.Ordinal)
+			.Select(weaponId =>
+			{
+				MissionWeaponDefinition definition = MissionEquipmentRegistry.GetWeapon(weaponId);
+				bool isEquipped = string.Equals(weaponId, officerState.EquippedMissionWeaponId, StringComparison.Ordinal);
+				return new MissionInventoryEntry
+				{
+					EntryId = weaponId,
+					Title = definition?.DisplayName ?? weaponId,
+					Detail = BuildWeaponDetailText(definition, profile),
+					Highlighted = isEquipped,
+					CanActivate = true,
+					ActionText = isEquipped ? "EQUIPPED" : "EQUIP"
+				};
+			})
+			.OrderByDescending(entry => entry.Highlighted)
+			.ThenBy(entry => entry.Title, StringComparer.OrdinalIgnoreCase)
+			.ToList();
+
+		if (entries.Count == 0 && !string.IsNullOrWhiteSpace(profile?.WeaponName))
+		{
+			entries.Add(new MissionInventoryEntry
+			{
+				Title = profile.WeaponName,
+				Detail = BuildWeaponDetailText(null, profile),
+				Highlighted = true,
+				CanActivate = true,
+				ActionText = "EQUIPPED"
+			});
+		}
+
+		return entries;
+	}
+
+	private static List<MissionInventoryEntry> BuildShieldInventoryEntries(OfficerState officerState, OfficerInventoryCombatProfile profile)
+	{
+		List<MissionInventoryEntry> entries = OfficerMissionLoadoutService.GetOwnedShieldIds(officerState)
+			.Where(shieldId => !string.IsNullOrWhiteSpace(shieldId))
+			.Distinct(StringComparer.Ordinal)
+			.Select(shieldId =>
+			{
+				MissionShieldDefinition definition = MissionEquipmentRegistry.GetShield(shieldId);
+				bool isEquipped = string.Equals(shieldId, officerState.EquippedMissionShieldId, StringComparison.Ordinal);
+				return new MissionInventoryEntry
+				{
+					EntryId = shieldId,
+					Title = definition?.DisplayName ?? shieldId,
+					Detail = BuildShieldDetailText(definition, profile),
+					Highlighted = isEquipped,
+					CanActivate = true,
+					ActionText = isEquipped ? "EQUIPPED" : "EQUIP"
+				};
+			})
+			.OrderByDescending(entry => entry.Highlighted)
+			.ThenBy(entry => entry.Title, StringComparer.OrdinalIgnoreCase)
+			.ToList();
+
+		if (entries.Count == 0 && !string.IsNullOrWhiteSpace(profile?.ShieldName))
+		{
+			entries.Add(new MissionInventoryEntry
+			{
+				Title = profile.ShieldName,
+				Detail = BuildShieldDetailText(null, profile),
+				Highlighted = true,
+				CanActivate = true,
+				ActionText = "EQUIPPED"
+			});
+		}
+
+		return entries;
+	}
+
+	private static List<MissionInventoryEntry> BuildItemInventoryEntries(OfficerState officerState)
+	{
+		return (officerState?.PersonalInventoryItemIDs ?? new List<string>())
+			.Where(itemId => !string.IsNullOrWhiteSpace(itemId))
+			.GroupBy(itemId => itemId, StringComparer.Ordinal)
+			.Select(group =>
+			{
+				CampaignItemDefinition definition = CampaignItemRegistry.GetItem(group.Key);
+				return new MissionInventoryEntry
+				{
+					Title = definition?.DisplayName ?? group.Key,
+					Detail = BuildItemDetailText(definition),
+					QuantityText = group.Count() > 1 ? $"x{group.Count()}" : string.Empty
+				};
+			})
+			.OrderBy(entry => entry.Title, StringComparer.OrdinalIgnoreCase)
+			.ToList();
+	}
+
+	private static string BuildWeaponDetailText(MissionWeaponDefinition definition, OfficerInventoryCombatProfile profile = null)
+	{
+		List<string> parts = new List<string>();
+		if (definition != null)
+		{
+			parts.Add(definition.IsMelee ? "Melee" : $"Range {definition.AttackRange}");
+			parts.Add($"DMG {definition.MinDamage}-{definition.MaxDamage}");
+			if (definition.BonusShieldDamage > 0)
+			{
+				parts.Add($"+{definition.BonusShieldDamage} vs shields");
+			}
+
+			if (definition.ShieldPiercingDamage > 0)
+			{
+				parts.Add($"{definition.ShieldPiercingDamage} pierce");
+			}
+
+			if (!string.IsNullOrWhiteSpace(definition.StatusEffectId))
+			{
+				int chancePercent = Mathf.RoundToInt(definition.StatusEffectChance * 100f);
+				parts.Add($"{definition.StatusEffectId.Replace('_', ' ')} {chancePercent}%");
+			}
+
+			if (!string.IsNullOrWhiteSpace(definition.Description))
+			{
+				parts.Add(definition.Description);
+			}
+
+			return string.Join(" | ", parts);
+		}
+
+		if (profile != null)
+		{
+			parts.Add(profile.UsesMeleeWeapon ? "Melee" : $"Range {profile.AttackRange}");
+			parts.Add($"DMG {profile.AttackMinDamage}-{profile.AttackDamage}");
+			if (profile.BonusShieldDamage > 0)
+			{
+				parts.Add($"+{profile.BonusShieldDamage} vs shields");
+			}
+
+			if (profile.ShieldPiercingDamage > 0)
+			{
+				parts.Add($"{profile.ShieldPiercingDamage} pierce");
+			}
+		}
+
+		return string.Join(" | ", parts);
+	}
+
+	private static string BuildShieldDetailText(MissionShieldDefinition definition, OfficerInventoryCombatProfile profile = null)
+	{
+		List<string> parts = new List<string>();
+		if (definition != null)
+		{
+			parts.Add($"+{definition.CapacityBonus} capacity");
+			parts.Add($"+{definition.RechargePerTurn}/turn");
+			if (!string.IsNullOrWhiteSpace(definition.Description))
+			{
+				parts.Add(definition.Description);
+			}
+
+			return string.Join(" | ", parts);
+		}
+
+		if (profile != null)
+		{
+			parts.Add($"Capacity {profile.MaxShields}");
+			parts.Add($"+{profile.ShieldRechargePerTurn}/turn");
+		}
+
+		return string.Join(" | ", parts);
+	}
+
+	private static string BuildItemDetailText(CampaignItemDefinition definition)
+	{
+		if (definition == null)
+		{
+			return "Recovered field salvage.";
+		}
+
+		List<string> parts = new List<string>();
+		if (!string.IsNullOrWhiteSpace(definition.Category))
+		{
+			parts.Add(definition.Category);
+		}
+
+		if (!string.IsNullOrWhiteSpace(definition.Description))
+		{
+			parts.Add(definition.Description);
+		}
+
+		return parts.Count == 0 ? "Recovered field salvage." : string.Join(" | ", parts);
+	}
+
+	private static OfficerInventoryCombatProfile BuildOfficerInventoryCombatProfile(OfficerState officerState)
+	{
+		OfficerInventoryCombatProfile profile = CreateBaseOfficerInventoryCombatProfile(officerState?.Specialty);
+		profile.CombatAbilityId = officerState?.CombatAbilityID ?? string.Empty;
+
+		int baseMaxShields = profile.MaxShields;
+		int baseShieldRecharge = profile.ShieldRechargePerTurn;
+
+		MissionWeaponDefinition weapon = OfficerMissionLoadoutService.GetEquippedWeapon(officerState);
+		if (weapon != null)
+		{
+			profile.WeaponName = string.IsNullOrWhiteSpace(weapon.DisplayName) ? profile.WeaponName : weapon.DisplayName;
+			profile.UsesMeleeWeapon = weapon.IsMelee;
+			profile.AttackRange = Mathf.Max(1, weapon.AttackRange);
+			profile.AttackMinDamage = Mathf.Max(1, weapon.MinDamage);
+			profile.AttackDamage = Mathf.Max(profile.AttackMinDamage, weapon.MaxDamage);
+			profile.BonusShieldDamage = Mathf.Max(0, weapon.BonusShieldDamage);
+			profile.ShieldPiercingDamage = Mathf.Max(0, weapon.ShieldPiercingDamage);
+			profile.WeaponStatusEffectId = weapon.StatusEffectId ?? string.Empty;
+			profile.WeaponStatusEffectChance = Mathf.Max(0f, weapon.StatusEffectChance);
+		}
+
+		MissionShieldDefinition shield = OfficerMissionLoadoutService.GetEquippedShield(officerState);
+		if (shield != null)
+		{
+			profile.ShieldName = string.IsNullOrWhiteSpace(shield.DisplayName) ? profile.ShieldName : shield.DisplayName;
+			profile.MaxShields = Mathf.Max(0, baseMaxShields + shield.CapacityBonus);
+			profile.ShieldRechargePerTurn = Mathf.Max(0, baseShieldRecharge + shield.RechargePerTurn);
+		}
+
+		return profile;
+	}
+
+	private static OfficerInventoryCombatProfile CreateBaseOfficerInventoryCombatProfile(string specialty)
+	{
+		OfficerInventoryCombatProfile profile = new OfficerInventoryCombatProfile();
+		switch (specialty)
+		{
+			case "Medical Triage":
+			case "Morale Support":
+				profile.MaxHp = 16;
+				profile.MaxShields = 4;
+				profile.MaxActions = 2;
+				profile.AttackMinDamage = 2;
+				profile.AttackRange = 1;
+				profile.AttackDamage = 3;
+				profile.InitiativeBonus = 0;
+				profile.WeaponName = "Shock Baton";
+				break;
+			case "Salvage Efficiency":
+			case "Engine Routing":
+				profile.MaxHp = 15;
+				profile.MaxShields = 5;
+				profile.MaxActions = 2;
+				profile.AttackMinDamage = 2;
+				profile.AttackRange = 1;
+				profile.AttackDamage = 4;
+				profile.InitiativeBonus = 1;
+				profile.WeaponName = "Cutting Rig";
+				break;
+			case "Missile Control":
+				profile.MaxHp = 13;
+				profile.MaxShields = 6;
+				profile.MaxActions = 2;
+				profile.AttackMinDamage = 3;
+				profile.AttackRange = 4;
+				profile.AttackDamage = 5;
+				profile.InitiativeBonus = 1;
+				profile.WeaponName = "Heavy Sidearm";
+				break;
+			case "Tactical Command":
+				profile.MaxHp = 14;
+				profile.MaxShields = 6;
+				profile.MaxActions = 2;
+				profile.AttackMinDamage = 3;
+				profile.AttackRange = 4;
+				profile.AttackDamage = 5;
+				profile.InitiativeBonus = 2;
+				profile.WeaponName = "Pulse Carbine";
+				break;
+			case "Shield Tuning":
+				profile.MaxHp = 17;
+				profile.MaxShields = 8;
+				profile.MaxActions = 2;
+				profile.AttackMinDamage = 2;
+				profile.AttackRange = 2;
+				profile.AttackDamage = 4;
+				profile.InitiativeBonus = 0;
+				profile.WeaponName = "Defense Pistol";
+				profile.ShieldRechargePerTurn = 2;
+				break;
+			default:
+				profile.MaxHp = 14;
+				profile.MaxShields = 5;
+				profile.MaxActions = 2;
+				profile.AttackMinDamage = 2;
+				profile.AttackRange = 3;
+				profile.AttackDamage = 4;
+				profile.InitiativeBonus = 1;
+				profile.WeaponName = "Sidearm";
+				break;
+		}
+
+		return profile;
+	}
+
+	private PanelContainer BuildInventoryRailTag(string text, bool active)
+	{
+		PanelContainer tag = new PanelContainer
+		{
+			CustomMinimumSize = new Vector2(0f, 70f)
+		};
+		tag.AddThemeStyleboxOverride("panel", CreateInventoryRailStyle(active));
+
+		Label label = new Label
+		{
+			Text = text,
+			HorizontalAlignment = HorizontalAlignment.Center,
+			VerticalAlignment = VerticalAlignment.Center
+		};
+		label.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+		label.AddThemeFontSizeOverride("font_size", 12);
+		label.AddThemeColorOverride("font_color", active ? new Color(0.96f, 0.90f, 0.80f) : new Color(0.72f, 0.68f, 0.62f));
+		tag.AddChild(label);
+		return tag;
+	}
+
+	private PanelContainer BuildInventorySectionCard(string title, out VBoxContainer body)
+	{
+		PanelContainer panel = new PanelContainer();
+		panel.AddThemeStyleboxOverride("panel", CreateInventorySectionStyle());
+
+		MarginContainer margin = new MarginContainer();
+		margin.AddThemeConstantOverride("margin_left", 14);
+		margin.AddThemeConstantOverride("margin_top", 14);
+		margin.AddThemeConstantOverride("margin_right", 14);
+		margin.AddThemeConstantOverride("margin_bottom", 14);
+		panel.AddChild(margin);
+
+		VBoxContainer content = new VBoxContainer();
+		content.AddThemeConstantOverride("separation", 10);
+		margin.AddChild(content);
+		content.AddChild(BuildInventorySectionHeader(title));
+
+		body = new VBoxContainer();
+		body.AddThemeConstantOverride("separation", 8);
+		content.AddChild(body);
+		return panel;
+	}
+
+	private Label BuildInventorySectionHeader(string title)
+	{
+		Label header = new Label
+		{
+			Text = title,
+			HorizontalAlignment = HorizontalAlignment.Center
+		};
+		header.AddThemeFontSizeOverride("font_size", 17);
+		header.AddThemeColorOverride("font_color", new Color(0.92f, 0.86f, 0.74f));
+		return header;
+	}
+
+	private void PopulateInventoryEntryStack(VBoxContainer container, IReadOnlyList<MissionInventoryEntry> entries, string emptyText)
+	{
+		if (container == null)
+		{
+			return;
+		}
+
+		ClearContainerChildren(container);
+		if (entries == null || entries.Count == 0)
+		{
+			container.AddChild(BuildInventoryPlaceholder(emptyText));
+			return;
+		}
+
+		foreach (MissionInventoryEntry entry in entries)
+		{
+			if (entry == null)
+			{
+				continue;
+			}
+
+			container.AddChild(BuildInventoryEntryCard(entry));
+		}
+	}
+
+	private void PopulateInteractiveInventoryEntryStack(
+		VBoxContainer container,
+		IReadOnlyList<MissionInventoryEntry> entries,
+		string emptyText,
+		Action<string> onActivate)
+	{
+		if (container == null)
+		{
+			return;
+		}
+
+		ClearContainerChildren(container);
+		if (entries == null || entries.Count == 0)
+		{
+			container.AddChild(BuildInventoryPlaceholder(emptyText));
+			return;
+		}
+
+		foreach (MissionInventoryEntry entry in entries)
+		{
+			if (entry == null)
+			{
+				continue;
+			}
+
+			container.AddChild(BuildInventoryEntryCard(entry, onActivate));
+		}
+	}
+
+	private void PopulateInventoryItemStack(IReadOnlyList<MissionInventoryEntry> entries)
+	{
+		if (_officerInventoryItemStack == null)
+		{
+			return;
+		}
+
+		ClearContainerChildren(_officerInventoryItemStack);
+		int visibleCount = 0;
+		foreach (MissionInventoryEntry entry in entries ?? Array.Empty<MissionInventoryEntry>())
+		{
+			if (entry == null)
+			{
+				continue;
+			}
+
+			_officerInventoryItemStack.AddChild(BuildInventoryItemCell(entry));
+			visibleCount++;
+		}
+
+		if (visibleCount == 0)
+		{
+			_officerInventoryItemStack.AddChild(BuildInventoryPlaceholder("No field items are stowed here."));
+			return;
+		}
+
+		for (int slotIndex = visibleCount; slotIndex < 4; slotIndex++)
+		{
+			_officerInventoryItemStack.AddChild(BuildInventoryEmptyCell());
+		}
+	}
+
+	private Control BuildInventoryEntryCard(MissionInventoryEntry entry, Action<string> onActivate = null)
+	{
+		PanelContainer card = new PanelContainer
+		{
+			TooltipText = entry.Detail,
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+			CustomMinimumSize = new Vector2(0f, 76f)
+		};
+		card.AddThemeStyleboxOverride("panel", CreateInventorySlotStyle(entry.Highlighted, false));
+
+		MarginContainer margin = new MarginContainer();
+		margin.AddThemeConstantOverride("margin_left", 10);
+		margin.AddThemeConstantOverride("margin_top", 8);
+		margin.AddThemeConstantOverride("margin_right", 10);
+		margin.AddThemeConstantOverride("margin_bottom", 8);
+		card.AddChild(margin);
+
+		HBoxContainer row = new HBoxContainer();
+		row.AddThemeConstantOverride("separation", 10);
+		margin.AddChild(row);
+
+		VBoxContainer textColumn = new VBoxContainer
+		{
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+		};
+		textColumn.AddThemeConstantOverride("separation", 2);
+		row.AddChild(textColumn);
+
+		Label title = new Label
+		{
+			Text = entry.Title
+		};
+		title.AddThemeFontSizeOverride("font_size", 15);
+		title.AddThemeColorOverride("font_color", entry.Highlighted ? new Color(0.98f, 0.92f, 0.82f) : Colors.White);
+		textColumn.AddChild(title);
+
+		if (!string.IsNullOrWhiteSpace(entry.Detail))
+		{
+			Label detail = new Label
+			{
+				Text = entry.Detail,
+				AutowrapMode = TextServer.AutowrapMode.WordSmart
+			};
+			detail.AddThemeFontSizeOverride("font_size", 12);
+			detail.AddThemeColorOverride("font_color", new Color(0.83f, 0.79f, 0.72f));
+			textColumn.AddChild(detail);
+		}
+
+		if (!string.IsNullOrWhiteSpace(entry.QuantityText))
+		{
+			Label quantity = new Label
+			{
+				Text = entry.QuantityText,
+				HorizontalAlignment = HorizontalAlignment.Right,
+				VerticalAlignment = VerticalAlignment.Center
+			};
+			quantity.CustomMinimumSize = new Vector2(40f, 0f);
+			quantity.AddThemeFontSizeOverride("font_size", 14);
+			quantity.AddThemeColorOverride("font_color", new Color(0.94f, 0.83f, 0.56f));
+			row.AddChild(quantity);
+		}
+
+		if (entry.CanActivate && !string.IsNullOrWhiteSpace(entry.EntryId))
+		{
+			Button actionButton = new Button
+			{
+				Text = string.IsNullOrWhiteSpace(entry.ActionText) ? "EQUIP" : entry.ActionText,
+				Disabled = entry.Highlighted,
+				CustomMinimumSize = new Vector2(88f, 34f)
+			};
+			actionButton.AddThemeStyleboxOverride("normal", CreateInventoryButtonStyle());
+			actionButton.AddThemeStyleboxOverride("hover", CreateInventoryButtonStyle(true));
+			actionButton.AddThemeStyleboxOverride("pressed", CreateInventoryButtonStyle(true));
+			actionButton.AddThemeStyleboxOverride("disabled", CreateInventoryButtonStyle());
+			actionButton.AddThemeFontSizeOverride("font_size", 12);
+			string entryId = entry.EntryId;
+			actionButton.Pressed += () => onActivate?.Invoke(entryId);
+			row.AddChild(actionButton);
+		}
+
+		return card;
+	}
+
+	private Control BuildInventoryPlaceholder(string text)
+	{
+		PanelContainer card = new PanelContainer
+		{
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+		};
+		card.AddThemeStyleboxOverride("panel", CreateInventorySlotStyle(false, true));
+
+		Label label = new Label
+		{
+			Text = text,
+			AutowrapMode = TextServer.AutowrapMode.WordSmart,
+			HorizontalAlignment = HorizontalAlignment.Center,
+			VerticalAlignment = VerticalAlignment.Center
+		};
+		label.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+		label.AddThemeFontSizeOverride("font_size", 13);
+		label.AddThemeColorOverride("font_color", new Color(0.68f, 0.64f, 0.60f));
+		card.CustomMinimumSize = new Vector2(0f, 64f);
+		card.AddChild(label);
+		return card;
+	}
+
+	private Control BuildInventoryItemCell(MissionInventoryEntry entry)
+	{
+		PanelContainer cell = new PanelContainer
+		{
+			CustomMinimumSize = new Vector2(0f, 92f),
+			TooltipText = entry.Detail,
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+		};
+		cell.AddThemeStyleboxOverride("panel", CreateInventorySlotStyle(entry.Highlighted, false));
+
+		MarginContainer margin = new MarginContainer();
+		margin.AddThemeConstantOverride("margin_left", 10);
+		margin.AddThemeConstantOverride("margin_top", 8);
+		margin.AddThemeConstantOverride("margin_right", 10);
+		margin.AddThemeConstantOverride("margin_bottom", 8);
+		cell.AddChild(margin);
+
+		VBoxContainer content = new VBoxContainer();
+		content.AddThemeConstantOverride("separation", 4);
+		margin.AddChild(content);
+
+		Label title = new Label
+		{
+			Text = entry.Title,
+			AutowrapMode = TextServer.AutowrapMode.WordSmart
+		};
+		title.AddThemeFontSizeOverride("font_size", 14);
+		title.AddThemeColorOverride("font_color", Colors.White);
+		content.AddChild(title);
+
+		Label detail = new Label
+		{
+			Text = string.IsNullOrWhiteSpace(entry.Detail) ? "Field gear slot." : entry.Detail,
+			AutowrapMode = TextServer.AutowrapMode.WordSmart,
+			SizeFlagsVertical = Control.SizeFlags.ExpandFill
+		};
+		detail.AddThemeFontSizeOverride("font_size", 11);
+		detail.AddThemeColorOverride("font_color", new Color(0.82f, 0.77f, 0.70f));
+		content.AddChild(detail);
+
+		if (!string.IsNullOrWhiteSpace(entry.QuantityText))
+		{
+			Label quantity = new Label
+			{
+				Text = entry.QuantityText,
+				HorizontalAlignment = HorizontalAlignment.Right
+			};
+			quantity.AddThemeFontSizeOverride("font_size", 13);
+			quantity.AddThemeColorOverride("font_color", new Color(0.95f, 0.84f, 0.52f));
+			content.AddChild(quantity);
+		}
+
+		return cell;
+	}
+
+	private Control BuildInventoryEmptyCell()
+	{
+		PanelContainer cell = new PanelContainer
+		{
+			CustomMinimumSize = new Vector2(0f, 56f),
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+		};
+		cell.AddThemeStyleboxOverride("panel", CreateInventorySlotStyle(false, true));
+		return cell;
+	}
+
+	private static void ClearContainerChildren(Node container)
+	{
+		if (container == null)
+		{
+			return;
+		}
+
+		foreach (Node child in container.GetChildren())
+		{
+			child.QueueFree();
+		}
+	}
+
+	private void OnOfficerInventoryOverlayGuiInput(InputEvent @event)
+	{
+		if (@event is not InputEventMouseButton mouseButton
+			|| !mouseButton.Pressed
+			|| mouseButton.ButtonIndex != MouseButton.Left)
+		{
+			return;
+		}
+
+		HideOfficerInventory();
+		_officerInventoryOverlay?.AcceptEvent();
+	}
+
+	private static Texture2D LoadPortraitTexture(string resourcePath)
+	{
+		if (string.IsNullOrWhiteSpace(resourcePath) || !ResourceLoader.Exists(resourcePath))
+		{
+			return null;
+		}
+
+		return ResourceLoader.Load<Texture2D>(resourcePath);
+	}
+
+	private static StyleBoxFlat CreateInventoryWindowStyle()
+	{
+		return new StyleBoxFlat
+		{
+			BgColor = new Color(0.17f, 0.13f, 0.11f, 0.98f),
+			BorderColor = new Color(0.55f, 0.50f, 0.44f, 1f),
+			BorderWidthLeft = 5,
+			BorderWidthTop = 5,
+			BorderWidthRight = 5,
+			BorderWidthBottom = 5,
+			CornerRadiusTopLeft = 16,
+			CornerRadiusTopRight = 16,
+			CornerRadiusBottomRight = 16,
+			CornerRadiusBottomLeft = 16,
+			ShadowColor = new Color(0f, 0f, 0f, 0.42f),
+			ShadowSize = 12,
+			ContentMarginLeft = 4f,
+			ContentMarginTop = 4f,
+			ContentMarginRight = 4f,
+			ContentMarginBottom = 4f
+		};
+	}
+
+	private static StyleBoxFlat CreateInventoryBannerStyle()
+	{
+		return new StyleBoxFlat
+		{
+			BgColor = new Color(0.31f, 0.24f, 0.18f, 0.98f),
+			BorderColor = new Color(0.68f, 0.60f, 0.45f, 1f),
+			BorderWidthLeft = 4,
+			BorderWidthTop = 4,
+			BorderWidthRight = 4,
+			BorderWidthBottom = 4,
+			CornerRadiusTopLeft = 12,
+			CornerRadiusTopRight = 12,
+			CornerRadiusBottomRight = 12,
+			CornerRadiusBottomLeft = 12
+		};
+	}
+
+	private static StyleBoxFlat CreateInventorySectionStyle(bool highlighted = false)
+	{
+		return new StyleBoxFlat
+		{
+			BgColor = highlighted ? new Color(0.25f, 0.20f, 0.17f, 0.96f) : new Color(0.14f, 0.11f, 0.09f, 0.96f),
+			BorderColor = highlighted ? new Color(0.72f, 0.60f, 0.42f, 1f) : new Color(0.44f, 0.40f, 0.36f, 1f),
+			BorderWidthLeft = 3,
+			BorderWidthTop = 3,
+			BorderWidthRight = 3,
+			BorderWidthBottom = 3,
+			CornerRadiusTopLeft = 10,
+			CornerRadiusTopRight = 10,
+			CornerRadiusBottomRight = 10,
+			CornerRadiusBottomLeft = 10
+		};
+	}
+
+	private static StyleBoxFlat CreateInventorySlotStyle(bool highlighted, bool empty)
+	{
+		return new StyleBoxFlat
+		{
+			BgColor = empty
+				? new Color(0.09f, 0.08f, 0.07f, 0.82f)
+				: highlighted
+					? new Color(0.34f, 0.23f, 0.14f, 0.94f)
+					: new Color(0.18f, 0.15f, 0.12f, 0.94f),
+			BorderColor = empty
+				? new Color(0.24f, 0.22f, 0.20f, 0.82f)
+				: highlighted
+					? new Color(0.86f, 0.70f, 0.42f, 1f)
+					: new Color(0.46f, 0.40f, 0.34f, 1f),
+			BorderWidthLeft = 2,
+			BorderWidthTop = 2,
+			BorderWidthRight = 2,
+			BorderWidthBottom = 2,
+			CornerRadiusTopLeft = 8,
+			CornerRadiusTopRight = 8,
+			CornerRadiusBottomRight = 8,
+			CornerRadiusBottomLeft = 8
+		};
+	}
+
+	private static StyleBoxFlat CreateInventoryRailStyle(bool active)
+	{
+		return new StyleBoxFlat
+		{
+			BgColor = active ? new Color(0.30f, 0.22f, 0.14f, 0.96f) : new Color(0.11f, 0.09f, 0.08f, 0.92f),
+			BorderColor = active ? new Color(0.82f, 0.68f, 0.40f, 1f) : new Color(0.36f, 0.33f, 0.30f, 1f),
+			BorderWidthLeft = 3,
+			BorderWidthTop = 3,
+			BorderWidthRight = 3,
+			BorderWidthBottom = 3,
+			CornerRadiusTopLeft = 10,
+			CornerRadiusTopRight = 10,
+			CornerRadiusBottomRight = 10,
+			CornerRadiusBottomLeft = 10
+		};
+	}
+
+	private static StyleBoxFlat CreateInventoryButtonStyle(bool hover = false)
+	{
+		return new StyleBoxFlat
+		{
+			BgColor = hover ? new Color(0.39f, 0.26f, 0.16f, 0.98f) : new Color(0.24f, 0.18f, 0.12f, 0.96f),
+			BorderColor = hover ? new Color(0.90f, 0.74f, 0.44f, 1f) : new Color(0.62f, 0.50f, 0.30f, 1f),
+			BorderWidthLeft = 3,
+			BorderWidthTop = 3,
+			BorderWidthRight = 3,
+			BorderWidthBottom = 3,
+			CornerRadiusTopLeft = 10,
+			CornerRadiusTopRight = 10,
+			CornerRadiusBottomRight = 10,
+			CornerRadiusBottomLeft = 10
+		};
 	}
 
 	private void ApplyOfficerApprovalEvent(OfficerApprovalEventType eventType, OfficerApprovalContext context = null)
@@ -3019,6 +4462,365 @@ public partial class BattleMap : Node2D
 		HideOfficerReplacementPrompt();
 		_activeReplacementShipName = string.Empty;
 		ShowPendingOfficerReplacementPromptIfNeeded();
+	}
+
+	private void OpenOfficerSwapMenu()
+	{
+		if (_globalData == null || CurrentlyViewedShip == null || string.IsNullOrWhiteSpace(CurrentlyViewedShip.Name))
+		{
+			return;
+		}
+
+		HideOfficerInventory();
+		_activeOfficerSwapShipName = CurrentlyViewedShip.Name;
+		PopulateOfficerSwapMenu(_activeOfficerSwapShipName);
+		if (_officerSwapMenuWrapper != null)
+		{
+			_officerSwapMenuWrapper.Visible = true;
+		}
+	}
+
+	private void HideOfficerSwapMenu()
+	{
+		if (_officerSwapMenuWrapper != null)
+		{
+			_officerSwapMenuWrapper.Visible = false;
+		}
+
+		_activeOfficerSwapShipName = string.Empty;
+	}
+
+	private void PopulateOfficerSwapMenu(string shipName)
+	{
+		if (_globalData == null
+			|| _officerSwapTitleLabel == null
+			|| _officerSwapBodyLabel == null
+			|| _officerSwapOptionList == null
+			|| _officerSwapStatusLabel == null)
+		{
+			return;
+		}
+
+		ClearContainerChildren(_officerSwapOptionList);
+		OfficerState currentOfficer = ResolveOfficerStateForShip(shipName);
+		string currentOfficerName = currentOfficer?.DisplayName ?? "No assigned officer";
+		string currentOfficerSpecialty = currentOfficer?.Specialty ?? "Unassigned";
+
+		_officerSwapTitleLabel.Text = $"OFFICER TRANSFER: {shipName.ToUpperInvariant()}";
+		_officerSwapBodyLabel.Text =
+			$"[center]Current officer: [color=cyan]{currentOfficerName}[/color][/center]\n" +
+			$"[center]{currentOfficerSpecialty}[/center]\n\n" +
+			$"Select a saved {CampaignText.RemnantsLabel.TrimEnd('s').ToLowerInvariant()} to assign to this ship. " +
+			$"If an officer is already posted here, they will move into the reserve roster and can be reassigned later.";
+
+		List<RemnantRecord> candidates = (_globalData.RescuedRemnants ?? new List<RemnantRecord>())
+			.Where(remnant => remnant != null && !string.IsNullOrWhiteSpace(remnant.RecordId))
+			.OrderByDescending(remnant => remnant.StoredOfficerState != null)
+			.ThenBy(remnant => remnant.DisplayName, StringComparer.OrdinalIgnoreCase)
+			.ToList();
+
+		if (candidates.Count == 0)
+		{
+			_officerSwapStatusLabel.Text = $"No saved {CampaignText.RemnantsLabel.ToLowerInvariant()} are currently available for reassignment.";
+			_officerSwapOptionList.AddChild(BuildInventoryPlaceholder($"No saved {CampaignText.RemnantsLabel.ToLowerInvariant()} available."));
+			return;
+		}
+
+		foreach (RemnantRecord remnant in candidates)
+		{
+			_officerSwapOptionList.AddChild(BuildOfficerSwapOptionCard(shipName, remnant));
+		}
+
+		_officerSwapStatusLabel.Text = $"Available reserve roster: {candidates.Count} {CampaignText.RemnantsLabel.ToLowerInvariant()}.";
+	}
+
+	private Control BuildOfficerSwapOptionCard(string shipName, RemnantRecord remnant)
+	{
+		PanelContainer card = new PanelContainer
+		{
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+		};
+		card.AddThemeStyleboxOverride("panel", CreateInventorySectionStyle());
+
+		MarginContainer margin = new MarginContainer();
+		margin.AddThemeConstantOverride("margin_left", 12);
+		margin.AddThemeConstantOverride("margin_top", 12);
+		margin.AddThemeConstantOverride("margin_right", 12);
+		margin.AddThemeConstantOverride("margin_bottom", 12);
+		card.AddChild(margin);
+
+		HBoxContainer row = new HBoxContainer();
+		row.AddThemeConstantOverride("separation", 12);
+		margin.AddChild(row);
+
+		VBoxContainer textColumn = new VBoxContainer
+		{
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+		};
+		textColumn.AddThemeConstantOverride("separation", 6);
+		row.AddChild(textColumn);
+
+		Label nameLabel = new Label
+		{
+			Text = string.IsNullOrWhiteSpace(remnant.DisplayName) ? "UNNAMED REMNANT" : remnant.DisplayName.ToUpperInvariant()
+		};
+		nameLabel.AddThemeFontSizeOverride("font_size", 18);
+		nameLabel.AddThemeColorOverride("font_color", Colors.White);
+		textColumn.AddChild(nameLabel);
+
+		string reserveTag = remnant.StoredOfficerState != null ? "Reserve Officer" : CampaignText.RemnantsLabel.TrimEnd('s');
+		string subtitle = remnant.StoredOfficerState != null
+			? $"{reserveTag} | {remnant.StoredOfficerState.Specialty} | Approval {remnant.StoredOfficerState.Approval}"
+			: $"{reserveTag} | {BuildRemnantCommissionSummary(remnant)}";
+		Label subtitleLabel = new Label
+		{
+			Text = subtitle,
+			AutowrapMode = TextServer.AutowrapMode.WordSmart
+		};
+		subtitleLabel.AddThemeColorOverride("font_color", new Color(0.84f, 0.92f, 1f));
+		textColumn.AddChild(subtitleLabel);
+
+		Label bodyLabel = new Label
+		{
+			Text = BuildRemnantSwapDescription(remnant),
+			AutowrapMode = TextServer.AutowrapMode.WordSmart
+		};
+		bodyLabel.AddThemeColorOverride("font_color", new Color(0.82f, 0.86f, 0.92f));
+		textColumn.AddChild(bodyLabel);
+
+		Button assignButton = new Button
+		{
+			Text = "ASSIGN",
+			CustomMinimumSize = new Vector2(140f, 42f),
+			SizeFlagsHorizontal = Control.SizeFlags.ShrinkCenter
+		};
+		string recordId = remnant.RecordId;
+		assignButton.Pressed += () => AssignRemnantToShip(shipName, recordId);
+		row.AddChild(assignButton);
+
+		return card;
+	}
+
+	private void AssignRemnantToShip(string shipName, string remnantRecordId)
+	{
+		if (_globalData == null || string.IsNullOrWhiteSpace(shipName) || string.IsNullOrWhiteSpace(remnantRecordId))
+		{
+			return;
+		}
+
+		List<RemnantRecord> roster = _globalData.RescuedRemnants ??= new List<RemnantRecord>();
+		RemnantRecord selectedRemnant = roster.FirstOrDefault(remnant => remnant != null && remnant.RecordId == remnantRecordId);
+		if (selectedRemnant == null)
+		{
+			if (_officerSwapStatusLabel != null)
+			{
+				_officerSwapStatusLabel.Text = "That reserve assignment is no longer available.";
+			}
+			return;
+		}
+
+		OfficerState incomingOfficer = CreateOfficerFromRemnant(selectedRemnant, shipName);
+		if (incomingOfficer == null)
+		{
+			if (_officerSwapStatusLabel != null)
+			{
+				_officerSwapStatusLabel.Text = "Unable to commission that reserve into officer duty right now.";
+			}
+			return;
+		}
+
+		OfficerState outgoingOfficer = ResolveOfficerStateForShip(shipName);
+		roster.Remove(selectedRemnant);
+		if (outgoingOfficer != null)
+		{
+			roster.Add(CreateRemnantFromOfficer(outgoingOfficer));
+		}
+
+		_officerService?.AssignOfficerToShip(shipName, incomingOfficer);
+		_globalData.PendingOfficerReplacementShipNames?.Remove(shipName);
+
+		if (UI?.CombatLogPanel != null)
+		{
+			UI.CombatLogPanel.Visible = true;
+			LogCombatMessage(outgoingOfficer == null
+				? $"[color=cyan]{incomingOfficer.DisplayName} is assigned to {shipName} from the reserve roster.[/color]"
+				: $"[color=cyan]{incomingOfficer.DisplayName} relieves {outgoingOfficer.DisplayName} aboard {shipName}.[/color]");
+		}
+
+		SaveCampaign(true);
+		HideOfficerSwapMenu();
+		if (CurrentlyViewedShip != null && CurrentlyViewedShip.Name == shipName)
+		{
+			ToggleShipMenu(true, CurrentlyViewedShip);
+		}
+	}
+
+	private OfficerState CreateOfficerFromRemnant(RemnantRecord remnant, string shipName)
+	{
+		if (remnant?.StoredOfficerState != null)
+		{
+			OfficerState restoredOfficer = remnant.StoredOfficerState.ToRuntime();
+			restoredOfficer.ShipName = shipName;
+			OfficerMissionLoadoutService.EnsureOfficerLoadout(restoredOfficer);
+			return restoredOfficer;
+		}
+
+		if (remnant == null || _officerService == null)
+		{
+			return null;
+		}
+
+		string seedKey = string.IsNullOrWhiteSpace(remnant.RecordId) ? remnant.DisplayName : remnant.RecordId;
+		OfficerState commissionedOfficer = _officerService.CreateCustomOfficer(new CustomOfficerRequest
+		{
+			ShipName = shipName,
+			DisplayName = string.IsNullOrWhiteSpace(remnant.DisplayName) ? $"Officer {shipName}" : remnant.DisplayName,
+			PortraitPath = remnant.PortraitPath,
+			Archetype = SelectBySeed(OfficerService.Archetypes, seedKey, 0),
+			Ideology = SelectBySeed(OfficerService.Ideologies, seedKey, 1),
+			Specialty = SelectBySeed(OfficerService.Specialties, seedKey, 2),
+			Flaw = SelectBySeed(OfficerService.Flaws, seedKey, 3),
+			BiographySeed = SelectBySeed(OfficerService.BiographySeeds, seedKey, 4)
+		});
+		if (commissionedOfficer == null)
+		{
+			return null;
+		}
+
+		commissionedOfficer.OfficerID = $"remnant_{SanitizeIdentifier(seedKey)}";
+		commissionedOfficer.Biography = BuildOfficerBiographyFromRemnant(remnant);
+		commissionedOfficer.PersonalInventoryItemIDs = (remnant.PersonalInventoryItemIDs ?? new List<string>()).ToList();
+		OfficerMissionLoadoutService.EnsureOfficerLoadout(commissionedOfficer);
+		return commissionedOfficer;
+	}
+
+	private static RemnantRecord CreateRemnantFromOfficer(OfficerState officer)
+	{
+		return new RemnantRecord
+		{
+			RecordId = $"reserve_officer_{officer?.OfficerID ?? Guid.NewGuid().ToString("N")}",
+			DisplayName = officer?.DisplayName ?? "Reserve Officer",
+			Description = officer == null
+				? "Former fleet officer awaiting reassignment."
+				: string.IsNullOrWhiteSpace(officer.Biography)
+					? "Former fleet officer awaiting reassignment."
+					: officer.Biography,
+			Notes = officer == null
+				? string.Empty
+				: $"Formerly assigned to {officer.ShipName}. Specialty: {officer.Specialty}.",
+			MissionId = string.Empty,
+			MissionTitle = "Fleet Reserve",
+			RescuedOnTurn = 0,
+			PortraitPath = officer?.PortraitPath ?? string.Empty,
+			DefinitionPath = string.Empty,
+			PersonalInventoryItemIDs = (officer?.PersonalInventoryItemIDs ?? new List<string>()).ToList(),
+			StoredOfficerState = OfficerStateSaveData.FromRuntime(officer)
+		};
+	}
+
+	private static string BuildRemnantSwapDescription(RemnantRecord remnant)
+	{
+		if (remnant?.StoredOfficerState != null)
+		{
+			List<string> parts = new List<string>();
+			if (!string.IsNullOrWhiteSpace(remnant.StoredOfficerState.Biography))
+			{
+				parts.Add(remnant.StoredOfficerState.Biography.Trim());
+			}
+
+			if (!string.IsNullOrWhiteSpace(remnant.StoredOfficerState.Flaw))
+			{
+				parts.Add($"Watchpoint: {remnant.StoredOfficerState.Flaw}.");
+			}
+
+			return string.Join("\n", parts.Where(part => !string.IsNullOrWhiteSpace(part)));
+		}
+
+		return BuildOfficerBiographyFromRemnant(remnant);
+	}
+
+	private static string BuildRemnantCommissionSummary(RemnantRecord remnant)
+	{
+		List<string> parts = new List<string>();
+		if (!string.IsNullOrWhiteSpace(remnant?.MissionTitle))
+		{
+			parts.Add(remnant.MissionTitle);
+		}
+
+		int carriedItems = remnant?.PersonalInventoryItemIDs?.Count ?? 0;
+		if (carriedItems > 0)
+		{
+			parts.Add($"{carriedItems} carried item{(carriedItems == 1 ? string.Empty : "s")}");
+		}
+
+		return parts.Count == 0 ? "Ready for field commission" : string.Join(" | ", parts);
+	}
+
+	private static string BuildOfficerBiographyFromRemnant(RemnantRecord remnant)
+	{
+		List<string> parts = new List<string>();
+		if (!string.IsNullOrWhiteSpace(remnant?.Description))
+		{
+			parts.Add(remnant.Description.Trim());
+		}
+
+		if (!string.IsNullOrWhiteSpace(remnant?.Notes))
+		{
+			parts.Add(remnant.Notes.Trim());
+		}
+
+		if (!string.IsNullOrWhiteSpace(remnant?.MissionTitle))
+		{
+			parts.Add($"Recovered during {remnant.MissionTitle}.");
+		}
+
+		return parts.Count == 0
+			? "A rescued remnant now stepping forward into fleet service."
+			: string.Join(" ", parts);
+	}
+
+	private static string SelectBySeed(IReadOnlyList<string> options, string seedKey, int salt)
+	{
+		if (options == null || options.Count == 0)
+		{
+			return string.Empty;
+		}
+
+		int index = Mathf.Abs(ComputeSeedHash(seedKey, salt)) % options.Count;
+		return options[index];
+	}
+
+	private static int ComputeSeedHash(string seedKey, int salt)
+	{
+		unchecked
+		{
+			int hash = 17 + salt;
+			foreach (char character in seedKey ?? string.Empty)
+			{
+				hash = (hash * 31) + character;
+			}
+
+			return hash;
+		}
+	}
+
+	private static string SanitizeIdentifier(string value)
+	{
+		if (string.IsNullOrWhiteSpace(value))
+		{
+			return "reserve";
+		}
+
+		char[] characters = value.Trim().ToLowerInvariant().ToCharArray();
+		for (int index = 0; index < characters.Length; index++)
+		{
+			if (!char.IsLetterOrDigit(characters[index]))
+			{
+				characters[index] = '_';
+			}
+		}
+
+		return new string(characters);
 	}
 
 	private Button BuildPauseMenuButton(string text, Action onPressed, float width = 260f)

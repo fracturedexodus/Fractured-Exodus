@@ -80,7 +80,10 @@ public static class CampaignItemRegistry
 			Description = dict.TryGetValue("description", out Variant descriptionVariant) ? descriptionVariant.AsString() : string.Empty,
 			Category = dict.TryGetValue("category", out Variant categoryVariant) ? categoryVariant.AsString() : "Mission Loot",
 			Stackable = !dict.TryGetValue("stackable", out Variant stackableVariant) || stackableVariant.AsBool(),
-			CodexEntryId = dict.TryGetValue("codex_entry_id", out Variant codexVariant) ? codexVariant.AsString() : string.Empty
+			CodexEntryId = dict.TryGetValue("codex_entry_id", out Variant codexVariant) ? codexVariant.AsString() : string.Empty,
+			MissionWeaponId = dict.TryGetValue("mission_weapon_id", out Variant weaponVariant) ? weaponVariant.AsString() : string.Empty,
+			MissionShieldId = dict.TryGetValue("mission_shield_id", out Variant shieldVariant) ? shieldVariant.AsString() : string.Empty,
+			ConsumeOnUnlock = dict.TryGetValue("consume_on_unlock", out Variant consumeVariant) && consumeVariant.AsBool()
 		};
 	}
 }

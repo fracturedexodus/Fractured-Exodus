@@ -4,5 +4,7 @@
 	"description": "A precision sensor crystal recovered from a sentry's ruined targeting assembly.",
 	"category": "Recovered Artifact",
 	"stackable": true,
-	"codex_entry_id": ""
+	"codex_entry_id": "",
+	"mission_weapon_id": "pulse_lance",
+	"consume_on_unlock": true
 }

@@ -90,6 +90,10 @@ public class MissionActorSaveData
 	public int CurrentActions { get; set; }
 	public string ActiveStatusEffectId { get; set; } = string.Empty;
 	public List<string> PersonalInventoryItemIDs { get; set; } = new List<string>();
+	public string EquippedMissionWeaponId { get; set; } = string.Empty;
+	public string EquippedMissionShieldId { get; set; } = string.Empty;
+	public List<string> OwnedMissionWeaponIds { get; set; } = new List<string>();
+	public List<string> OwnedMissionShieldIds { get; set; } = new List<string>();
 	public bool IsDead { get; set; }
 	public bool IsConsumed { get; set; }
 	public bool IsExtracted { get; set; }
@@ -106,6 +110,10 @@ public class MissionActorSaveData
 			{ "CurrentActions", CurrentActions },
 			{ "ActiveStatusEffectId", ActiveStatusEffectId },
 			{ "PersonalInventoryItemIDs", CampaignSaveData.ToVariantArray(PersonalInventoryItemIDs) },
+			{ "EquippedMissionWeaponId", EquippedMissionWeaponId },
+			{ "EquippedMissionShieldId", EquippedMissionShieldId },
+			{ "OwnedMissionWeaponIds", CampaignSaveData.ToVariantArray(OwnedMissionWeaponIds) },
+			{ "OwnedMissionShieldIds", CampaignSaveData.ToVariantArray(OwnedMissionShieldIds) },
 			{ "IsDead", IsDead },
 			{ "IsConsumed", IsConsumed },
 			{ "IsExtracted", IsExtracted }
@@ -126,6 +134,10 @@ public class MissionActorSaveData
 			CurrentActions = dict.ContainsKey("CurrentActions") ? (int)dict["CurrentActions"] : 0,
 			ActiveStatusEffectId = dict.ContainsKey("ActiveStatusEffectId") ? (string)dict["ActiveStatusEffectId"] : string.Empty,
 			PersonalInventoryItemIDs = CampaignSaveData.FromStringArray(dict.ContainsKey("PersonalInventoryItemIDs") ? (Godot.Collections.Array)dict["PersonalInventoryItemIDs"] : new Godot.Collections.Array()),
+			EquippedMissionWeaponId = dict.ContainsKey("EquippedMissionWeaponId") ? (string)dict["EquippedMissionWeaponId"] : string.Empty,
+			EquippedMissionShieldId = dict.ContainsKey("EquippedMissionShieldId") ? (string)dict["EquippedMissionShieldId"] : string.Empty,
+			OwnedMissionWeaponIds = CampaignSaveData.FromStringArray(dict.ContainsKey("OwnedMissionWeaponIds") ? (Godot.Collections.Array)dict["OwnedMissionWeaponIds"] : new Godot.Collections.Array()),
+			OwnedMissionShieldIds = CampaignSaveData.FromStringArray(dict.ContainsKey("OwnedMissionShieldIds") ? (Godot.Collections.Array)dict["OwnedMissionShieldIds"] : new Godot.Collections.Array()),
 			IsDead = dict.ContainsKey("IsDead") && (bool)dict["IsDead"],
 			IsConsumed = dict.ContainsKey("IsConsumed") && (bool)dict["IsConsumed"],
 			IsExtracted = dict.ContainsKey("IsExtracted") && (bool)dict["IsExtracted"]

@@ -4,5 +4,7 @@
 	"description": "A heavy charge cell stripped from a scavenger breaching maul, still warm with residual current.",
 	"category": "Field Salvage",
 	"stackable": true,
-	"codex_entry_id": ""
+	"codex_entry_id": "",
+	"mission_weapon_id": "shock_maul",
+	"consume_on_unlock": true
 }

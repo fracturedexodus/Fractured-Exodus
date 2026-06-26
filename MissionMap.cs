@@ -247,6 +247,10 @@ public partial class MissionMap : Node2D
 			_missionUi.CombatWeaponSwapRequested -= OnCombatWeaponSwapRequested;
 			_missionUi.ExplorationControlModeChosen -= OnExplorationControlModeChosen;
 			_missionUi.ExplorationOfficerChosen -= OnExplorationOfficerChosen;
+			_missionUi.ExplorationOfficerInventoryRequested -= OnExplorationOfficerInventoryRequested;
+			_missionUi.ExplorationUnitFocusRequested -= OnExplorationUnitFocusRequested;
+			_missionUi.OfficerInventoryWeaponEquipRequested -= OnOfficerInventoryWeaponEquipRequested;
+			_missionUi.OfficerInventoryShieldEquipRequested -= OnOfficerInventoryShieldEquipRequested;
 			_missionUi.MissionSaveConfirmed -= OnMissionSaveConfirmed;
 			_missionUi.StoryEventConfirmed -= OnStoryEventConfirmed;
 			_missionUi.ConfirmationAccepted -= OnConfirmationAccepted;
@@ -405,6 +409,20 @@ public partial class MissionMap : Node2D
 	{
 		if (_missionGameOver)
 		{
+			return;
+		}
+
+		if (_missionUi?.IsOfficerInventoryVisible ?? false)
+		{
+			if (@event is InputEventKey inventoryEscapeEvent
+				&& inventoryEscapeEvent.Pressed
+				&& !inventoryEscapeEvent.Echo
+				&& inventoryEscapeEvent.Keycode == Key.Escape)
+			{
+				_missionUi.HideOfficerInventory();
+				GetViewport().SetInputAsHandled();
+			}
+
 			return;
 		}
 
@@ -623,6 +641,16 @@ public partial class MissionMap : Node2D
 
 		_camera.Position = focusPosition / officers.Count;
 		ApplyZoom(MaxZoom);
+	}
+
+	private void FocusCameraOnUnit(Node2D unit)
+	{
+		if (_camera == null || unit == null)
+		{
+			return;
+		}
+
+		_camera.Position = unit.GlobalPosition;
 	}
 
 	private void EnsureBackgroundNodes()
@@ -2010,6 +2038,10 @@ public partial class MissionMap : Node2D
 		_missionUi.CombatWeaponSwapRequested += OnCombatWeaponSwapRequested;
 		_missionUi.ExplorationControlModeChosen += OnExplorationControlModeChosen;
 		_missionUi.ExplorationOfficerChosen += OnExplorationOfficerChosen;
+		_missionUi.ExplorationOfficerInventoryRequested += OnExplorationOfficerInventoryRequested;
+		_missionUi.ExplorationUnitFocusRequested += OnExplorationUnitFocusRequested;
+		_missionUi.OfficerInventoryWeaponEquipRequested += OnOfficerInventoryWeaponEquipRequested;
+		_missionUi.OfficerInventoryShieldEquipRequested += OnOfficerInventoryShieldEquipRequested;
 		_missionUi.MissionSaveConfirmed += OnMissionSaveConfirmed;
 		_missionUi.StoryEventConfirmed += OnStoryEventConfirmed;
 		_missionUi.ConfirmationAccepted += OnConfirmationAccepted;
@@ -2507,14 +2539,18 @@ public partial class MissionMap : Node2D
 					DefinitionPath = npc.DefinitionResourcePath,
 					Cell = Vector2ISaveData.FromVector2I(npc.CurrentCell),
 					CurrentHP = npc.CurrentHP,
-					CurrentShields = npc.CurrentShields,
-					CurrentActions = npc.CurrentActions,
-					ActiveStatusEffectId = npc.ActiveStatusEffectId,
-					PersonalInventoryItemIDs = npc.PersonalInventoryItemIDs.ToList(),
-					IsDead = npc.IsDead,
-					IsConsumed = npc.IsConsumed,
-					IsExtracted = npc.IsExtracted
-				})
+				CurrentShields = npc.CurrentShields,
+				CurrentActions = npc.CurrentActions,
+				ActiveStatusEffectId = npc.ActiveStatusEffectId,
+				PersonalInventoryItemIDs = npc.PersonalInventoryItemIDs.ToList(),
+				EquippedMissionWeaponId = npc.EquippedMissionWeaponId,
+				EquippedMissionShieldId = npc.EquippedMissionShieldId,
+				OwnedMissionWeaponIds = npc.OwnedMissionWeaponIds.ToList(),
+				OwnedMissionShieldIds = npc.OwnedMissionShieldIds.ToList(),
+				IsDead = npc.IsDead,
+				IsConsumed = npc.IsConsumed,
+				IsExtracted = npc.IsExtracted
+			})
 				.ToList(),
 			Props = _missionPropsByCell.Values
 				.Where(prop => prop != null && !string.IsNullOrWhiteSpace(prop.PropInstanceId))
@@ -2674,7 +2710,11 @@ public partial class MissionMap : Node2D
 				npcState.IsDead,
 				npcState.IsConsumed,
 				npcState.IsExtracted,
-				npcState.PersonalInventoryItemIDs);
+				npcState.PersonalInventoryItemIDs,
+				npcState.OwnedMissionWeaponIds,
+				npcState.OwnedMissionShieldIds,
+				npcState.EquippedMissionWeaponId,
+				npcState.EquippedMissionShieldId);
 		}
 
 		ReindexMissionNpcCells();
@@ -3255,7 +3295,8 @@ public partial class MissionMap : Node2D
 				DisplayName = officer.OfficerName,
 				Subtitle = officer.Specialty,
 				Icon = LoadPortraitTexture(officer.PortraitPath),
-				Selected = officer == primaryUnit
+				Selected = officer == primaryUnit,
+				CanInspectInventory = true
 			})
 			.ToList();
 
@@ -3267,7 +3308,8 @@ public partial class MissionMap : Node2D
 				DisplayName = survivor.DisplayName,
 				Subtitle = "Rescued Survivor",
 				Icon = LoadPortraitTexture(survivor.PortraitPath),
-				Selected = survivor == primaryUnit
+				Selected = survivor == primaryUnit,
+				CanInspectInventory = true
 			}));
 
 		return options
@@ -3306,6 +3348,37 @@ public partial class MissionMap : Node2D
 				SelectEscortSurvivor(survivor);
 				break;
 		}
+	}
+
+	private object ResolveExplorationUnit(string unitId)
+	{
+		if (string.IsNullOrWhiteSpace(unitId))
+		{
+			return null;
+		}
+
+		if (unitId.StartsWith("officer:", StringComparison.Ordinal))
+		{
+			string resolvedOfficerId = unitId["officer:".Length..];
+			return _officerPawns.FirstOrDefault(candidate =>
+				candidate != null
+				&& !candidate.IsDead
+				&& string.Equals(candidate.OfficerID, resolvedOfficerId, StringComparison.Ordinal));
+		}
+
+		if (unitId.StartsWith("survivor:", StringComparison.Ordinal))
+		{
+			string survivorNpcId = unitId["survivor:".Length..];
+			return _missionNpcs.FirstOrDefault(candidate =>
+				candidate != null
+				&& string.Equals(candidate.NpcId, survivorNpcId, StringComparison.Ordinal)
+				&& IsActiveEscortSurvivor(candidate));
+		}
+
+		return _officerPawns.FirstOrDefault(candidate =>
+			candidate != null
+			&& !candidate.IsDead
+			&& string.Equals(candidate.OfficerID, unitId, StringComparison.Ordinal));
 	}
 
 	private void UpdateSelectedOfficerDisplay()
@@ -5196,14 +5269,37 @@ public partial class MissionMap : Node2D
 			return false;
 		}
 
-		return TryCollectLootAtBuildCell(
+		List<string> unlockedEquipmentNames = new List<string>();
+		bool collected = TryCollectLootAtBuildCell(
 			GetBuildCell(officer.CurrentCell),
 			officer.OfficerName,
 			items =>
 			{
 				officerState.PersonalInventoryItemIDs ??= new List<string>();
 				officerState.PersonalInventoryItemIDs.AddRange(items);
+				unlockedEquipmentNames = OfficerMissionLoadoutService.ApplyCampaignItemUnlocks(officerState).ToList();
 			});
+		if (!collected)
+		{
+			return false;
+		}
+
+		if (unlockedEquipmentNames.Count > 0)
+		{
+			officer.RefreshLoadoutFromState();
+			string unlockedSummary = string.Join(", ", unlockedEquipmentNames);
+			string message = $"{officer.OfficerName} salvages and readies {unlockedSummary}.";
+			if (_combatActive)
+			{
+				AppendCombatLog(message);
+			}
+			else
+			{
+				AppendActionLog(message);
+			}
+		}
+
+		return true;
 	}
 
 	private bool TryCollectLootAtCurrentCell(MissionNpcPawn survivor)
@@ -5213,10 +5309,36 @@ public partial class MissionMap : Node2D
 			return false;
 		}
 
-		return TryCollectLootAtBuildCell(
+		List<string> unlockedEquipmentNames = new List<string>();
+		bool collected = TryCollectLootAtBuildCell(
 			GetBuildCell(survivor.CurrentCell),
 			survivor.DisplayName,
-			items => survivor.PersonalInventoryItemIDs.AddRange(items));
+			items =>
+			{
+				survivor.PersonalInventoryItemIDs.AddRange(items);
+				unlockedEquipmentNames = survivor.ApplyCampaignItemUnlocks().ToList();
+			});
+		if (!collected)
+		{
+			return false;
+		}
+
+		if (unlockedEquipmentNames.Count > 0)
+		{
+			survivor.RefreshLoadout();
+			string unlockedSummary = string.Join(", ", unlockedEquipmentNames);
+			string message = $"{survivor.DisplayName} salvages and readies {unlockedSummary}.";
+			if (_combatActive)
+			{
+				AppendCombatLog(message);
+			}
+			else
+			{
+				AppendActionLog(message);
+			}
+		}
+
+		return true;
 	}
 
 	private bool TryCollectLootAtBuildCell(Vector2I buildCell, string collectorName, Action<List<string>> assignItems)
@@ -6400,6 +6522,133 @@ public partial class MissionMap : Node2D
 			{
 				_explorationPartyMovementEnabled = false;
 				SelectEscortSurvivor(survivor);
+			}
+		}
+	}
+
+	private void OnExplorationUnitFocusRequested(string unitId)
+	{
+		if (_missionGameOver || string.IsNullOrWhiteSpace(unitId))
+		{
+			return;
+		}
+
+		switch (ResolveExplorationUnit(unitId))
+		{
+			case OfficerPawn officer:
+				FocusCameraOnUnit(officer);
+				break;
+			case MissionNpcPawn survivor:
+				FocusCameraOnUnit(survivor);
+				break;
+		}
+	}
+
+	private void OnExplorationOfficerInventoryRequested(string officerId)
+	{
+		if (_missionUi == null || _combatActive || _missionGameOver || string.IsNullOrWhiteSpace(officerId))
+		{
+			return;
+		}
+
+		MissionOfficerInventoryPanelData data = ResolveExplorationUnit(officerId) switch
+		{
+			OfficerPawn officer => BuildOfficerInventoryPanelData(officer),
+			MissionNpcPawn survivor => BuildSurvivorInventoryPanelData(survivor),
+			_ => null
+		};
+		if (data != null)
+		{
+			_missionUi.ShowOfficerInventory(data);
+		}
+	}
+
+	private void OnOfficerInventoryWeaponEquipRequested(string officerId, string weaponId)
+	{
+		if (_missionUi == null
+			|| _combatActive
+			|| _missionGameOver
+			|| string.IsNullOrWhiteSpace(officerId)
+			|| string.IsNullOrWhiteSpace(weaponId))
+		{
+			return;
+		}
+
+		switch (ResolveExplorationUnit(officerId))
+		{
+			case OfficerPawn officer when TryGetOfficerState(officer, out OfficerState officerState):
+			{
+				MissionWeaponDefinition weapon = MissionEquipmentRegistry.GetWeapon(weaponId);
+				if (weapon == null || !OfficerMissionLoadoutService.EquipWeapon(officerState, weaponId))
+				{
+					return;
+				}
+
+				officer.RefreshLoadoutFromState();
+				AppendActionLog($"{officer.OfficerName} equips {weapon.DisplayName}.");
+				UpdateSelectedOfficerDisplay();
+				RefreshCombatHud();
+				_missionUi.ShowOfficerInventory(BuildOfficerInventoryPanelData(officer));
+				return;
+			}
+			case MissionNpcPawn survivor:
+			{
+				MissionWeaponDefinition weapon = MissionEquipmentRegistry.GetWeapon(weaponId);
+				if (weapon == null || !survivor.EquipWeapon(weaponId))
+				{
+					return;
+				}
+
+				AppendActionLog($"{survivor.DisplayName} equips {weapon.DisplayName}.");
+				UpdateSelectedOfficerDisplay();
+				RefreshCombatHud();
+				_missionUi.ShowOfficerInventory(BuildSurvivorInventoryPanelData(survivor));
+				return;
+			}
+		}
+	}
+
+	private void OnOfficerInventoryShieldEquipRequested(string officerId, string shieldId)
+	{
+		if (_missionUi == null
+			|| _combatActive
+			|| _missionGameOver
+			|| string.IsNullOrWhiteSpace(officerId)
+			|| string.IsNullOrWhiteSpace(shieldId))
+		{
+			return;
+		}
+
+		switch (ResolveExplorationUnit(officerId))
+		{
+			case OfficerPawn officer when TryGetOfficerState(officer, out OfficerState officerState):
+			{
+				MissionShieldDefinition shield = MissionEquipmentRegistry.GetShield(shieldId);
+				if (shield == null || !OfficerMissionLoadoutService.EquipShield(officerState, shieldId))
+				{
+					return;
+				}
+
+				officer.RefreshLoadoutFromState();
+				AppendActionLog($"{officer.OfficerName} calibrates {shield.DisplayName}.");
+				UpdateSelectedOfficerDisplay();
+				RefreshCombatHud();
+				_missionUi.ShowOfficerInventory(BuildOfficerInventoryPanelData(officer));
+				return;
+			}
+			case MissionNpcPawn survivor:
+			{
+				MissionShieldDefinition shield = MissionEquipmentRegistry.GetShield(shieldId);
+				if (shield == null || !survivor.EquipShield(shieldId))
+				{
+					return;
+				}
+
+				AppendActionLog($"{survivor.DisplayName} calibrates {shield.DisplayName}.");
+				UpdateSelectedOfficerDisplay();
+				RefreshCombatHud();
+				_missionUi.ShowOfficerInventory(BuildSurvivorInventoryPanelData(survivor));
+				return;
 			}
 		}
 	}
@@ -8295,6 +8544,66 @@ public partial class MissionMap : Node2D
 		};
 	}
 
+	private MissionOfficerInventoryPanelData BuildOfficerInventoryPanelData(OfficerPawn officer)
+	{
+		if (officer == null || !TryGetOfficerState(officer, out OfficerState officerState))
+		{
+			return null;
+		}
+
+		OfficerMissionLoadoutService.EnsureOfficerLoadout(officerState);
+		List<MissionInventoryEntry> loadoutEntries = new List<MissionInventoryEntry>
+		{
+			new MissionInventoryEntry
+			{
+				Title = officer.WeaponName,
+				Detail = BuildWeaponDetailText(MissionEquipmentRegistry.GetWeapon(officerState.EquippedMissionWeaponId), officer),
+				Highlighted = true
+			},
+			new MissionInventoryEntry
+			{
+				Title = officer.ShieldName,
+				Detail = BuildShieldDetailText(MissionEquipmentRegistry.GetShield(officerState.EquippedMissionShieldId), officer),
+				Highlighted = true
+			},
+			new MissionInventoryEntry
+			{
+				Title = string.IsNullOrWhiteSpace(officer.CombatAbilityId) ? "Mission Discipline" : officer.CombatAbilityId,
+				Detail = string.IsNullOrWhiteSpace(officer.ActiveStatusEffectId)
+					? "Status stable. No active impairments."
+					: $"Current condition: {officer.ActiveStatusEffectId.Replace('_', ' ')}."
+			}
+		};
+
+		List<MissionInventoryEntry> weaponEntries = BuildWeaponInventoryEntries(officerState, officer);
+		List<MissionInventoryEntry> shieldEntries = BuildShieldInventoryEntries(officerState, officer);
+		List<MissionInventoryEntry> itemEntries = BuildItemInventoryEntries(officerState);
+		int carriedItems = (officerState.PersonalInventoryItemIDs ?? new List<string>()).Count;
+		string footerText = "Click a locker entry to equip it. Right-click another portrait to switch dossiers.";
+		if (weaponEntries.Count <= 1 && shieldEntries.Count <= 1)
+		{
+			footerText = carriedItems == 0
+				? "No extra salvage is stowed on this operative yet."
+				: $"Field pack holds {carriedItems} item{(carriedItems == 1 ? string.Empty : "s")}.";
+		}
+
+		return new MissionOfficerInventoryPanelData
+		{
+			OfficerId = $"officer:{officer.OfficerID}",
+			DisplayName = officer.OfficerName,
+			ShipName = officer.ShipName,
+			Specialty = officer.Specialty,
+			Portrait = LoadPortraitTexture(officer.PortraitPath),
+			SummaryText = BuildOfficerInventorySummaryText(officerState, officer),
+			VitalStatsText = BuildOfficerVitalStatsText(officerState, officer),
+			FooterText = footerText,
+			LoadoutEntries = loadoutEntries,
+			WeaponEntries = weaponEntries,
+			ShieldEntries = shieldEntries,
+			ItemEntries = itemEntries
+		};
+	}
+
 	private string BuildOfficerInventoryText(OfficerPawn officer)
 	{
 		if (officer == null || !TryGetOfficerState(officer, out OfficerState officerState))
@@ -8390,6 +8699,433 @@ public partial class MissionMap : Node2D
 		sections.Add($"{title}\n{string.Join("\n", lines)}");
 	}
 
+	private static List<MissionInventoryEntry> BuildWeaponInventoryEntries(OfficerState officerState, OfficerPawn officer)
+	{
+		List<MissionInventoryEntry> entries = OfficerMissionLoadoutService.GetOwnedWeaponIds(officerState)
+			.Where(weaponId => !string.IsNullOrWhiteSpace(weaponId))
+			.Distinct(StringComparer.Ordinal)
+			.Select(weaponId =>
+			{
+				MissionWeaponDefinition definition = MissionEquipmentRegistry.GetWeapon(weaponId);
+				bool isEquipped = string.Equals(weaponId, officerState.EquippedMissionWeaponId, StringComparison.Ordinal);
+				return new MissionInventoryEntry
+				{
+					EntryId = weaponId,
+					Title = definition?.DisplayName ?? weaponId,
+					Detail = BuildWeaponDetailText(definition, officer),
+					Highlighted = isEquipped,
+					CanActivate = true,
+					ActionText = isEquipped ? "EQUIPPED" : "EQUIP"
+				};
+			})
+			.OrderByDescending(entry => entry.Highlighted)
+			.ThenBy(entry => entry.Title, StringComparer.OrdinalIgnoreCase)
+			.ToList();
+
+		if (entries.Count == 0 && !string.IsNullOrWhiteSpace(officer?.WeaponName))
+		{
+			entries.Add(new MissionInventoryEntry
+			{
+				EntryId = officer.WeaponId,
+				Title = officer.WeaponName,
+				Detail = BuildWeaponDetailText(null, officer),
+				Highlighted = true,
+				CanActivate = true,
+				ActionText = "EQUIPPED"
+			});
+		}
+
+		return entries;
+	}
+
+	private static List<MissionInventoryEntry> BuildShieldInventoryEntries(OfficerState officerState, OfficerPawn officer)
+	{
+		List<MissionInventoryEntry> entries = OfficerMissionLoadoutService.GetOwnedShieldIds(officerState)
+			.Where(shieldId => !string.IsNullOrWhiteSpace(shieldId))
+			.Distinct(StringComparer.Ordinal)
+			.Select(shieldId =>
+			{
+				MissionShieldDefinition definition = MissionEquipmentRegistry.GetShield(shieldId);
+				bool isEquipped = string.Equals(shieldId, officerState.EquippedMissionShieldId, StringComparison.Ordinal);
+				return new MissionInventoryEntry
+				{
+					EntryId = shieldId,
+					Title = definition?.DisplayName ?? shieldId,
+					Detail = BuildShieldDetailText(definition, officer),
+					Highlighted = isEquipped,
+					CanActivate = true,
+					ActionText = isEquipped ? "EQUIPPED" : "EQUIP"
+				};
+			})
+			.OrderByDescending(entry => entry.Highlighted)
+			.ThenBy(entry => entry.Title, StringComparer.OrdinalIgnoreCase)
+			.ToList();
+
+		if (entries.Count == 0 && !string.IsNullOrWhiteSpace(officer?.ShieldName))
+		{
+			entries.Add(new MissionInventoryEntry
+			{
+				EntryId = officer.ShieldName,
+				Title = officer.ShieldName,
+				Detail = BuildShieldDetailText(null, officer),
+				Highlighted = true,
+				CanActivate = true,
+				ActionText = "EQUIPPED"
+			});
+		}
+
+		return entries;
+	}
+
+	private static List<MissionInventoryEntry> BuildItemInventoryEntries(OfficerState officerState)
+	{
+		return (officerState?.PersonalInventoryItemIDs ?? new List<string>())
+			.Where(itemId => !string.IsNullOrWhiteSpace(itemId))
+			.GroupBy(itemId => itemId, StringComparer.Ordinal)
+			.Select(group =>
+			{
+				CampaignItemDefinition definition = CampaignItemRegistry.GetItem(group.Key);
+				return new MissionInventoryEntry
+				{
+					Title = definition?.DisplayName ?? group.Key,
+					Detail = BuildItemDetailText(definition),
+					QuantityText = group.Count() > 1 ? $"x{group.Count()}" : string.Empty
+				};
+			})
+			.OrderBy(entry => entry.Title, StringComparer.OrdinalIgnoreCase)
+			.ToList();
+	}
+
+	private static string BuildOfficerInventorySummaryText(OfficerState officerState, OfficerPawn officer)
+	{
+		List<string> notes = new List<string>();
+		if (!string.IsNullOrWhiteSpace(officerState?.Biography))
+		{
+			notes.Add(officerState.Biography.Trim());
+		}
+		else
+		{
+			notes.Add("No formal dossier has been written for this operative yet.");
+		}
+
+		if (!string.IsNullOrWhiteSpace(officerState?.Archetype) || !string.IsNullOrWhiteSpace(officerState?.Ideology))
+		{
+			notes.Add($"Alignment: {officerState.Archetype} with {officerState.Ideology} leanings.");
+		}
+
+		if (!string.IsNullOrWhiteSpace(officerState?.Flaw))
+		{
+			notes.Add($"Watchpoint: {officerState.Flaw}.");
+		}
+
+		if (!string.IsNullOrWhiteSpace(officer?.CombatAbilityId))
+		{
+			notes.Add($"Combat discipline: {officer.CombatAbilityId}.");
+		}
+
+		return string.Join("\n\n", notes.Where(note => !string.IsNullOrWhiteSpace(note)));
+	}
+
+	private static string BuildOfficerVitalStatsText(OfficerState officerState, OfficerPawn officer)
+	{
+		List<string> lines = new List<string>
+		{
+			$"HP        {officer.CurrentHP}/{officer.MaxHP}",
+			$"SHIELDS   {officer.CurrentShields}/{officer.MaxShields}",
+			$"ACTIONS   {officer.CurrentActions}/{officer.MaxActions}",
+			$"RANGE     {officer.AttackRange}",
+			$"DAMAGE    {officer.AttackMinDamage}-{officer.AttackDamage}",
+			$"INIT      +{officer.InitiativeBonus}",
+			$"APPROVAL  {officerState?.Approval ?? 0}",
+			$"STRESS    {officerState?.Stress ?? 0}"
+		};
+
+		if (officer.ShieldRechargePerTurn > 0)
+		{
+			lines.Add($"RECHARGE  +{officer.ShieldRechargePerTurn}/turn");
+		}
+
+		return string.Join("\n", lines);
+	}
+
+	private static string BuildWeaponDetailText(MissionWeaponDefinition definition, OfficerPawn officer = null, MissionNpcPawn survivor = null)
+	{
+		List<string> parts = new List<string>();
+		if (definition != null)
+		{
+			parts.Add(definition.IsMelee ? "Melee" : $"Range {definition.AttackRange}");
+			parts.Add($"DMG {definition.MinDamage}-{definition.MaxDamage}");
+			if (definition.BonusShieldDamage > 0)
+			{
+				parts.Add($"+{definition.BonusShieldDamage} vs shields");
+			}
+
+			if (definition.ShieldPiercingDamage > 0)
+			{
+				parts.Add($"{definition.ShieldPiercingDamage} pierce");
+			}
+
+			if (!string.IsNullOrWhiteSpace(definition.StatusEffectId))
+			{
+				int chancePercent = Mathf.RoundToInt(definition.StatusEffectChance * 100f);
+				parts.Add($"{definition.StatusEffectId.Replace('_', ' ')} {chancePercent}%");
+			}
+
+			if (!string.IsNullOrWhiteSpace(definition.Description))
+			{
+				parts.Add(definition.Description);
+			}
+
+			return string.Join(" | ", parts);
+		}
+
+		if (officer != null)
+		{
+			parts.Add(officer.UsesMeleeWeapon ? "Melee" : $"Range {officer.AttackRange}");
+			parts.Add($"DMG {officer.AttackMinDamage}-{officer.AttackDamage}");
+			if (officer.BonusShieldDamage > 0)
+			{
+				parts.Add($"+{officer.BonusShieldDamage} vs shields");
+			}
+
+			if (officer.ShieldPiercingDamage > 0)
+			{
+				parts.Add($"{officer.ShieldPiercingDamage} pierce");
+			}
+		}
+		else if (survivor != null)
+		{
+			parts.Add(survivor.UsesMeleeWeapon ? "Melee" : $"Range {survivor.AttackRange}");
+			parts.Add($"DMG {survivor.AttackMinDamage}-{survivor.AttackDamage}");
+			if (survivor.BonusShieldDamage > 0)
+			{
+				parts.Add($"+{survivor.BonusShieldDamage} vs shields");
+			}
+
+			if (survivor.ShieldPiercingDamage > 0)
+			{
+				parts.Add($"{survivor.ShieldPiercingDamage} pierce");
+			}
+		}
+
+		return string.Join(" | ", parts);
+	}
+
+	private static string BuildShieldDetailText(MissionShieldDefinition definition, OfficerPawn officer = null, MissionNpcPawn survivor = null)
+	{
+		List<string> parts = new List<string>();
+		if (definition != null)
+		{
+			parts.Add($"+{definition.CapacityBonus} capacity");
+			parts.Add($"+{definition.RechargePerTurn}/turn");
+			if (!string.IsNullOrWhiteSpace(definition.Description))
+			{
+				parts.Add(definition.Description);
+			}
+
+			return string.Join(" | ", parts);
+		}
+
+		if (officer != null)
+		{
+			parts.Add($"Capacity {officer.MaxShields}");
+			parts.Add($"+{officer.ShieldRechargePerTurn}/turn");
+		}
+		else if (survivor != null)
+		{
+			parts.Add($"Capacity {survivor.MaxShields}");
+			parts.Add($"+{survivor.ShieldRechargePerTurn}/turn");
+		}
+
+		return string.Join(" | ", parts);
+	}
+
+	private static string BuildItemDetailText(CampaignItemDefinition definition)
+	{
+		if (definition == null)
+		{
+			return "Recovered mission salvage.";
+		}
+
+		List<string> parts = new List<string>();
+		if (!string.IsNullOrWhiteSpace(definition.Category))
+		{
+			parts.Add(definition.Category);
+		}
+
+		if (!string.IsNullOrWhiteSpace(definition.Description))
+		{
+			parts.Add(definition.Description);
+		}
+
+		return parts.Count == 0 ? "Recovered mission salvage." : string.Join(" | ", parts);
+	}
+
+	private MissionOfficerInventoryPanelData BuildSurvivorInventoryPanelData(MissionNpcPawn survivor)
+	{
+		if (!IsActiveEscortSurvivor(survivor))
+		{
+			return null;
+		}
+
+		survivor.GetOwnedWeaponIds();
+		survivor.GetOwnedShieldIds();
+		List<MissionInventoryEntry> loadoutEntries = new List<MissionInventoryEntry>
+		{
+			new MissionInventoryEntry
+			{
+				Title = survivor.WeaponName,
+				Detail = BuildWeaponDetailText(MissionEquipmentRegistry.GetWeapon(survivor.EquippedMissionWeaponId), null, survivor),
+				Highlighted = true
+			},
+			new MissionInventoryEntry
+			{
+				Title = survivor.ShieldName,
+				Detail = BuildShieldDetailText(MissionEquipmentRegistry.GetShield(survivor.EquippedMissionShieldId), null, survivor),
+				Highlighted = true
+			},
+			new MissionInventoryEntry
+			{
+				Title = "Escort Status",
+				Detail = string.IsNullOrWhiteSpace(survivor.ActiveStatusEffectId)
+					? "Able to move, scavenge, and defend the evac route."
+					: $"Current condition: {survivor.ActiveStatusEffectId.Replace('_', ' ')}."
+			}
+		};
+
+		List<MissionInventoryEntry> weaponEntries = BuildSurvivorWeaponInventoryEntries(survivor);
+		List<MissionInventoryEntry> shieldEntries = BuildSurvivorShieldInventoryEntries(survivor);
+		List<MissionInventoryEntry> itemEntries = BuildSurvivorItemInventoryEntries(survivor);
+		int carriedItems = survivor.PersonalInventoryItemIDs.Count;
+		string footerText = "Click a locker entry to equip it. Right-click another portrait to switch dossiers.";
+		if (weaponEntries.Count <= 1 && shieldEntries.Count <= 1)
+		{
+			footerText = carriedItems == 0
+				? "This survivor is carrying no extra salvage."
+				: $"Field pack holds {carriedItems} item{(carriedItems == 1 ? string.Empty : "s")}.";
+		}
+
+		return new MissionOfficerInventoryPanelData
+		{
+			OfficerId = $"survivor:{survivor.NpcId}",
+			DisplayName = survivor.DisplayName,
+			ShipName = CampaignText.RemnantsLabel,
+			Specialty = "Rescued Survivor",
+			Portrait = LoadPortraitTexture(survivor.PortraitPath),
+			SummaryText = BuildSurvivorInventorySummaryText(survivor),
+			VitalStatsText = BuildSurvivorVitalStatsText(survivor),
+			FooterText = footerText,
+			LoadoutEntries = loadoutEntries,
+			WeaponEntries = weaponEntries,
+			ShieldEntries = shieldEntries,
+			ItemEntries = itemEntries
+		};
+	}
+
+	private static List<MissionInventoryEntry> BuildSurvivorWeaponInventoryEntries(MissionNpcPawn survivor)
+	{
+		return survivor.GetOwnedWeaponIds()
+			.Where(weaponId => !string.IsNullOrWhiteSpace(weaponId))
+			.Distinct(StringComparer.Ordinal)
+			.Select(weaponId =>
+			{
+				MissionWeaponDefinition definition = MissionEquipmentRegistry.GetWeapon(weaponId);
+				bool isEquipped = string.Equals(weaponId, survivor.EquippedMissionWeaponId, StringComparison.Ordinal);
+				return new MissionInventoryEntry
+				{
+					EntryId = weaponId,
+					Title = definition?.DisplayName ?? weaponId,
+					Detail = BuildWeaponDetailText(definition, null, survivor),
+					Highlighted = isEquipped,
+					CanActivate = true,
+					ActionText = isEquipped ? "EQUIPPED" : "EQUIP"
+				};
+			})
+			.OrderByDescending(entry => entry.Highlighted)
+			.ThenBy(entry => entry.Title, StringComparer.OrdinalIgnoreCase)
+			.ToList();
+	}
+
+	private static List<MissionInventoryEntry> BuildSurvivorShieldInventoryEntries(MissionNpcPawn survivor)
+	{
+		return survivor.GetOwnedShieldIds()
+			.Where(shieldId => !string.IsNullOrWhiteSpace(shieldId))
+			.Distinct(StringComparer.Ordinal)
+			.Select(shieldId =>
+			{
+				MissionShieldDefinition definition = MissionEquipmentRegistry.GetShield(shieldId);
+				bool isEquipped = string.Equals(shieldId, survivor.EquippedMissionShieldId, StringComparison.Ordinal);
+				return new MissionInventoryEntry
+				{
+					EntryId = shieldId,
+					Title = definition?.DisplayName ?? shieldId,
+					Detail = BuildShieldDetailText(definition, null, survivor),
+					Highlighted = isEquipped,
+					CanActivate = true,
+					ActionText = isEquipped ? "EQUIPPED" : "EQUIP"
+				};
+			})
+			.OrderByDescending(entry => entry.Highlighted)
+			.ThenBy(entry => entry.Title, StringComparer.OrdinalIgnoreCase)
+			.ToList();
+	}
+
+	private static List<MissionInventoryEntry> BuildSurvivorItemInventoryEntries(MissionNpcPawn survivor)
+	{
+		return (survivor?.PersonalInventoryItemIDs ?? new List<string>())
+			.Where(itemId => !string.IsNullOrWhiteSpace(itemId))
+			.GroupBy(itemId => itemId, StringComparer.Ordinal)
+			.Select(group =>
+			{
+				CampaignItemDefinition definition = CampaignItemRegistry.GetItem(group.Key);
+				return new MissionInventoryEntry
+				{
+					Title = definition?.DisplayName ?? group.Key,
+					Detail = BuildItemDetailText(definition),
+					QuantityText = group.Count() > 1 ? $"x{group.Count()}" : string.Empty
+				};
+			})
+			.OrderBy(entry => entry.Title, StringComparer.OrdinalIgnoreCase)
+			.ToList();
+	}
+
+	private static string BuildSurvivorInventorySummaryText(MissionNpcPawn survivor)
+	{
+		List<string> notes = new List<string>();
+		if (!string.IsNullOrWhiteSpace(survivor?.Description))
+		{
+			notes.Add(survivor.Description.Trim());
+		}
+
+		if (!string.IsNullOrWhiteSpace(survivor?.Notes))
+		{
+			notes.Add(survivor.Notes.Trim());
+		}
+
+		notes.Add("Recovered survivors can scavenge the battlefield and carry away-team equipment during extraction.");
+		return string.Join("\n\n", notes.Where(note => !string.IsNullOrWhiteSpace(note)));
+	}
+
+	private static string BuildSurvivorVitalStatsText(MissionNpcPawn survivor)
+	{
+		List<string> lines = new List<string>
+		{
+			$"HP        {survivor.CurrentHP}/{survivor.MaxHP}",
+			$"SHIELDS   {survivor.CurrentShields}/{survivor.MaxShields}",
+			$"ACTIONS   {survivor.CurrentActions}/{survivor.MaxActions}",
+			$"RANGE     {survivor.AttackRange}",
+			$"DAMAGE    {survivor.AttackMinDamage}-{survivor.AttackDamage}",
+			$"INIT      +{survivor.InitiativeBonus}"
+		};
+
+		if (survivor.ShieldRechargePerTurn > 0)
+		{
+			lines.Add($"RECHARGE  +{survivor.ShieldRechargePerTurn}/turn");
+		}
+
+		return string.Join("\n", lines);
+	}
+
 	private MissionCombatantSummary BuildEnemySummary(MissionNpcPawn enemy)
 	{
 		if (enemy == null)
@@ -8433,16 +9169,26 @@ public partial class MissionMap : Node2D
 			return string.Empty;
 		}
 
+		List<string> sections = new List<string>();
+		List<string> weaponLines = BuildNamedInventoryLines(
+			npc.GetOwnedWeaponIds(),
+			npc.EquippedMissionWeaponId,
+			weaponId => MissionEquipmentRegistry.GetWeapon(weaponId)?.DisplayName);
+		List<string> shieldLines = BuildNamedInventoryLines(
+			npc.GetOwnedShieldIds(),
+			npc.EquippedMissionShieldId,
+			shieldId => MissionEquipmentRegistry.GetShield(shieldId)?.DisplayName);
 		List<string> itemLines = BuildStackedInventoryLines(
 			npc.PersonalInventoryItemIDs,
 			itemId => CampaignItemRegistry.GetItem(itemId)?.DisplayName);
-		if (itemLines.Count == 0)
+		AppendInventorySection(sections, "WEAPONS", weaponLines);
+		AppendInventorySection(sections, "SHIELDS", shieldLines);
+		AppendInventorySection(sections, "ITEMS", itemLines);
+		if (sections.Count == 0)
 		{
 			return string.Empty;
 		}
 
-		List<string> sections = new List<string>();
-		AppendInventorySection(sections, "ITEMS", itemLines);
 		return string.Join("\n\n", sections);
 	}
 

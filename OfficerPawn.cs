@@ -204,6 +204,19 @@ public partial class OfficerPawn : Node2D
 		return true;
 	}
 
+	public bool RefreshLoadoutFromState()
+	{
+		if (_officerState == null)
+		{
+			return false;
+		}
+
+		OfficerMissionLoadoutService.EnsureOfficerLoadout(_officerState);
+		ApplyMissionLoadout(_officerState);
+		EmitSignal(SignalName.CombatStateChanged, this);
+		return true;
+	}
+
 	public bool CanSpendActions(int amount)
 	{
 		return !IsDead && amount > 0 && CurrentActions >= amount;

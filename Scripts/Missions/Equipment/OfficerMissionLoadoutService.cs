@@ -13,6 +13,7 @@ public static class OfficerMissionLoadoutService
 
 		officer.OwnedMissionWeaponIds ??= new List<string>();
 		officer.OwnedMissionShieldIds ??= new List<string>();
+		ApplyCampaignItemUnlocks(officer);
 		officer.OwnedMissionWeaponIds = SanitizeOwnedIds(officer.OwnedMissionWeaponIds, MissionEquipmentRegistry.GetWeapon);
 		officer.OwnedMissionShieldIds = SanitizeOwnedIds(officer.OwnedMissionShieldIds, MissionEquipmentRegistry.GetShield);
 
@@ -36,6 +37,65 @@ public static class OfficerMissionLoadoutService
 		{
 			officer.OwnedMissionShieldIds.Add(officer.EquippedMissionShieldId);
 		}
+	}
+
+	public static IReadOnlyList<string> ApplyCampaignItemUnlocks(OfficerState officer)
+	{
+		if (officer == null)
+		{
+			return Array.Empty<string>();
+		}
+
+		officer.PersonalInventoryItemIDs ??= new List<string>();
+		officer.OwnedMissionWeaponIds ??= new List<string>();
+		officer.OwnedMissionShieldIds ??= new List<string>();
+
+		List<string> unlockedDisplayNames = new List<string>();
+		List<string> remainingItems = new List<string>();
+		foreach (string itemId in officer.PersonalInventoryItemIDs)
+		{
+			if (string.IsNullOrWhiteSpace(itemId))
+			{
+				continue;
+			}
+
+			CampaignItemDefinition item = CampaignItemRegistry.GetItem(itemId);
+			bool itemProvidesEquipment = false;
+			if (!string.IsNullOrWhiteSpace(item?.MissionWeaponId) && MissionEquipmentRegistry.GetWeapon(item.MissionWeaponId) != null)
+			{
+				itemProvidesEquipment = true;
+				if (!officer.OwnedMissionWeaponIds.Contains(item.MissionWeaponId))
+				{
+					officer.OwnedMissionWeaponIds.Add(item.MissionWeaponId);
+					unlockedDisplayNames.Add(MissionEquipmentRegistry.GetWeapon(item.MissionWeaponId)?.DisplayName ?? item.MissionWeaponId);
+				}
+			}
+
+			if (!string.IsNullOrWhiteSpace(item?.MissionShieldId) && MissionEquipmentRegistry.GetShield(item.MissionShieldId) != null)
+			{
+				itemProvidesEquipment = true;
+				if (!officer.OwnedMissionShieldIds.Contains(item.MissionShieldId))
+				{
+					officer.OwnedMissionShieldIds.Add(item.MissionShieldId);
+					unlockedDisplayNames.Add(MissionEquipmentRegistry.GetShield(item.MissionShieldId)?.DisplayName ?? item.MissionShieldId);
+				}
+			}
+
+			if (!(item?.ConsumeOnUnlock == true && itemProvidesEquipment))
+			{
+				remainingItems.Add(itemId);
+			}
+		}
+
+		if (remainingItems.Count != officer.PersonalInventoryItemIDs.Count)
+		{
+			officer.PersonalInventoryItemIDs = remainingItems;
+		}
+
+		return unlockedDisplayNames
+			.Where(name => !string.IsNullOrWhiteSpace(name))
+			.Distinct(StringComparer.Ordinal)
+			.ToList();
 	}
 
 	public static IReadOnlyList<string> GetOwnedWeaponIds(OfficerState officer)

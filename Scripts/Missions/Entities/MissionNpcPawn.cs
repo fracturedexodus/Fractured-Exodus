@@ -1,4 +1,5 @@
 using Godot;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -48,6 +49,10 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 	public float WeaponStatusEffectChance { get; private set; }
 	public string ActiveStatusEffectId { get; private set; } = string.Empty;
 	public List<string> PersonalInventoryItemIDs { get; private set; } = new List<string>();
+	public string EquippedMissionWeaponId { get; private set; } = string.Empty;
+	public string EquippedMissionShieldId { get; private set; } = string.Empty;
+	public List<string> OwnedMissionWeaponIds { get; private set; } = new List<string>();
+	public List<string> OwnedMissionShieldIds { get; private set; } = new List<string>();
 	public bool IsDead { get; private set; }
 	public bool IsExtracted { get; private set; }
 	public bool IsMoving => _isMoving;
@@ -79,6 +84,16 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 	private Color _reactionFlashColor = Colors.White;
 	private float _facingHoldTimer;
 	private bool _useDirectionalTextures;
+	private string _defaultWeaponDefinitionId = string.Empty;
+	private string _defaultShieldDefinitionId = string.Empty;
+	private int _baseAttackMinDamage = 1;
+	private int _baseAttackRange = 1;
+	private int _baseAttackDamage = 3;
+	private string _baseWeaponName = "Claws";
+	private string _baseShieldName = "Reactive Screen";
+	private int _baseMaxShields = 0;
+	private int _baseShieldRechargePerTurn = 1;
+	private bool _baseUsesMeleeWeapon;
 
 	public override void _Ready()
 	{
@@ -246,6 +261,10 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 		PersonalInventoryItemIDs = (definition.PersonalInventoryItemIDs ?? new Godot.Collections.Array<string>())
 			.Where(itemId => !string.IsNullOrWhiteSpace(itemId))
 			.ToList();
+		OwnedMissionWeaponIds = new List<string>();
+		OwnedMissionShieldIds = new List<string>();
+		EquippedMissionWeaponId = string.Empty;
+		EquippedMissionShieldId = string.Empty;
 		ApplyEquipmentDefinitions(definition);
 
 		if (_visualSprite != null)
@@ -345,8 +364,30 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 		_isMoving = false;
 	}
 
-	public void ApplySavedRuntimeState(int currentHp, int currentShields, int currentActions, string activeStatusEffectId, bool isDead, bool isConsumed, bool isExtracted, IReadOnlyList<string> personalInventoryItemIds = null)
+	public void ApplySavedRuntimeState(
+		int currentHp,
+		int currentShields,
+		int currentActions,
+		string activeStatusEffectId,
+		bool isDead,
+		bool isConsumed,
+		bool isExtracted,
+		IReadOnlyList<string> personalInventoryItemIds = null,
+		IReadOnlyList<string> ownedMissionWeaponIds = null,
+		IReadOnlyList<string> ownedMissionShieldIds = null,
+		string equippedMissionWeaponId = "",
+		string equippedMissionShieldId = "")
 	{
+		OwnedMissionWeaponIds = (ownedMissionWeaponIds ?? new List<string>())
+			.Where(weaponId => !string.IsNullOrWhiteSpace(weaponId))
+			.ToList();
+		OwnedMissionShieldIds = (ownedMissionShieldIds ?? new List<string>())
+			.Where(shieldId => !string.IsNullOrWhiteSpace(shieldId))
+			.ToList();
+		EquippedMissionWeaponId = equippedMissionWeaponId ?? string.Empty;
+		EquippedMissionShieldId = equippedMissionShieldId ?? string.Empty;
+		EnsureMissionLoadout();
+		ApplyCurrentEquipmentDefinitions();
 		CurrentHP = Mathf.Clamp(currentHp, 0, MaxHP);
 		CurrentShields = Mathf.Clamp(currentShields, 0, MaxShields);
 		CurrentActions = Mathf.Clamp(currentActions, 0, MaxActions);
@@ -386,6 +427,119 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 
 		Visible = true;
 		SetProcess(true);
+	}
+
+	public IReadOnlyList<string> GetOwnedWeaponIds()
+	{
+		EnsureMissionLoadout();
+		return OwnedMissionWeaponIds.ToList();
+	}
+
+	public IReadOnlyList<string> GetOwnedShieldIds()
+	{
+		EnsureMissionLoadout();
+		return OwnedMissionShieldIds.ToList();
+	}
+
+	public IReadOnlyList<string> ApplyCampaignItemUnlocks()
+	{
+		PersonalInventoryItemIDs ??= new List<string>();
+		OwnedMissionWeaponIds ??= new List<string>();
+		OwnedMissionShieldIds ??= new List<string>();
+
+		List<string> unlockedDisplayNames = new List<string>();
+		List<string> remainingItems = new List<string>();
+		foreach (string itemId in PersonalInventoryItemIDs)
+		{
+			if (string.IsNullOrWhiteSpace(itemId))
+			{
+				continue;
+			}
+
+			CampaignItemDefinition item = CampaignItemRegistry.GetItem(itemId);
+			bool itemProvidesEquipment = false;
+			if (!string.IsNullOrWhiteSpace(item?.MissionWeaponId) && MissionEquipmentRegistry.GetWeapon(item.MissionWeaponId) != null)
+			{
+				itemProvidesEquipment = true;
+				if (!OwnedMissionWeaponIds.Contains(item.MissionWeaponId))
+				{
+					OwnedMissionWeaponIds.Add(item.MissionWeaponId);
+					unlockedDisplayNames.Add(MissionEquipmentRegistry.GetWeapon(item.MissionWeaponId)?.DisplayName ?? item.MissionWeaponId);
+				}
+			}
+
+			if (!string.IsNullOrWhiteSpace(item?.MissionShieldId) && MissionEquipmentRegistry.GetShield(item.MissionShieldId) != null)
+			{
+				itemProvidesEquipment = true;
+				if (!OwnedMissionShieldIds.Contains(item.MissionShieldId))
+				{
+					OwnedMissionShieldIds.Add(item.MissionShieldId);
+					unlockedDisplayNames.Add(MissionEquipmentRegistry.GetShield(item.MissionShieldId)?.DisplayName ?? item.MissionShieldId);
+				}
+			}
+
+			if (!(item?.ConsumeOnUnlock == true && itemProvidesEquipment))
+			{
+				remainingItems.Add(itemId);
+			}
+		}
+
+		if (remainingItems.Count != PersonalInventoryItemIDs.Count)
+		{
+			PersonalInventoryItemIDs = remainingItems;
+		}
+
+		EnsureMissionLoadout();
+		return unlockedDisplayNames
+			.Where(name => !string.IsNullOrWhiteSpace(name))
+			.Distinct(StringComparer.Ordinal)
+			.ToList();
+	}
+
+	public bool EquipWeapon(string weaponId)
+	{
+		if (string.IsNullOrWhiteSpace(weaponId) || MissionEquipmentRegistry.GetWeapon(weaponId) == null)
+		{
+			return false;
+		}
+
+		EnsureMissionLoadout();
+		if (!OwnedMissionWeaponIds.Contains(weaponId))
+		{
+			return false;
+		}
+
+		EquippedMissionWeaponId = weaponId;
+		ApplyCurrentEquipmentDefinitions();
+		EmitSignal(SignalName.CombatStateChanged, this);
+		return true;
+	}
+
+	public bool EquipShield(string shieldId)
+	{
+		if (string.IsNullOrWhiteSpace(shieldId) || MissionEquipmentRegistry.GetShield(shieldId) == null)
+		{
+			return false;
+		}
+
+		EnsureMissionLoadout();
+		if (!OwnedMissionShieldIds.Contains(shieldId))
+		{
+			return false;
+		}
+
+		EquippedMissionShieldId = shieldId;
+		ApplyCurrentEquipmentDefinitions(true);
+		EmitSignal(SignalName.CombatStateChanged, this);
+		return true;
+	}
+
+	public bool RefreshLoadout()
+	{
+		EnsureMissionLoadout();
+		ApplyCurrentEquipmentDefinitions();
+		EmitSignal(SignalName.CombatStateChanged, this);
+		return true;
 	}
 
 	public void MoveAlongPath(IReadOnlyList<Vector2> globalPathPoints, IReadOnlyList<Vector2I> pathCells, Vector2I destinationCell)
@@ -790,7 +944,58 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 
 	private void ApplyEquipmentDefinitions(MissionNpcDefinition definition)
 	{
-		MissionWeaponDefinition weapon = MissionEquipmentRegistry.GetWeapon(definition.WeaponDefinitionId);
+		_defaultWeaponDefinitionId = definition?.WeaponDefinitionId ?? string.Empty;
+		_defaultShieldDefinitionId = definition?.ShieldDefinitionId ?? string.Empty;
+		_baseAttackMinDamage = AttackMinDamage;
+		_baseAttackRange = AttackRange;
+		_baseAttackDamage = AttackDamage;
+		_baseWeaponName = WeaponName;
+		_baseShieldName = ShieldName;
+		_baseMaxShields = MaxShields;
+		_baseShieldRechargePerTurn = ShieldRechargePerTurn;
+		_baseUsesMeleeWeapon = UsesMeleeWeapon;
+		EnsureMissionLoadout();
+		ApplyCurrentEquipmentDefinitions(true);
+	}
+
+	private void EnsureMissionLoadout()
+	{
+		OwnedMissionWeaponIds ??= new List<string>();
+		OwnedMissionShieldIds ??= new List<string>();
+		OwnedMissionWeaponIds = SanitizeOwnedIds(OwnedMissionWeaponIds, MissionEquipmentRegistry.GetWeapon);
+		OwnedMissionShieldIds = SanitizeOwnedIds(OwnedMissionShieldIds, MissionEquipmentRegistry.GetShield);
+
+		if (!string.IsNullOrWhiteSpace(_defaultWeaponDefinitionId) && MissionEquipmentRegistry.GetWeapon(_defaultWeaponDefinitionId) != null && !OwnedMissionWeaponIds.Contains(_defaultWeaponDefinitionId))
+		{
+			OwnedMissionWeaponIds.Add(_defaultWeaponDefinitionId);
+		}
+
+		if (!string.IsNullOrWhiteSpace(_defaultShieldDefinitionId) && MissionEquipmentRegistry.GetShield(_defaultShieldDefinitionId) != null && !OwnedMissionShieldIds.Contains(_defaultShieldDefinitionId))
+		{
+			OwnedMissionShieldIds.Add(_defaultShieldDefinitionId);
+		}
+
+		EquippedMissionWeaponId = ResolveEquippedId(EquippedMissionWeaponId, OwnedMissionWeaponIds, _defaultWeaponDefinitionId, MissionEquipmentRegistry.GetWeapon);
+		EquippedMissionShieldId = ResolveEquippedId(EquippedMissionShieldId, OwnedMissionShieldIds, _defaultShieldDefinitionId, MissionEquipmentRegistry.GetShield);
+	}
+
+	private void ApplyCurrentEquipmentDefinitions(bool refillShields = false)
+	{
+		WeaponId = string.Empty;
+		WeaponName = _baseWeaponName;
+		UsesMeleeWeapon = _baseUsesMeleeWeapon;
+		AttackRange = Mathf.Max(1, _baseAttackRange);
+		AttackMinDamage = Mathf.Max(1, _baseAttackMinDamage);
+		AttackDamage = Mathf.Max(AttackMinDamage, _baseAttackDamage);
+		BonusShieldDamage = 0;
+		ShieldPiercingDamage = 0;
+		WeaponStatusEffectId = string.Empty;
+		WeaponStatusEffectChance = 0f;
+		ShieldName = _baseShieldName;
+		MaxShields = Mathf.Max(0, _baseMaxShields);
+		ShieldRechargePerTurn = Mathf.Max(0, _baseShieldRechargePerTurn);
+
+		MissionWeaponDefinition weapon = MissionEquipmentRegistry.GetWeapon(EquippedMissionWeaponId);
 		if (weapon != null)
 		{
 			WeaponId = weapon.WeaponId ?? string.Empty;
@@ -805,14 +1010,59 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 			WeaponStatusEffectChance = Mathf.Clamp(weapon.StatusEffectChance, 0f, 1f);
 		}
 
-		MissionShieldDefinition shield = MissionEquipmentRegistry.GetShield(definition.ShieldDefinitionId);
+		MissionShieldDefinition shield = MissionEquipmentRegistry.GetShield(EquippedMissionShieldId);
 		if (shield != null)
 		{
 			ShieldName = string.IsNullOrWhiteSpace(shield.DisplayName) ? ShieldName : shield.DisplayName;
-			MaxShields = Mathf.Max(0, MaxShields + shield.CapacityBonus);
-			CurrentShields = MaxShields;
-			ShieldRechargePerTurn = Mathf.Max(0, shield.RechargePerTurn);
+			MaxShields = Mathf.Max(0, _baseMaxShields + shield.CapacityBonus);
+			CurrentShields = refillShields
+				? MaxShields
+				: Mathf.Clamp(CurrentShields, 0, MaxShields);
+			ShieldRechargePerTurn = Mathf.Max(0, _baseShieldRechargePerTurn + shield.RechargePerTurn);
 		}
+		else
+		{
+			CurrentShields = Mathf.Clamp(CurrentShields, 0, MaxShields);
+		}
+	}
+
+	private static List<string> SanitizeOwnedIds<TDefinition>(IEnumerable<string> ids, Func<string, TDefinition> resolver)
+		where TDefinition : class
+	{
+		HashSet<string> seenIds = new HashSet<string>(StringComparer.Ordinal);
+		List<string> sanitizedIds = new List<string>();
+		foreach (string id in ids ?? Enumerable.Empty<string>())
+		{
+			if (string.IsNullOrWhiteSpace(id) || !seenIds.Add(id) || resolver(id) == null)
+			{
+				continue;
+			}
+
+			sanitizedIds.Add(id);
+		}
+
+		return sanitizedIds;
+	}
+
+	private static string ResolveEquippedId<TDefinition>(
+		string equippedId,
+		IReadOnlyList<string> ownedIds,
+		string defaultId,
+		Func<string, TDefinition> resolver)
+		where TDefinition : class
+	{
+		if (!string.IsNullOrWhiteSpace(equippedId) && resolver(equippedId) != null)
+		{
+			return equippedId;
+		}
+
+		string ownedFallback = ownedIds?.FirstOrDefault(id => !string.IsNullOrWhiteSpace(id) && resolver(id) != null);
+		if (!string.IsNullOrWhiteSpace(ownedFallback))
+		{
+			return ownedFallback;
+		}
+
+		return resolver(defaultId) != null ? defaultId : string.Empty;
 	}
 
 	private static Vector2[] BuildDiamond(float halfWidth, float halfHeight)

@@ -115,5 +115,7 @@ public class CampaignRewardService
 				UnlockCodexEntries(new[] { item.CodexEntryId });
 			}
 		}
+
+		OfficerMissionLoadoutService.ApplyCampaignItemUnlocks(officer);
 	}
 }
