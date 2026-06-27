@@ -576,9 +576,9 @@ public partial class OfficerPawn : Node2D
 			case "Morale Support":
 				MaxHP = 16;
 				MaxShields = 4;
-				MaxActions = 2;
+				MaxActions = MissionGridRules.ScaleAuthoredUnit(2);
 				AttackMinDamage = 2;
-				AttackRange = 1;
+				AttackRange = MissionGridRules.ScaleAuthoredUnit(1);
 				AttackDamage = 3;
 				InitiativeBonus = 0;
 				WeaponName = "Shock Baton";
@@ -587,9 +587,9 @@ public partial class OfficerPawn : Node2D
 			case "Engine Routing":
 				MaxHP = 15;
 				MaxShields = 5;
-				MaxActions = 2;
+				MaxActions = MissionGridRules.ScaleAuthoredUnit(2);
 				AttackMinDamage = 2;
-				AttackRange = 1;
+				AttackRange = MissionGridRules.ScaleAuthoredUnit(1);
 				AttackDamage = 4;
 				InitiativeBonus = 1;
 				WeaponName = "Cutting Rig";
@@ -597,9 +597,9 @@ public partial class OfficerPawn : Node2D
 			case "Missile Control":
 				MaxHP = 13;
 				MaxShields = 6;
-				MaxActions = 2;
+				MaxActions = MissionGridRules.ScaleAuthoredUnit(2);
 				AttackMinDamage = 3;
-				AttackRange = 4;
+				AttackRange = MissionGridRules.ScaleAuthoredUnit(4);
 				AttackDamage = 5;
 				InitiativeBonus = 1;
 				WeaponName = "Heavy Sidearm";
@@ -607,9 +607,9 @@ public partial class OfficerPawn : Node2D
 			case "Tactical Command":
 				MaxHP = 14;
 				MaxShields = 6;
-				MaxActions = 2;
+				MaxActions = MissionGridRules.ScaleAuthoredUnit(2);
 				AttackMinDamage = 3;
-				AttackRange = 4;
+				AttackRange = MissionGridRules.ScaleAuthoredUnit(4);
 				AttackDamage = 5;
 				InitiativeBonus = 2;
 				WeaponName = "Pulse Carbine";
@@ -617,9 +617,9 @@ public partial class OfficerPawn : Node2D
 			case "Shield Tuning":
 				MaxHP = 17;
 				MaxShields = 8;
-				MaxActions = 2;
+				MaxActions = MissionGridRules.ScaleAuthoredUnit(2);
 				AttackMinDamage = 2;
-				AttackRange = 2;
+				AttackRange = MissionGridRules.ScaleAuthoredUnit(2);
 				AttackDamage = 4;
 				InitiativeBonus = 0;
 				WeaponName = "Defense Pistol";
@@ -628,9 +628,9 @@ public partial class OfficerPawn : Node2D
 			default:
 				MaxHP = 14;
 				MaxShields = 5;
-				MaxActions = 2;
+				MaxActions = MissionGridRules.ScaleAuthoredUnit(2);
 				AttackMinDamage = 2;
-				AttackRange = 3;
+				AttackRange = MissionGridRules.ScaleAuthoredUnit(3);
 				AttackDamage = 4;
 				InitiativeBonus = 1;
 				WeaponName = "Sidearm";
@@ -660,7 +660,7 @@ public partial class OfficerPawn : Node2D
 		WeaponId = weapon.WeaponId ?? string.Empty;
 		WeaponName = string.IsNullOrWhiteSpace(weapon.DisplayName) ? WeaponName : weapon.DisplayName;
 		UsesMeleeWeapon = weapon.IsMelee;
-		AttackRange = Mathf.Max(1, weapon.AttackRange);
+		AttackRange = MissionGridRules.ScaleAuthoredUnit(weapon.AttackRange);
 		AttackMinDamage = Mathf.Max(1, weapon.MinDamage);
 		AttackDamage = Mathf.Max(AttackMinDamage, weapon.MaxDamage);
 		BonusShieldDamage = Mathf.Max(0, weapon.BonusShieldDamage);

@@ -234,7 +234,7 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 		Notes = definition.Notes ?? string.Empty;
 		PortraitPath = definition.PortraitPath ?? string.Empty;
 		DialogueId = definition.DefaultDialogueId ?? string.Empty;
-		InteractionRange = Mathf.Max(1, definition.InteractionRange);
+		InteractionRange = MissionGridRules.ScaleAuthoredUnit(definition.InteractionRange);
 		MaxHP = Mathf.Max(1, definition.MaxHP);
 		CurrentHP = MaxHP;
 		MaxShields = Mathf.Max(0, definition.MaxShields);
@@ -244,10 +244,10 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 		}
 
 		CurrentShields = MaxShields;
-		MaxActions = Mathf.Max(1, definition.MaxActions);
+		MaxActions = MissionGridRules.ScaleAuthoredUnit(definition.MaxActions);
 		CurrentActions = MaxActions;
 		AttackMinDamage = Mathf.Max(1, definition.AttackDamage / 2);
-		AttackRange = Mathf.Max(1, definition.AttackRange);
+		AttackRange = MissionGridRules.ScaleAuthoredUnit(definition.AttackRange);
 		AttackDamage = Mathf.Max(1, definition.AttackDamage);
 		InitiativeBonus = definition.InitiativeBonus;
 		WeaponName = string.IsNullOrWhiteSpace(definition.WeaponName) ? "Claws" : definition.WeaponName;
@@ -255,7 +255,7 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 		ShieldPiercingDamage = 0;
 		ShieldRechargePerTurn = 1;
 		ShieldName = MaxShields > 0 ? "Reactive Screen" : "No Shields";
-		UsesMeleeWeapon = AttackRange <= 1;
+		UsesMeleeWeapon = definition.AttackRange <= 1;
 		WeaponStatusEffectId = string.Empty;
 		WeaponStatusEffectChance = 0f;
 		PersonalInventoryItemIDs = (definition.PersonalInventoryItemIDs ?? new Godot.Collections.Array<string>())
@@ -1001,7 +1001,7 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 			WeaponId = weapon.WeaponId ?? string.Empty;
 			WeaponName = string.IsNullOrWhiteSpace(weapon.DisplayName) ? WeaponName : weapon.DisplayName;
 			UsesMeleeWeapon = weapon.IsMelee;
-			AttackRange = Mathf.Max(1, weapon.AttackRange);
+			AttackRange = MissionGridRules.ScaleAuthoredUnit(weapon.AttackRange);
 			AttackMinDamage = Mathf.Max(1, weapon.MinDamage);
 			AttackDamage = Mathf.Max(AttackMinDamage, weapon.MaxDamage);
 			BonusShieldDamage = Mathf.Max(0, weapon.BonusShieldDamage);

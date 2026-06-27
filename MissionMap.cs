@@ -15,8 +15,6 @@ public partial class MissionMap : Node2D
 	private const float CameraEdgePanMargin = 30f;
 	private const float CameraKeyboardFollowEdgeMargin = 8f;
 	private const int FogRevealRadius = 4;
-	private const int CombatAttackActionCost = 1;
-	private const int CombatInteractionActionCost = 1;
 	private const int ActorSortBias = 2;
 	private const int RuntimePropSortBias = 4;
 	private const int WallBaseSortBias = 1;
@@ -186,6 +184,9 @@ public partial class MissionMap : Node2D
 	private MissionInteractionMenuTarget _activeInteractionMenuTarget;
 	private string _activeInteractionMenuOfficerId = string.Empty;
 	private MissionPlayerCombatActionMode _selectedCombatActionMode = MissionPlayerCombatActionMode.Attack;
+
+	private int CombatAttackActionCost => MissionGridRules.StandardActionCost;
+	private int CombatInteractionActionCost => MissionGridRules.StandardActionCost;
 
 	public override void _Ready()
 	{
@@ -941,7 +942,7 @@ public partial class MissionMap : Node2D
 					Width = 1.15f,
 					DefaultColor = new Color(0.24f, 0.72f, 1.00f, 0.24f),
 					Position = _roomBuilder.GetMovementCellWorldPosition(movementCell.X, movementCell.Y),
-					ZIndex = _roomBuilder.GetCanvasSortOrderForMovementCell(movementCell, FloorGridSortBias),
+					ZIndex = _roomBuilder.GetCanvasSortOrderForBuildCell(buildCell, FloorGridSortBias),
 					Visible = false
 				};
 				outline.ZAsRelative = false;
@@ -1453,7 +1454,7 @@ public partial class MissionMap : Node2D
 		}
 
 		Vector2I anchorMovementCell = GetMovementCell(anchorBuildCell);
-		List<Vector2I> nearbyCells = _roomBuilder.GetReachableMovementCells(anchorMovementCell, 2)
+		List<Vector2I> nearbyCells = _roomBuilder.GetReachableMovementCells(anchorMovementCell, MissionGridRules.ScaleAuthoredUnit(2))
 			.Where(candidate => candidate != anchorMovementCell)
 			.Where(candidate => _roomBuilder.IsWalkableMovementCell(candidate))
 			.Where(candidate => !IsMovementCellBlockedByProp(candidate))
@@ -1495,7 +1496,7 @@ public partial class MissionMap : Node2D
 				continue;
 			}
 
-			foreach (Vector2I cell in _roomBuilder.GetReachableMovementCells(pawn.CurrentCell, FogRevealRadius))
+			foreach (Vector2I cell in _roomBuilder.GetReachableMovementCells(pawn.CurrentCell, MissionGridRules.ScaleAuthoredUnit(FogRevealRadius)))
 			{
 				_visibleCells.Add(cell);
 				_exploredCells.Add(cell);
@@ -3608,7 +3609,7 @@ public partial class MissionMap : Node2D
 	private string GetBaseMissionPromptText()
 	{
 		string prompt = string.IsNullOrWhiteSpace(_missionTemplate?.PromptText)
-			? "Controls: left click an officer to select, left click a floor tile to move, WASD to step the selected officer, TAB or 1-2 to switch officers, middle mouse drag or screen-edge hover to pan, mouse wheel or +/- to zoom."
+			? "Controls: left click an officer to select, left click a floor cell to move, WASD to step the selected officer, TAB or 1-2 to switch officers, middle mouse drag or screen-edge hover to pan, mouse wheel or +/- to zoom."
 			: _missionTemplate.PromptText;
 		if (GetAliveEscortSurvivors().Any())
 		{
@@ -4394,7 +4395,7 @@ public partial class MissionMap : Node2D
 		}
 
 		targetCell = steppedCells[^1];
-		Vector2I targetBuildCell = GetBuildCell(targetCell);
+		string targetGridCoordinate = FormatMovementGridCoordinate(targetCell);
 
 		if (_combatActive)
 		{
@@ -4410,12 +4411,12 @@ public partial class MissionMap : Node2D
 			officer.SpendActions(moveCost);
 			_pendingCombatMoveOfficerId = officer.OfficerID;
 			_pendingCombatMoveCost = moveCost;
-			targetBuildCell = GetBuildCell(targetCell);
-			AppendCombatLog($"{officer.OfficerName} repositions {moveCost} tile{(moveCost == 1 ? string.Empty : "s")} toward {targetBuildCell.X},{targetBuildCell.Y}, conserving {officer.WeaponName.ToLowerInvariant()} fire for the next opening.");
+			targetGridCoordinate = FormatMovementGridCoordinate(targetCell);
+			AppendCombatLog($"{officer.OfficerName} repositions {moveCost} cell{(moveCost == 1 ? string.Empty : "s")} toward {targetGridCoordinate}, conserving {officer.WeaponName.ToLowerInvariant()} fire for the next opening.");
 		}
 		else
 		{
-			AppendActionLog($"{officer.OfficerName} moves to {targetBuildCell.X},{targetBuildCell.Y}.");
+			AppendActionLog($"{officer.OfficerName} moves to {targetGridCoordinate}.");
 		}
 
 		List<Vector2> pathPoints = steppedCells
@@ -4478,7 +4479,7 @@ public partial class MissionMap : Node2D
 		}
 
 		targetCell = steppedCells[^1];
-		Vector2I targetBuildCell = GetBuildCell(targetCell);
+		string targetGridCoordinate = FormatMovementGridCoordinate(targetCell);
 		if (useCombatActions)
 		{
 			int maxMovementSteps = GetMaxMovementStepsForActions(survivor.CurrentActions);
@@ -4497,12 +4498,12 @@ public partial class MissionMap : Node2D
 			targetCell = steppedCells[^1];
 			survivor.SpendActions(moveCost);
 			_pendingCombatMoveEscortSurvivorId = survivor.NpcId;
-			targetBuildCell = GetBuildCell(targetCell);
-			AppendCombatLog($"{survivor.DisplayName} moves {moveCost} tile{(moveCost == 1 ? string.Empty : "s")} toward {targetBuildCell.X},{targetBuildCell.Y}.");
+			targetGridCoordinate = FormatMovementGridCoordinate(targetCell);
+			AppendCombatLog($"{survivor.DisplayName} moves {moveCost} cell{(moveCost == 1 ? string.Empty : "s")} toward {targetGridCoordinate}.");
 		}
 		else
 		{
-			AppendActionLog($"{survivor.DisplayName} moves to {targetBuildCell.X},{targetBuildCell.Y}.");
+			AppendActionLog($"{survivor.DisplayName} moves to {targetGridCoordinate}.");
 		}
 
 		List<Vector2> pathPoints = steppedCells
@@ -4756,7 +4757,7 @@ public partial class MissionMap : Node2D
 			return false;
 		}
 
-		return GetInteractionDistance(officer.CurrentCell, interaction) <= 1;
+		return GetInteractionDistance(officer.CurrentCell, interaction) <= MissionGridRules.StandardActionCost;
 	}
 
 	private int GetInteractionDistance(Vector2I officerCell, MissionRoomBuilder.MarkerPlacement interaction)
@@ -4782,7 +4783,7 @@ public partial class MissionMap : Node2D
 		}
 
 		Vector2I interactionCell = GetMovementCell(interaction.Cell);
-		List<Vector2I> candidates = _roomBuilder.GetReachableMovementCells(interactionCell, 1)
+		List<Vector2I> candidates = _roomBuilder.GetReachableMovementCells(interactionCell, MissionGridRules.ScaleAuthoredUnit(1))
 			.Where(candidate => _roomBuilder.IsWalkableMovementCell(candidate))
 			.Where(candidate => !IsMovementCellBlockedByProp(candidate))
 			.Where(candidate => !IsCellOccupiedByLivingActor(candidate, officer, null, ignoredOfficerIds))
@@ -4911,7 +4912,7 @@ public partial class MissionMap : Node2D
 		}
 
 		Vector2I propCell = GetMovementCell(GetPropCell(prop));
-		int interactionRange = Mathf.Max(1, prop.Definition?.InteractionRange ?? 1);
+		int interactionRange = MissionGridRules.ScaleAuthoredUnit(prop.Definition?.InteractionRange ?? 1);
 		int distance = GetTileDistance(officer.CurrentCell, propCell);
 		return distance <= interactionRange;
 	}
@@ -4942,7 +4943,7 @@ public partial class MissionMap : Node2D
 
 		Vector2I propBuildCell = GetPropCell(prop);
 		Vector2I propMovementCell = GetMovementCell(propBuildCell);
-		int interactionRange = Mathf.Max(1, prop.Definition?.InteractionRange ?? 1);
+		int interactionRange = MissionGridRules.ScaleAuthoredUnit(prop.Definition?.InteractionRange ?? 1);
 
 		List<Vector2I> candidates = _roomBuilder.GetReachableMovementCells(propMovementCell, interactionRange)
 			.Where(candidate => GetBuildCell(candidate) != propBuildCell)
@@ -5068,6 +5069,11 @@ public partial class MissionMap : Node2D
 	private Vector2I GetMovementCell(Vector2I buildCell)
 	{
 		return _roomBuilder?.GetMovementCellForBuildCell(buildCell) ?? buildCell;
+	}
+
+	private static string FormatMovementGridCoordinate(Vector2I movementCell)
+	{
+		return $"{movementCell.X},{movementCell.Y}";
 	}
 
 	private int GetMovementOverlayZIndex(Vector2I movementCell, int bias = 0)
@@ -5416,7 +5422,7 @@ public partial class MissionMap : Node2D
 
 	private int GetTileDistance(Vector2I a, Vector2I b)
 	{
-		return Mathf.CeilToInt(GetMovementStepDistance(a, b) / (float)GetMovementSubdivision());
+		return GetMovementStepDistance(a, b);
 	}
 
 	private int GetInteractionDistanceToBuildCell(Vector2I officerCell, Vector2I buildCell)
@@ -5444,17 +5450,12 @@ public partial class MissionMap : Node2D
 
 	private int GetMovementCostForPathSteps(int stepCount)
 	{
-		if (stepCount <= 0)
-		{
-			return 0;
-		}
-
-		return Mathf.Max(1, Mathf.CeilToInt(stepCount / (float)GetMovementSubdivision()));
+		return Mathf.Max(0, stepCount);
 	}
 
 	private int GetMaxMovementStepsForActions(int actions)
 	{
-		return Mathf.Max(0, actions * GetMovementSubdivision());
+		return Mathf.Max(0, actions);
 	}
 
 	private bool CanAttackTarget(Vector2I attackerCell, Vector2I targetCell, MissionAttackProfile attackProfile)
@@ -5921,7 +5922,7 @@ public partial class MissionMap : Node2D
 			{
 				ActionId = "move",
 				Label = "Move",
-				Description = "Click a floor tile to reposition the active officer. Distance determines AP cost.",
+				Description = "Click a floor cell to reposition the active officer. Distance determines AP cost.",
 				Disabled = officer == null || officer.IsDead || officer.CurrentActions <= 0,
 				Selected = _selectedCombatActionMode == MissionPlayerCombatActionMode.Move
 			}
@@ -5952,7 +5953,7 @@ public partial class MissionMap : Node2D
 			options.Add(new MissionCombatWeaponOption
 			{
 				WeaponId = weapon.WeaponId,
-				Label = $"{weapon.DisplayName} [{stance} | R{weapon.AttackRange} | {weapon.MinDamage}-{weapon.MaxDamage}]",
+				Label = $"{weapon.DisplayName} [{stance} | R{MissionGridRules.ScaleAuthoredUnit(weapon.AttackRange)} | {weapon.MinDamage}-{weapon.MaxDamage}]",
 				Description = $"{weapon.Description}\nCosts {CombatAttackActionCost} AP to equip during combat.",
 				Disabled = equipped || !officer.CanSpendActions(CombatAttackActionCost),
 				Equipped = equipped
@@ -6194,7 +6195,7 @@ public partial class MissionMap : Node2D
 		survivor.MoveAlongPath(pathPoints, steppedCells, finalDestination);
 		if (useCombatActions)
 		{
-			AppendCombatLog($"{survivor.DisplayName} falls back {moveCost} tile{(moveCost == 1 ? string.Empty : "s")} toward extraction.");
+			AppendCombatLog($"{survivor.DisplayName} falls back {moveCost} cell{(moveCost == 1 ? string.Empty : "s")} toward extraction.");
 		}
 		else
 		{
@@ -6887,7 +6888,7 @@ public partial class MissionMap : Node2D
 
 		Vector2I destinationCell = steppedCells[^1];
 		enemy.SpendActions(moveCost);
-		AppendCombatLog($"{enemy.DisplayName} pushes {moveCost} tile{(moveCost == 1 ? string.Empty : "s")} toward the away team, closing with {enemy.WeaponName.ToLowerInvariant()} ready.");
+		AppendCombatLog($"{enemy.DisplayName} pushes {moveCost} cell{(moveCost == 1 ? string.Empty : "s")} toward the away team, closing with {enemy.WeaponName.ToLowerInvariant()} ready.");
 		List<Vector2> pathPoints = steppedCells
 			.Select(GetMovementCellGlobalPosition)
 			.ToList();
@@ -8853,7 +8854,7 @@ public partial class MissionMap : Node2D
 		List<string> parts = new List<string>();
 		if (definition != null)
 		{
-			parts.Add(definition.IsMelee ? "Melee" : $"Range {definition.AttackRange}");
+			parts.Add(definition.IsMelee ? "Melee" : $"Range {MissionGridRules.ScaleAuthoredUnit(definition.AttackRange)}");
 			parts.Add($"DMG {definition.MinDamage}-{definition.MaxDamage}");
 			if (definition.BonusShieldDamage > 0)
 			{

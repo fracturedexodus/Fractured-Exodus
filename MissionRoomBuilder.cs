@@ -111,7 +111,7 @@ public partial class MissionRoomBuilder : Node
 
 	public Vector2 GetMovementCellWorldPosition(int column, int row, Vector2 extraOffset)
 	{
-		return IsoGridHelper.GridToWorld(column, row, TileStep / MovementSubdivisionsPerTile, Origin) + extraOffset;
+		return IsoGridHelper.GridToWorld(column, row, TileStep / MovementSubdivisionsPerTile, GetMovementGridOrigin()) + extraOffset;
 	}
 
 	public Vector2 GetMovementCellWorldPosition(int column, int row)
@@ -292,7 +292,15 @@ public partial class MissionRoomBuilder : Node
 
 	public Vector2I GetNearestMovementCell(Vector2 localPosition)
 	{
-		return IsoGridHelper.WorldToGrid(localPosition, TileStep / MovementSubdivisionsPerTile, Origin);
+		return IsoGridHelper.WorldToGrid(localPosition, TileStep / MovementSubdivisionsPerTile, GetMovementGridOrigin());
+	}
+
+	private Vector2 GetMovementGridOrigin()
+	{
+		Vector2 movementTileStep = TileStep / MovementSubdivisionsPerTile;
+		// Shift the movement lattice up by half a mini-cell so the 8x8 diamond grid
+		// fully covers each floor tile instead of missing the tile's top corner.
+		return Origin - new Vector2(0f, movementTileStep.Y * 0.5f);
 	}
 
 	public Vector2 GetRoomCenterWorldPosition()
@@ -489,7 +497,7 @@ public partial class MissionRoomBuilder : Node
 			return reachable;
 		}
 
-		int maxSteps = maxTiles * MovementSubdivisionsPerTile;
+		int maxSteps = maxTiles;
 		Queue<(Vector2I Cell, int Steps)> frontier = new Queue<(Vector2I Cell, int Steps)>();
 		frontier.Enqueue((startCell, 0));
 		reachable.Add(startCell);
