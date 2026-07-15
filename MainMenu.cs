@@ -512,6 +512,10 @@ public partial class MainMenu : Control
 		{
 			label += " [QUICKSAVE]";
 		}
+		if (save.IsRecovered)
+		{
+			label += " [RECOVERED]";
+		}
 
 		return label;
 	}

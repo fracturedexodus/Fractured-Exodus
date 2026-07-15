@@ -790,6 +790,9 @@ public class SystemSaveData
 
 public class CampaignSaveData
 {
+	public const int CurrentSchemaVersion = 1;
+
+	public int SaveSchemaVersion { get; set; } = CurrentSchemaVersion;
 	public string SaveDisplayName { get; set; } = string.Empty;
 	public string SavedAtUtc { get; set; } = string.Empty;
 	public string LastSavedScenePath { get; set; } = string.Empty;
@@ -833,6 +836,7 @@ public class CampaignSaveData
 	{
 		return new CampaignSaveData
 		{
+			SaveSchemaVersion = CurrentSchemaVersion,
 			SaveDisplayName = globalData.SaveDisplayName,
 			SavedAtUtc = globalData.SavedAtUtc,
 			LastSavedScenePath = globalData.LastSavedScenePath,
@@ -955,6 +959,7 @@ public class CampaignSaveData
 
 		return new Godot.Collections.Dictionary<string, Variant>
 		{
+			{ "SaveSchemaVersion", SaveSchemaVersion },
 			{ "SaveDisplayName", SaveDisplayName },
 			{ "SavedAtUtc", SavedAtUtc },
 			{ "LastSavedScenePath", LastSavedScenePath },
@@ -1000,6 +1005,7 @@ public class CampaignSaveData
 	{
 		return new CampaignSaveData
 		{
+			SaveSchemaVersion = dict.ContainsKey("SaveSchemaVersion") ? (int)dict["SaveSchemaVersion"] : 0,
 			SaveDisplayName = dict.ContainsKey("SaveDisplayName") ? (string)dict["SaveDisplayName"] : string.Empty,
 			SavedAtUtc = dict.ContainsKey("SavedAtUtc") ? (string)dict["SavedAtUtc"] : string.Empty,
 			LastSavedScenePath = dict.ContainsKey("LastSavedScenePath") ? (string)dict["LastSavedScenePath"] : string.Empty,

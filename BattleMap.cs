@@ -4917,17 +4917,18 @@ public partial class BattleMap : Node2D
 			Fog != null ? Fog.GetExploredHexes() : Enumerable.Empty<Vector2I>(),
 			HexContents);
 
+		bool saved;
 		if (autoSave)
 		{
-			_globalData.SaveGame(true, "res://exploration_battle.tscn");
+			saved = _globalData.SaveGame(true, "res://exploration_battle.tscn");
 		}
 		else if (string.IsNullOrWhiteSpace(saveName))
 		{
-			_globalData.SaveGame(false, "res://exploration_battle.tscn");
+			saved = _globalData.SaveGame(false, "res://exploration_battle.tscn");
 		}
 		else
 		{
-			_globalData.SaveNamedGame(saveName, "res://exploration_battle.tscn");
+			saved = _globalData.SaveNamedGame(saveName, "res://exploration_battle.tscn");
 		}
 
 		if (!autoSave)
@@ -4937,7 +4938,9 @@ public partial class BattleMap : Node2D
 				UI.CombatLogPanel.Visible = true;
 			}
 			string saveLabel = string.IsNullOrWhiteSpace(saveName) ? "QUICKSAVE" : saveName.ToUpperInvariant();
-			LogCombatMessage($"\n[color=green]--- GAME SAVED: {saveLabel} ---[/color]");
+			LogCombatMessage(saved
+				? $"\n[color=green]--- GAME SAVED: {saveLabel} ---[/color]"
+				: $"\n[color=red]--- SAVE FAILED: {_globalData.LastSaveError} ---[/color]");
 		}
 	}
 
@@ -5546,6 +5549,10 @@ public partial class BattleMap : Node2D
 		else if (save.IsLegacySave)
 		{
 			label += " [QUICKSAVE]";
+		}
+		if (save.IsRecovered)
+		{
+			label += " [RECOVERED]";
 		}
 
 		return label;

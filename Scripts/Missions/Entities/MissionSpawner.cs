@@ -98,6 +98,11 @@ public sealed class MissionSpawner
 		}
 
 		MissionNpcDefinition resolvedDefinition = definition.Duplicate() as MissionNpcDefinition ?? definition;
+		if (resolvedDefinition.IsHostile)
+		{
+			return resolvedDefinition;
+		}
+
 		string portraitPath = resolvedDefinition.PortraitPath ?? string.Empty;
 		bool canKeepPortrait = MissionNpcPortraitCatalog.IsNpcPortraitPath(portraitPath)
 			&& !string.IsNullOrWhiteSpace(portraitPath)

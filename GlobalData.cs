@@ -228,24 +228,26 @@ public partial class GlobalData : Node
 		GD.Print("GlobalData Singleton Initialized successfully.");
 	}
 
-	public void SaveGame(bool autoSave = false, string currentScenePath = "")
+	public string LastSaveError => _saveGameService.LastError;
+
+	public bool SaveGame(bool autoSave = false, string currentScenePath = "")
 	{
 		if (!string.IsNullOrWhiteSpace(currentScenePath))
 		{
 			LastSavedScenePath = currentScenePath;
 		}
 
-		_saveGameService.Save(this, autoSave);
+		return _saveGameService.Save(this, autoSave);
 	}
 
-	public void SaveNamedGame(string saveName, string currentScenePath)
+	public bool SaveNamedGame(string saveName, string currentScenePath)
 	{
 		if (!string.IsNullOrWhiteSpace(currentScenePath))
 		{
 			LastSavedScenePath = currentScenePath;
 		}
 
-		_saveGameService.SaveNamed(this, saveName);
+		return _saveGameService.SaveNamed(this, saveName);
 	}
 
 	public bool LoadGame(string slotId = "")

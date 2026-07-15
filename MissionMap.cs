@@ -2191,8 +2191,10 @@ public partial class MissionMap : Node2D
 		}
 
 		_globalData.CurrentMissionSaveState = BuildCurrentMissionSaveState();
-		_globalData.SaveNamedGame(saveName, ResolveMissionScenePath());
-		AppendActionLog($"Mission saved as {saveName}.");
+		bool saved = _globalData.SaveNamedGame(saveName, ResolveMissionScenePath());
+		AppendActionLog(saved
+			? $"Mission saved as {saveName}."
+			: $"Save failed: {_globalData.LastSaveError}");
 	}
 
 	private void QuickSaveMission()
@@ -2203,8 +2205,8 @@ public partial class MissionMap : Node2D
 		}
 
 		_globalData.CurrentMissionSaveState = BuildCurrentMissionSaveState();
-		_globalData.SaveGame(false, ResolveMissionScenePath());
-		AppendActionLog("Mission quicksaved.");
+		bool saved = _globalData.SaveGame(false, ResolveMissionScenePath());
+		AppendActionLog(saved ? "Mission quicksaved." : $"Quicksave failed: {_globalData.LastSaveError}");
 	}
 
 	private void QuickLoadMission()
@@ -9374,6 +9376,10 @@ public partial class MissionMap : Node2D
 		else if (save.IsLegacySave)
 		{
 			label += " [QUICKSAVE]";
+		}
+		if (save.IsRecovered)
+		{
+			label += " [RECOVERED]";
 		}
 
 		return label;

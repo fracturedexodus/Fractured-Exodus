@@ -11,6 +11,7 @@ public partial class OfficerPawn : Node2D
 	private const string OperativeNorthWestPath = "res://Assets/Missions/Characters/Operative01/operative_nw.png";
 	private const string OperativeSouthEastPath = "res://Assets/Missions/Characters/Operative01/operative_se.png";
 	private const string OperativeSouthWestPath = "res://Assets/Missions/Characters/Operative01/operative_sw.png";
+	private const string PortraitMatchedOfficerRoot = "res://Assets/Missions/Characters/PortraitMatched/Officers";
 
 	[Signal]
 	public delegate void EnteredCellEventHandler(OfficerPawn pawn, Vector2I cell);
@@ -72,6 +73,8 @@ public partial class OfficerPawn : Node2D
 	private readonly Dictionary<string, Texture2D> _directionTextures = new Dictionary<string, Texture2D>();
 	private string _facingDirection = "se";
 	private float _animationClock;
+	private float _animationPhaseOffset;
+	private float _movementBlend;
 	private Vector2 _baseSpritePosition = Vector2.Zero;
 	private Vector2 _baseSpriteScale = new Vector2(0.11f, 0.11f);
 	private int _baseMaxShields = 5;
@@ -141,6 +144,9 @@ public partial class OfficerPawn : Node2D
 		PortraitPath = officer.PortraitPath;
 		Specialty = officer.Specialty;
 		CombatAbilityId = officer.CombatAbilityID;
+		_animationPhaseOffset = BuildAnimationPhaseOffset($"{OfficerID}|{PortraitPath}");
+		LoadDirectionalTextures(PortraitPath);
+		RefreshSpriteTexture();
 		ApplyCombatProfileForSpecialty(officer.Specialty);
 		OfficerMissionLoadoutService.EnsureOfficerLoadout(officer);
 		ApplyMissionLoadout(officer);
@@ -555,7 +561,7 @@ public partial class OfficerPawn : Node2D
 		_nameLabel.AddThemeColorOverride("font_color", new Color(0.95f, 0.98f, 1f));
 		AddChild(_nameLabel);
 
-		LoadDirectionalTextures();
+		LoadDirectionalTextures(string.Empty);
 		RefreshSpriteTexture();
 	}
 
@@ -705,13 +711,66 @@ public partial class OfficerPawn : Node2D
 		return points;
 	}
 
-	private void LoadDirectionalTextures()
+	private void LoadDirectionalTextures(string portraitPath)
 	{
 		_directionTextures.Clear();
+		string portraitBaseName = GetResourceBaseName(portraitPath);
+		if (!string.IsNullOrWhiteSpace(portraitBaseName))
+		{
+			string characterRoot = $"{PortraitMatchedOfficerRoot}/{portraitBaseName}/{portraitBaseName}";
+			string[] directions = { "ne", "nw", "se", "sw" };
+			foreach (string direction in directions)
+			{
+				string candidatePath = $"{characterRoot}_{direction}.png";
+				if (ResourceLoader.Exists(candidatePath))
+				{
+					_directionTextures[direction] = GD.Load<Texture2D>(candidatePath);
+				}
+			}
+
+			if (_directionTextures.Count == directions.Length)
+			{
+				return;
+			}
+
+			_directionTextures.Clear();
+		}
+
 		_directionTextures["ne"] = GD.Load<Texture2D>(OperativeNorthEastPath);
 		_directionTextures["nw"] = GD.Load<Texture2D>(OperativeNorthWestPath);
 		_directionTextures["se"] = GD.Load<Texture2D>(OperativeSouthEastPath);
 		_directionTextures["sw"] = GD.Load<Texture2D>(OperativeSouthWestPath);
+	}
+
+	private static string GetResourceBaseName(string resourcePath)
+	{
+		if (string.IsNullOrWhiteSpace(resourcePath))
+		{
+			return string.Empty;
+		}
+
+		string normalizedPath = resourcePath.Replace('\\', '/');
+		int slashIndex = normalizedPath.LastIndexOf('/');
+		int extensionIndex = normalizedPath.LastIndexOf('.');
+		int startIndex = slashIndex + 1;
+		if (extensionIndex <= startIndex)
+		{
+			extensionIndex = normalizedPath.Length;
+		}
+
+		return normalizedPath[startIndex..extensionIndex];
+	}
+
+	private static float BuildAnimationPhaseOffset(string identity)
+	{
+		uint hash = 2166136261;
+		foreach (char character in identity ?? string.Empty)
+		{
+			hash ^= character;
+			hash *= 16777619;
+		}
+
+		return (hash % 1000) / 1000f * Mathf.Tau;
 	}
 
 	private void RefreshSpriteTexture()
@@ -778,44 +837,56 @@ public partial class OfficerPawn : Node2D
 
 	private void UpdateVisualAnimation(float delta)
 	{
-		_animationClock += delta * (_isMoving ? 8f : 2.4f);
-		float swayX = _isMoving ? Mathf.Sin(_animationClock * 0.5f) * 1.6f : Mathf.Sin(_animationClock * 0.35f) * 0.7f;
-		float bobY = _isMoving ? Mathf.Abs(Mathf.Sin(_animationClock)) * -5f : Mathf.Sin(_animationClock * 0.8f) * -1.4f;
-		float squash = _isMoving ? 1f + Mathf.Sin(_animationClock * 2f) * 0.035f : 1f + Mathf.Sin(_animationClock * 1.4f) * 0.012f;
+		_movementBlend = Mathf.MoveToward(_movementBlend, _isMoving ? 1f : 0f, delta * 7f);
+		_animationClock += delta * Mathf.Lerp(2.1f, 9.5f, _movementBlend);
+		float phase = _animationClock + _animationPhaseOffset;
+		float step = Mathf.Sin(phase);
+		float footfall = Mathf.Abs(step);
+		float idleBreath = Mathf.Sin(phase * 0.72f);
+		float swayX = Mathf.Lerp(idleBreath * 0.35f, step * 1.25f, _movementBlend);
+		float bobY = Mathf.Lerp(idleBreath * -0.55f, footfall * -3.8f, _movementBlend);
+		float squash = Mathf.Lerp(
+			1f + idleBreath * 0.006f,
+			1f + Mathf.Cos(phase * 2f) * 0.018f,
+			_movementBlend);
 		squash += _reactionStretch;
 		Vector2 animationOffset = new Vector2(swayX, bobY) + _reactionOffset;
 		Vector2 animatedScale = new Vector2(_baseSpriteScale.X / squash, _baseSpriteScale.Y * squash);
 		Color flashColor = Colors.White.Lerp(_reactionFlashColor, _reactionFlashStrength);
+		float gaitRotation = Mathf.Lerp(idleBreath * 0.18f, step * 0.85f, _movementBlend);
+		float animatedRotation = gaitRotation + _reactionRotationDegrees;
 
 		if (_sprite != null && _sprite.Visible)
 		{
 			_sprite.Position = _baseSpritePosition + animationOffset;
 			_sprite.Scale = animatedScale;
-			_sprite.RotationDegrees = _reactionRotationDegrees;
+			_sprite.RotationDegrees = animatedRotation;
 			_sprite.Modulate = flashColor;
 		}
 		if (_coverGhostSprite != null)
 		{
 			_coverGhostSprite.Position = _baseSpritePosition + animationOffset;
 			_coverGhostSprite.Scale = animatedScale * 1.04f;
-			_coverGhostSprite.RotationDegrees = _reactionRotationDegrees;
+			_coverGhostSprite.RotationDegrees = animatedRotation;
 		}
 		if (_body != null && _body.Visible)
 		{
 			_body.Position = new Vector2(0f, -18f) + animationOffset;
 			_body.Scale = new Vector2(1f / squash, squash);
-			_body.RotationDegrees = _reactionRotationDegrees;
+			_body.RotationDegrees = animatedRotation;
 			_body.Color = _bodyBaseColor.Lerp(_reactionFlashColor, _reactionFlashStrength);
 		}
 		if (_coverGhostBody != null)
 		{
 			_coverGhostBody.Position = new Vector2(0f, -18f) + animationOffset;
 			_coverGhostBody.Scale = new Vector2(1.08f / squash, 1.08f * squash);
-			_coverGhostBody.RotationDegrees = _reactionRotationDegrees;
+			_coverGhostBody.RotationDegrees = animatedRotation;
 		}
-		_shadow.Scale = _isMoving
-			? new Vector2(1.03f + Mathf.Sin(_animationClock * 2f) * 0.04f, 0.96f - (_reactionStretch * 0.1f))
-			: new Vector2(1f + (_reactionStretch * 0.12f), 1f - (_reactionStretch * 0.08f));
+		float movingShadowX = 1.02f + (footfall * 0.06f);
+		float movingShadowY = 0.97f - (footfall * 0.05f);
+		_shadow.Scale = new Vector2(
+			Mathf.Lerp(1f, movingShadowX, _movementBlend) + (_reactionStretch * 0.12f),
+			Mathf.Lerp(1f, movingShadowY, _movementBlend) - (_reactionStretch * 0.08f));
 	}
 
 	private Color GetSpecialtyColor(string specialty)

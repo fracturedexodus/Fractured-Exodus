@@ -6,6 +6,7 @@ using System.Linq;
 public partial class MissionNpcPawn : Node2D, IInteractable
 {
 	private const int NameLabelZIndex = 220;
+	private const string PortraitMatchedNpcRoot = "res://Assets/Missions/Characters/PortraitMatched/NPCs";
 	private static readonly Vector2 SelectionRingOffset = new Vector2(0f, 10f);
 	[Signal] public delegate void EnteredCellEventHandler(MissionNpcPawn pawn, Vector2I cell);
 	[Signal] public delegate void ReachedCellEventHandler(MissionNpcPawn pawn, Vector2I cell);
@@ -73,6 +74,8 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 	private readonly Queue<Vector2I> _pathCells = new Queue<Vector2I>();
 	private readonly Dictionary<string, Texture2D> _directionTextures = new Dictionary<string, Texture2D>();
 	private float _animationClock;
+	private float _animationPhaseOffset;
+	private float _movementBlend;
 	private string _facingDirection = "se";
 	private Vector2 _baseVisualPosition = Vector2.Zero;
 	private Vector2 _baseVisualScale = new Vector2(0.11f, 0.11f);
@@ -233,6 +236,7 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 		Description = definition.Description ?? string.Empty;
 		Notes = definition.Notes ?? string.Empty;
 		PortraitPath = definition.PortraitPath ?? string.Empty;
+		_animationPhaseOffset = BuildAnimationPhaseOffset($"{definition.NpcId}|{PortraitPath}");
 		DialogueId = definition.DefaultDialogueId ?? string.Empty;
 		InteractionRange = MissionGridRules.ScaleAuthoredUnit(definition.InteractionRange);
 		MaxHP = Mathf.Max(1, definition.MaxHP);
@@ -271,7 +275,7 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 		{
 			_baseVisualModulate = definition.AccentColor;
 			_baseVisualScale = new Vector2(definition.VisualScaleMultiplier, definition.VisualScaleMultiplier);
-			LoadDirectionalTextures(definition.SpriteTexturePath);
+			LoadDirectionalTextures(ResolvePortraitMatchedSpritePath(PortraitPath, definition.SpriteTexturePath));
 			RefreshVisualTexture();
 		}
 
@@ -350,6 +354,52 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 		}
 
 		_useDirectionalTextures = _directionTextures.Count > 0;
+	}
+
+	private static string ResolvePortraitMatchedSpritePath(string portraitPath, string fallbackSpritePath)
+	{
+		string portraitBaseName = GetResourceBaseName(portraitPath);
+		if (!string.IsNullOrWhiteSpace(portraitBaseName))
+		{
+			string candidatePath = $"{PortraitMatchedNpcRoot}/{portraitBaseName}/{portraitBaseName}_se.png";
+			if (ResourceLoader.Exists(candidatePath))
+			{
+				return candidatePath;
+			}
+		}
+
+		return fallbackSpritePath ?? string.Empty;
+	}
+
+	private static string GetResourceBaseName(string resourcePath)
+	{
+		if (string.IsNullOrWhiteSpace(resourcePath))
+		{
+			return string.Empty;
+		}
+
+		string normalizedPath = resourcePath.Replace('\\', '/');
+		int slashIndex = normalizedPath.LastIndexOf('/');
+		int extensionIndex = normalizedPath.LastIndexOf('.');
+		int startIndex = slashIndex + 1;
+		if (extensionIndex <= startIndex)
+		{
+			extensionIndex = normalizedPath.Length;
+		}
+
+		return normalizedPath[startIndex..extensionIndex];
+	}
+
+	private static float BuildAnimationPhaseOffset(string identity)
+	{
+		uint hash = 2166136261;
+		foreach (char character in identity ?? string.Empty)
+		{
+			hash ^= character;
+			hash *= 16777619;
+		}
+
+		return (hash % 1000) / 1000f * Mathf.Tau;
 	}
 
 	public void SetGridCell(Vector2I cell, Vector2 globalPosition)
@@ -862,20 +912,30 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 
 	private void UpdateVisualAnimation(float delta)
 	{
-		_animationClock += delta * (_isMoving ? 8f : 2.4f);
-		float swayX = _isMoving ? Mathf.Sin(_animationClock * 0.5f) * 1.6f : Mathf.Sin(_animationClock * 0.35f) * 0.7f;
-		float bobY = _isMoving ? Mathf.Abs(Mathf.Sin(_animationClock)) * -5f : Mathf.Sin(_animationClock * 0.8f) * -1.4f;
-		float squash = _isMoving ? 1f + Mathf.Sin(_animationClock * 2f) * 0.035f : 1f + Mathf.Sin(_animationClock * 1.4f) * 0.012f;
+		_movementBlend = Mathf.MoveToward(_movementBlend, _isMoving ? 1f : 0f, delta * 7f);
+		_animationClock += delta * Mathf.Lerp(2.1f, 9.5f, _movementBlend);
+		float phase = _animationClock + _animationPhaseOffset;
+		float step = Mathf.Sin(phase);
+		float footfall = Mathf.Abs(step);
+		float idleBreath = Mathf.Sin(phase * 0.72f);
+		float swayX = Mathf.Lerp(idleBreath * 0.35f, step * 1.25f, _movementBlend);
+		float bobY = Mathf.Lerp(idleBreath * -0.55f, footfall * -3.8f, _movementBlend);
+		float squash = Mathf.Lerp(
+			1f + idleBreath * 0.006f,
+			1f + Mathf.Cos(phase * 2f) * 0.018f,
+			_movementBlend);
 		squash += _reactionStretch;
 		Vector2 animationOffset = new Vector2(swayX, bobY) + _reactionOffset;
 		Vector2 animatedScale = new Vector2(_baseVisualScale.X / squash, _baseVisualScale.Y * squash);
 		Color flashColor = _baseVisualModulate.Lerp(_reactionFlashColor, _reactionFlashStrength);
+		float gaitRotation = Mathf.Lerp(idleBreath * 0.18f, step * 0.85f, _movementBlend);
+		float animatedRotation = gaitRotation + _reactionRotationDegrees;
 
 		if (_visualSprite != null)
 		{
 			_visualSprite.Position = _baseVisualPosition + animationOffset;
 			_visualSprite.Scale = animatedScale;
-			_visualSprite.RotationDegrees = _reactionRotationDegrees;
+			_visualSprite.RotationDegrees = animatedRotation;
 			_visualSprite.Modulate = flashColor;
 		}
 
@@ -883,14 +943,16 @@ public partial class MissionNpcPawn : Node2D, IInteractable
 		{
 			_coverGhostSprite.Position = _baseVisualPosition + animationOffset;
 			_coverGhostSprite.Scale = animatedScale * 1.04f;
-			_coverGhostSprite.RotationDegrees = _reactionRotationDegrees;
+			_coverGhostSprite.RotationDegrees = animatedRotation;
 		}
 
 		if (_shadow != null)
 		{
-			_shadow.Scale = _isMoving
-				? new Vector2(1.03f + Mathf.Sin(_animationClock * 2f) * 0.04f, 0.96f - (_reactionStretch * 0.1f))
-				: new Vector2(1f + (_reactionStretch * 0.12f), 1f - (_reactionStretch * 0.08f));
+			float movingShadowX = 1.02f + (footfall * 0.06f);
+			float movingShadowY = 0.97f - (footfall * 0.05f);
+			_shadow.Scale = new Vector2(
+				Mathf.Lerp(1f, movingShadowX, _movementBlend) + (_reactionStretch * 0.12f),
+				Mathf.Lerp(1f, movingShadowY, _movementBlend) - (_reactionStretch * 0.08f));
 		}
 	}
 
