@@ -640,6 +640,73 @@ public class OutpostSaveData
 	}
 }
 
+public class AmbientEventInstanceSaveData
+{
+	public string InstanceId { get; set; } = string.Empty;
+	public string EventId { get; set; } = string.Empty;
+	public Vector2ISaveData HexPosition { get; set; } = new Vector2ISaveData();
+	public string CurrentNodeId { get; set; } = "Start";
+	public bool IsResolved { get; set; }
+	public string ResolutionId { get; set; } = string.Empty;
+
+	public static AmbientEventInstanceSaveData FromRuntime(AmbientEventInstanceData instance)
+	{
+		return new AmbientEventInstanceSaveData
+		{
+			InstanceId = instance.InstanceId,
+			EventId = instance.EventId,
+			HexPosition = Vector2ISaveData.FromVector2I(instance.HexPosition),
+			CurrentNodeId = instance.CurrentNodeId,
+			IsResolved = instance.IsResolved,
+			ResolutionId = instance.ResolutionId
+		};
+	}
+
+	public AmbientEventInstanceData ToRuntime()
+	{
+		return new AmbientEventInstanceData
+		{
+			InstanceId = InstanceId,
+			EventId = EventId,
+			HexPosition = HexPosition.ToVector2I(),
+			CurrentNodeId = CurrentNodeId,
+			IsResolved = IsResolved,
+			ResolutionId = ResolutionId
+		};
+	}
+
+	public static AmbientEventInstanceSaveData FromVariantDictionary(Godot.Collections.Dictionary dict)
+	{
+		return new AmbientEventInstanceSaveData
+		{
+			InstanceId = dict.ContainsKey("InstanceId") ? (string)dict["InstanceId"] : string.Empty,
+			EventId = dict.ContainsKey("EventId") ? (string)dict["EventId"] : string.Empty,
+			HexPosition = Vector2ISaveData.FromVariantDictionary(new Godot.Collections.Dictionary
+			{
+				{ "Q", dict.ContainsKey("Q") ? dict["Q"] : 0 },
+				{ "R", dict.ContainsKey("R") ? dict["R"] : 0 }
+			}),
+			CurrentNodeId = dict.ContainsKey("CurrentNodeId") ? (string)dict["CurrentNodeId"] : "Start",
+			IsResolved = dict.ContainsKey("IsResolved") && (bool)dict["IsResolved"],
+			ResolutionId = dict.ContainsKey("ResolutionId") ? (string)dict["ResolutionId"] : string.Empty
+		};
+	}
+
+	public Godot.Collections.Dictionary<string, Variant> ToVariantDictionary()
+	{
+		return new Godot.Collections.Dictionary<string, Variant>
+		{
+			{ "InstanceId", InstanceId },
+			{ "EventId", EventId },
+			{ "Q", HexPosition.Q },
+			{ "R", HexPosition.R },
+			{ "CurrentNodeId", CurrentNodeId },
+			{ "IsResolved", IsResolved },
+			{ "ResolutionId", ResolutionId }
+		};
+	}
+}
+
 public class StarMapSaveData
 {
 	public string SystemName { get; set; } = string.Empty;
@@ -718,6 +785,7 @@ public class SystemSaveData
 	public List<Vector2ISaveData> RadarRevealedHexes { get; set; } = new List<Vector2ISaveData>();
 	public List<PlanetSaveData> Planets { get; set; } = new List<PlanetSaveData>();
 	public List<OutpostSaveData> Outposts { get; set; } = new List<OutpostSaveData>();
+	public List<AmbientEventInstanceSaveData> AmbientEvents { get; set; } = new List<AmbientEventInstanceSaveData>();
 
 	public static SystemSaveData FromRuntime(SystemData system)
 	{
@@ -732,7 +800,8 @@ public class SystemSaveData
 			ExploredHexes = (system.ExploredHexes ?? new List<Vector2I>()).Select(Vector2ISaveData.FromVector2I).ToList(),
 			RadarRevealedHexes = (system.RadarRevealedHexes ?? new List<Vector2I>()).Select(Vector2ISaveData.FromVector2I).ToList(),
 			Planets = (system.Planets ?? new List<PlanetData>()).Select(PlanetSaveData.FromRuntime).ToList(),
-			Outposts = (system.Outposts ?? new List<OutpostData>()).Select(OutpostSaveData.FromRuntime).ToList()
+			Outposts = (system.Outposts ?? new List<OutpostData>()).Select(OutpostSaveData.FromRuntime).ToList(),
+			AmbientEvents = (system.AmbientEvents ?? new List<AmbientEventInstanceData>()).Select(AmbientEventInstanceSaveData.FromRuntime).ToList()
 		};
 	}
 
@@ -749,7 +818,8 @@ public class SystemSaveData
 			ExploredHexes = ExploredHexes.Select(v => v.ToVector2I()).ToList(),
 			RadarRevealedHexes = RadarRevealedHexes.Select(v => v.ToVector2I()).ToList(),
 			Planets = Planets.Select(p => p.ToRuntime()).ToList(),
-			Outposts = Outposts.Select(o => o.ToRuntime()).ToList()
+			Outposts = Outposts.Select(o => o.ToRuntime()).ToList(),
+			AmbientEvents = AmbientEvents.Select(instance => instance.ToRuntime()).ToList()
 		};
 	}
 
@@ -766,7 +836,8 @@ public class SystemSaveData
 			ExploredHexes = CampaignSaveData.FromVectorArray(dict.ContainsKey("ExploredHexes") ? (Godot.Collections.Array)dict["ExploredHexes"] : new Godot.Collections.Array()),
 			RadarRevealedHexes = CampaignSaveData.FromVectorArray(dict.ContainsKey("RadarRevealedHexes") ? (Godot.Collections.Array)dict["RadarRevealedHexes"] : new Godot.Collections.Array()),
 			Planets = CampaignSaveData.FromVariantObjectList(dict.ContainsKey("Planets") ? (Godot.Collections.Array)dict["Planets"] : new Godot.Collections.Array(), PlanetSaveData.FromVariantDictionary),
-			Outposts = CampaignSaveData.FromVariantObjectList(dict.ContainsKey("Outposts") ? (Godot.Collections.Array)dict["Outposts"] : new Godot.Collections.Array(), OutpostSaveData.FromVariantDictionary)
+			Outposts = CampaignSaveData.FromVariantObjectList(dict.ContainsKey("Outposts") ? (Godot.Collections.Array)dict["Outposts"] : new Godot.Collections.Array(), OutpostSaveData.FromVariantDictionary),
+			AmbientEvents = CampaignSaveData.FromVariantObjectList(dict.ContainsKey("AmbientEvents") ? (Godot.Collections.Array)dict["AmbientEvents"] : new Godot.Collections.Array(), AmbientEventInstanceSaveData.FromVariantDictionary)
 		};
 	}
 
@@ -783,14 +854,15 @@ public class SystemSaveData
 			{ "ExploredHexes", CampaignSaveData.ToVariantArray(ExploredHexes.Select(v => v.ToVariantDictionary())) },
 			{ "RadarRevealedHexes", CampaignSaveData.ToVariantArray(RadarRevealedHexes.Select(v => v.ToVariantDictionary())) },
 			{ "Planets", CampaignSaveData.ToVariantArray(Planets.Select(p => p.ToVariantDictionary())) },
-			{ "Outposts", CampaignSaveData.ToVariantArray(Outposts.Select(o => o.ToVariantDictionary())) }
+			{ "Outposts", CampaignSaveData.ToVariantArray(Outposts.Select(o => o.ToVariantDictionary())) },
+			{ "AmbientEvents", CampaignSaveData.ToVariantArray(AmbientEvents.Select(instance => instance.ToVariantDictionary())) }
 		};
 	}
 }
 
 public class CampaignSaveData
 {
-	public const int CurrentSchemaVersion = 1;
+	public const int CurrentSchemaVersion = 2;
 
 	public int SaveSchemaVersion { get; set; } = CurrentSchemaVersion;
 	public string SaveDisplayName { get; set; } = string.Empty;
@@ -828,6 +900,7 @@ public class CampaignSaveData
 	public List<string> CompletedMissionIDs { get; set; } = new List<string>();
 	public Dictionary<string, string> MissionOutcomes { get; set; } = new Dictionary<string, string>();
 	public List<string> StoryFlags { get; set; } = new List<string>();
+	public Dictionary<string, int> RegionalCounters { get; set; } = new Dictionary<string, int>();
 	public MissionRuntimeSaveData CurrentMissionSaveState { get; set; }
 	public Dictionary<string, SystemSaveData> ExploredSystems { get; set; } = new Dictionary<string, SystemSaveData>();
 	public List<StarMapSaveData> CurrentSectorStars { get; set; } = new List<StarMapSaveData>();
@@ -872,6 +945,7 @@ public class CampaignSaveData
 			CompletedMissionIDs = (globalData.CompletedMissionIDs ?? new List<string>()).ToList(),
 			MissionOutcomes = (globalData.MissionOutcomes ?? new Dictionary<string, string>()).ToDictionary(kvp => kvp.Key, kvp => kvp.Value),
 			StoryFlags = (globalData.StoryFlags ?? new List<string>()).ToList(),
+			RegionalCounters = (globalData.RegionalCounters ?? new Dictionary<string, int>()).ToDictionary(kvp => kvp.Key, kvp => kvp.Value),
 			CurrentMissionSaveState = globalData.CurrentMissionSaveState,
 			ExploredSystems = (globalData.ExploredSystems ?? new Dictionary<string, SystemData>()).ToDictionary(kvp => kvp.Key, kvp => SystemSaveData.FromRuntime(kvp.Value)),
 			CurrentSectorStars = (globalData.CurrentSectorStars ?? new List<StarMapData>()).Select(StarMapSaveData.FromRuntime).ToList()
@@ -920,6 +994,7 @@ public class CampaignSaveData
 		globalData.CompletedMissionIDs = CompletedMissionIDs.ToList();
 		globalData.MissionOutcomes = MissionOutcomes.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
 		globalData.StoryFlags = StoryFlags.ToList();
+		globalData.RegionalCounters = RegionalCounters.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
 		globalData.CurrentMissionSaveState = CurrentMissionSaveState;
 		globalData.ExploredSystems = ExploredSystems.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.ToRuntime());
 		globalData.CurrentSectorStars = CurrentSectorStars.Select(s => s.ToRuntime()).ToList();
@@ -955,6 +1030,12 @@ public class CampaignSaveData
 		foreach (KeyValuePair<string, float> kvp in FleetResources)
 		{
 			fleetResources[kvp.Key] = kvp.Value;
+		}
+
+		var regionalCounters = new Godot.Collections.Dictionary<string, Variant>();
+		foreach (KeyValuePair<string, int> kvp in RegionalCounters)
+		{
+			regionalCounters[kvp.Key] = kvp.Value;
 		}
 
 		return new Godot.Collections.Dictionary<string, Variant>
@@ -995,6 +1076,7 @@ public class CampaignSaveData
 			{ "CompletedMissionIDs", ToVariantArray(CompletedMissionIDs) },
 			{ "MissionOutcomes", missionOutcomeDict },
 			{ "StoryFlags", ToVariantArray(StoryFlags) },
+			{ "RegionalCounters", regionalCounters },
 			{ "CurrentMissionSaveState", CurrentMissionSaveState?.ToVariantDictionary() ?? new Godot.Collections.Dictionary<string, Variant>() },
 			{ "ExploredSystems", systemDict },
 			{ "CurrentSectorStars", ToVariantArray(CurrentSectorStars.Select(s => s.ToVariantDictionary())) }
@@ -1041,6 +1123,7 @@ public class CampaignSaveData
 			CompletedMissionIDs = FromStringArray(dict.ContainsKey("CompletedMissionIDs") ? (Godot.Collections.Array)dict["CompletedMissionIDs"] : new Godot.Collections.Array()),
 			MissionOutcomes = FromSimpleStringDictionary(dict.ContainsKey("MissionOutcomes") ? (Godot.Collections.Dictionary)dict["MissionOutcomes"] : new Godot.Collections.Dictionary()),
 			StoryFlags = FromStringArray(dict.ContainsKey("StoryFlags") ? (Godot.Collections.Array)dict["StoryFlags"] : new Godot.Collections.Array()),
+			RegionalCounters = FromIntDictionary(dict.ContainsKey("RegionalCounters") ? (Godot.Collections.Dictionary)dict["RegionalCounters"] : new Godot.Collections.Dictionary()),
 			CurrentMissionSaveState = dict.ContainsKey("CurrentMissionSaveState") && dict["CurrentMissionSaveState"].VariantType == Variant.Type.Dictionary
 				? MissionRuntimeSaveData.FromVariantDictionary((Godot.Collections.Dictionary)dict["CurrentMissionSaveState"])
 				: null,
@@ -1150,6 +1233,17 @@ public class CampaignSaveData
 		foreach (Variant key in dict.Keys)
 		{
 			values[(string)key] = (string)dict[key];
+		}
+
+		return values;
+	}
+
+	private static Dictionary<string, int> FromIntDictionary(Godot.Collections.Dictionary dict)
+	{
+		var values = new Dictionary<string, int>();
+		foreach (Variant key in dict.Keys)
+		{
+			values[(string)key] = ((Variant)dict[key]).AsInt32();
 		}
 
 		return values;

@@ -9,6 +9,7 @@ public static class GameConstants
 		public const string EnemyFleet = "Enemy Fleet";
 		public const string StarGate = "StarGate";
 		public const string Outpost = "Outpost";
+		public const string AmbientEvent = "Ambient Event";
 	}
 
 	public static class EquipmentCategories

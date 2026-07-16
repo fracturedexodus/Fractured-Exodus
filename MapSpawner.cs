@@ -170,6 +170,9 @@ public static class MapSpawner
 			SpawnEntityAtHex(gateHex, "res://Assets/Backgrounds/StarGate.png", gateEntity, 0.4f, hexSize, hexGrid, hexContents, entityLayer);
 		}
 
+		EnsureAmbientEventAssigned(globalData, currentSystem, rng, maxRadius, hexGrid, hexContents);
+		SpawnAmbientEvents(currentSystem, hexSize, hexGrid, hexContents, entityLayer);
+
 		// --- PERSISTENT ASTEROIDS ---
 		asteroidHexes.Clear();
 		if (currentSystem.AsteroidHexes != null && currentSystem.AsteroidHexes.Count > 0)
@@ -550,5 +553,163 @@ public static class MapSpawner
 		{
 			targetOutpost.MissionInteractionKey = "outpost:smuggler_exchange";
 		}
+	}
+
+	private static void EnsureAmbientEventAssigned(
+		GlobalData globalData,
+		SystemData currentSystem,
+		Random rng,
+		int maxRadius,
+		Dictionary<Vector2I, Node2D> hexGrid,
+		Dictionary<Vector2I, MapEntity> hexContents)
+	{
+		if (globalData == null || currentSystem == null || GetCurrentRegion(globalData) != "Luminous Verge")
+		{
+			return;
+		}
+
+		currentSystem.AmbientEvents ??= new List<AmbientEventInstanceData>();
+		if (currentSystem.AmbientEvents.Any(instance => instance != null && instance.EventId == "pilgrim_beacons"))
+		{
+			return;
+		}
+
+		AmbientEventDefinition definition = AmbientEventRegistry.GetEvent("pilgrim_beacons");
+		if (definition == null)
+		{
+			return;
+		}
+
+		bool hasPilgrimBeaconAnywhere = globalData.ExploredSystems.Values.Any(system =>
+			system?.AmbientEvents != null && system.AmbientEvents.Any(instance => instance != null && instance.EventId == definition.EventId));
+		if (hasPilgrimBeaconAnywhere && rng.NextDouble() > definition.SpawnChance)
+		{
+			return;
+		}
+
+		int minimumRadius = Math.Min(7, maxRadius);
+		int maximumRadius = Math.Max(minimumRadius + 1, Math.Min(14, maxRadius - 1));
+		Vector2I eventHex = FindAmbientEventHex(currentSystem, minimumRadius, maximumRadius, rng, hexGrid, hexContents);
+		currentSystem.AmbientEvents.Add(new AmbientEventInstanceData
+		{
+			InstanceId = $"{currentSystem.SystemName}:pilgrim_beacons",
+			EventId = definition.EventId,
+			HexPosition = eventHex,
+			CurrentNodeId = definition.StartNodeId
+		});
+	}
+
+	private static Vector2I FindAmbientEventHex(
+		SystemData currentSystem,
+		int minimumRadius,
+		int maximumRadius,
+		Random rng,
+		Dictionary<Vector2I, Node2D> hexGrid,
+		Dictionary<Vector2I, MapEntity> hexContents)
+	{
+		HashSet<Vector2I> reservedOutpostHexes = (currentSystem.Outposts ?? new List<OutpostData>())
+			.Where(outpost => outpost != null)
+			.Select(outpost => outpost.HexPosition)
+			.ToHashSet();
+
+		for (int attempt = 0; attempt < 24; attempt++)
+		{
+			Vector2I candidate = FindEmptyHexInRing(rng.Next(minimumRadius, maximumRadius + 1), rng, hexGrid, hexContents);
+			if (!reservedOutpostHexes.Contains(candidate))
+			{
+				return candidate;
+			}
+		}
+
+		List<Vector2I> fallbackHexes = hexGrid.Keys
+			.Where(hex => HexMath.HexDistance(Vector2I.Zero, hex) >= minimumRadius
+				&& HexMath.HexDistance(Vector2I.Zero, hex) <= maximumRadius
+				&& !hexContents.ContainsKey(hex)
+				&& !reservedOutpostHexes.Contains(hex))
+			.ToList();
+		ShuffleList(fallbackHexes, rng);
+		return fallbackHexes.Count > 0 ? fallbackHexes[0] : new Vector2I(maximumRadius, 0);
+	}
+
+	private static void SpawnAmbientEvents(
+		SystemData currentSystem,
+		float hexSize,
+		Dictionary<Vector2I, Node2D> hexGrid,
+		Dictionary<Vector2I, MapEntity> hexContents,
+		Node2D entityLayer)
+	{
+		foreach (AmbientEventInstanceData instance in currentSystem?.AmbientEvents ?? new List<AmbientEventInstanceData>())
+		{
+			if (instance == null || instance.IsResolved || hexContents.ContainsKey(instance.HexPosition))
+			{
+				continue;
+			}
+
+			AmbientEventDefinition definition = AmbientEventRegistry.GetEvent(instance.EventId);
+			if (definition == null)
+			{
+				continue;
+			}
+
+			MapEntity eventEntity = new MapEntity
+			{
+				Name = definition.MapDisplayName,
+				Type = GameConstants.EntityTypes.AmbientEvent,
+				Details = definition.MapDetails,
+				AmbientEventId = instance.EventId,
+				AmbientEventInstanceId = instance.InstanceId
+			};
+			string spritePath = string.IsNullOrWhiteSpace(definition.MapSpritePath)
+				? "res://Assets/Backgrounds/YellowSUN.png"
+				: definition.MapSpritePath;
+			float mapScale = Math.Max(0.01f, definition.MapScale);
+			SpawnEntityAtHex(
+				instance.HexPosition,
+				spritePath,
+				eventEntity,
+				mapScale,
+				hexSize,
+				hexGrid,
+				hexContents,
+				entityLayer);
+			AddAmbientBeaconVfx(eventEntity.VisualSprite, mapScale);
+		}
+	}
+
+	private static void AddAmbientBeaconVfx(Sprite2D sprite, float baseScale)
+	{
+		if (!GodotObject.IsInstanceValid(sprite))
+		{
+			return;
+		}
+
+		sprite.Modulate = Colors.White;
+		PointLight2D glow = new PointLight2D
+		{
+			Texture = sprite.Texture,
+			Color = new Color(0.58f, 0.24f, 1f),
+			Energy = 1.4f,
+			TextureScale = 0.28f
+		};
+		sprite.AddChild(glow);
+
+		Tween pulse = sprite.CreateTween().SetLoops();
+		float expandedScale = baseScale * 1.15f;
+		pulse.TweenProperty(sprite, "scale", new Vector2(expandedScale, expandedScale), 0.8f)
+			.SetTrans(Tween.TransitionType.Sine)
+			.SetEase(Tween.EaseType.InOut);
+		pulse.TweenProperty(sprite, "scale", new Vector2(baseScale, baseScale), 0.8f)
+			.SetTrans(Tween.TransitionType.Sine)
+			.SetEase(Tween.EaseType.InOut);
+
+		Tween orbit = sprite.CreateTween().SetLoops();
+		orbit.TweenProperty(sprite, "rotation", Mathf.Tau, 28f)
+			.SetTrans(Tween.TransitionType.Linear);
+	}
+
+	private static string GetCurrentRegion(GlobalData globalData)
+	{
+		return globalData?.CurrentSectorStars?
+			.FirstOrDefault(star => star != null && star.SystemName == globalData.SavedSystem)?.Region ?? string.Empty;
 	}
 }

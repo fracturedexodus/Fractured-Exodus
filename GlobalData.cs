@@ -30,6 +30,16 @@ public class OutpostData
 	public string MissionInteractionKey { get; set; } = string.Empty;
 }
 
+public class AmbientEventInstanceData
+{
+	public string InstanceId { get; set; } = string.Empty;
+	public string EventId { get; set; } = string.Empty;
+	public Vector2I HexPosition { get; set; } = Vector2I.Zero;
+	public string CurrentNodeId { get; set; } = "Start";
+	public bool IsResolved { get; set; }
+	public string ResolutionId { get; set; } = string.Empty;
+}
+
 public class SystemData 
 {
 	public string SystemName { get; set; }
@@ -45,6 +55,7 @@ public class SystemData
 	public List<Vector2I> ExploredHexes { get; set; } = new List<Vector2I>();
 	public List<Vector2I> RadarRevealedHexes { get; set; } = new List<Vector2I>();
 	public List<OutpostData> Outposts { get; set; } = new List<OutpostData>();
+	public List<AmbientEventInstanceData> AmbientEvents { get; set; } = new List<AmbientEventInstanceData>();
 }
 
 public class StarMapData
@@ -210,6 +221,7 @@ public partial class GlobalData : Node
 	public List<string> CompletedMissionIDs { get; set; } = new List<string>();
 	public Dictionary<string, string> MissionOutcomes { get; set; } = new Dictionary<string, string>();
 	public List<string> StoryFlags { get; set; } = new List<string>();
+	public Dictionary<string, int> RegionalCounters { get; set; } = new Dictionary<string, int>();
 
 	public List<QuestData> ActiveQuests { get; set; } = new List<QuestData>();
 	public Godot.Collections.Array CompletedQuestIDs { get; set; } = new Godot.Collections.Array();
@@ -324,7 +336,7 @@ public partial class GlobalData : Node
 		CurrentTurn = 1; InCombat = false; CurrentQueueIndex = 0; JustJumped = false; 
 		SavedFleetState.Clear(); UnequippedInventory.Clear(); FleetCargoItemIDs.Clear(); UnlockedCodexEntryIDs.Clear(); RescuedRemnants.Clear(); FleetLoadouts.Clear(); ShipOfficers.Clear(); PendingDowntimeEvents.Clear(); PendingOfficerReplacementShipNames.Clear();
 		SaveDisplayName = string.Empty; SavedAtUtc = string.Empty; LastSavedScenePath = string.Empty;
-		ClearCurrentMissionState(); CompletedMissionIDs.Clear(); MissionOutcomes.Clear(); StoryFlags.Clear();
+		ClearCurrentMissionState(); CompletedMissionIDs.Clear(); MissionOutcomes.Clear(); StoryFlags.Clear(); RegionalCounters.Clear();
 		
 		FleetResources = new Godot.Collections.Dictionary<string, Variant> {
 			{ GameConstants.ResourceKeys.RawMaterials, 350.0f },

@@ -1,0 +1,119 @@
+{
+  "event_id": "pilgrim_beacons",
+  "title": "Pilgrim Beacons",
+  "region": "Luminous Verge",
+  "map_display_name": "Pilgrim Beacon",
+  "map_details": "A devotional signal repeating a request for safe passage through the radiance.",
+  "map_sprite_path": "res://Assets/AmbientEvents/pilgrim_beacon.png",
+  "map_scale": 0.08,
+  "spawn_chance": 0.35,
+  "start_node_id": "Start",
+  "nodes": [
+    {
+      "node_id": "Start",
+      "speaker_name": "Cantor Serin",
+      "text": "Three small pilgrim craft drift beneath a chain of violet beacons. Their navigation lattice is failing as the nearby light tide climbs toward resonance.\n\n\"Custodian, we ask passage to the Halo Tides. Guide us through the radiance, or lend us your fleet's blessing so the Verge may recognize our course.\"",
+      "choices": [
+        {
+          "choice_id": "escort",
+          "text": "Escort them through the radiance. [-1 Energy Core, -1 Action]",
+          "complete_event": true,
+          "action_cost": 1,
+          "resource_costs": { "Energy Cores": 1 },
+          "effects": {
+            "regional_counter_changes": { "verge_insight": 1, "chorus_exposure": 2 },
+            "set_flags": ["pilgrim_beacons_escorted"],
+            "officer_decision_tag": "aid",
+            "result_text": "Your fleet forms a shield around the pilgrim craft and guides them between the rising bands of light. Before departing, Cantor Serin transmits a fragment of the Tide's harmonic route.\n\n[color=#7cff9a]+1 Verge Insight  |  +2 Chorus Exposure[/color]"
+          }
+        },
+        {
+          "choice_id": "bless",
+          "text": "Send supplies and transmit a passage blessing. [-30 Raw Materials]",
+          "complete_event": true,
+          "resource_costs": { "Raw Materials": 30 },
+          "effects": {
+            "regional_counter_changes": { "chorus_exposure": 1 },
+            "set_flags": ["pilgrim_beacons_blessed"],
+            "officer_decision_tag": "aid",
+            "result_text": "Repair stock crosses the void while your transponder repeats the old words of safe passage. The pilgrims answer with a many-voiced hymn and vanish into the illuminated current.\n\n[color=#7cff9a]+1 Chorus Exposure[/color]"
+          }
+        },
+        {
+          "choice_id": "scan",
+          "text": "Scan their holds before answering. [-1 Action]",
+          "next_node_id": "CargoRevealed",
+          "action_cost": 1,
+          "required_acting_ships": ["The Aether Skimmer", "The Relic Harvester"],
+          "effects": {
+            "set_flags": ["pilgrim_beacons_scanned"],
+            "officer_decision_tag": "cautious",
+            "result_text": "The scan finds a shielded harmonic mass aboard the lead craft. It is not part of their navigation lattice."
+          }
+        },
+        {
+          "choice_id": "extort",
+          "text": "Demand a tithe for safe passage. [+50 Raw Materials]",
+          "complete_event": true,
+          "effects": {
+            "resource_changes": { "Raw Materials": 50 },
+            "set_flags": ["pilgrims_extorted"],
+            "officer_decision_tag": "extort",
+            "result_text": "The pilgrims surrender repair stock without argument. Their final transmission contains no curse—only your fleet's registry, spoken slowly so every beacon can remember it.\n\n[color=#7cff9a]+50 Raw Materials[/color]"
+          }
+        },
+        {
+          "choice_id": "refuse",
+          "text": "Refuse passage and close the channel.",
+          "complete_event": true,
+          "effects": {
+            "set_flags": ["pilgrim_beacons_refused"],
+            "officer_decision_tag": "refuse",
+            "result_text": "The beacon chain dims behind you. The pilgrim craft remain on the edge of the rising light tide, still repeating their request to an empty channel."
+          }
+        }
+      ]
+    },
+    {
+      "node_id": "CargoRevealed",
+      "speaker_name": "Cantor Serin",
+      "text": "Your scan pierces a shielded reliquary aboard the lead craft. Within it, a harmonic icon is actively pulling at the surrounding light—and worsening the navigational interference.\n\nCantor Serin does not deny it. \"The icon must reach the Halo Tides. We knew you might not understand.\"",
+      "choices": [
+        {
+          "choice_id": "allow_relic",
+          "text": "Allow the relic to continue with them.",
+          "complete_event": true,
+          "effects": {
+            "regional_counter_changes": { "verge_insight": 1, "chorus_exposure": 2 },
+            "set_flags": ["pilgrim_relic_witnessed"],
+            "officer_decision_tag": "faithful",
+            "result_text": "You transmit a corrected route and let the reliquary pass. For one moment the icon answers your sensors with a pattern that feels uncomfortably like recognition.\n\n[color=#7cff9a]+1 Verge Insight  |  +2 Chorus Exposure[/color]"
+          }
+        },
+        {
+          "choice_id": "confiscate_relic",
+          "text": "Confiscate and seal the relic. [+1 Ancient Tech]",
+          "complete_event": true,
+          "effects": {
+            "resource_changes": { "Ancient Tech": 1 },
+            "regional_counter_changes": { "null_weaver_suspicion": 2 },
+            "set_flags": ["pilgrim_relic_confiscated"],
+            "officer_decision_tag": "confiscate",
+            "result_text": "The pilgrims release the reliquary rather than risk destruction. Its song falls silent inside your containment field, but a distant Null Weaver cipher immediately begins asking what your fleet has taken aboard.\n\n[color=#7cff9a]+1 Ancient Tech[/color]  [color=#ffcc66]+2 Null Weaver Suspicion[/color]"
+          }
+        },
+        {
+          "choice_id": "report_accord",
+          "text": "Transmit the evidence to the Celestial Accord.",
+          "complete_event": true,
+          "effects": {
+            "regional_counter_changes": { "accord_trust": 2, "verge_insight": 1 },
+            "set_flags": ["accord_pilgrim_dossier"],
+            "officer_decision_tag": "report",
+            "result_text": "An Accord observer acknowledges the evidence and begins constructing a safe interception route. The pilgrims break contact before the scholars arrive.\n\n[color=#7cff9a]+2 Accord Trust  |  +1 Verge Insight[/color]"
+          }
+        }
+      ]
+    }
+  ]
+}

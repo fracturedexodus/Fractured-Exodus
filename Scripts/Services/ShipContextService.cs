@@ -11,6 +11,14 @@ public class MissionInteractionContext
 	public MapEntity SourceEntity { get; set; }
 }
 
+public class AmbientEventInteractionContext
+{
+	public string InstanceId { get; set; } = string.Empty;
+	public AmbientEventDefinition Definition { get; set; }
+	public AmbientEventInstanceData Instance { get; set; }
+	public MapEntity SourceEntity { get; set; }
+}
+
 public class ShipMenuState
 {
 	public string Title { get; set; }
@@ -32,6 +40,8 @@ public class ShipMenuState
 	public bool ShowMission { get; set; }
 	public string MissionText { get; set; }
 	public string MissionInteractionKey { get; set; }
+	public bool ShowAmbientEvent { get; set; }
+	public string AmbientEventText { get; set; }
 }
 
 public class ShipContextService
@@ -54,6 +64,7 @@ public class ShipContextService
 		bool isPlayer = ship.Type == GameConstants.EntityTypes.PlayerFleet;
 		PlanetData adjacentPlanetData = GetAdjacentPlanetData(ship, hexContents);
 		MissionInteractionContext missionContext = GetAdjacentMissionContext(ship, hexContents);
+		AmbientEventInteractionContext ambientEventContext = GetAdjacentAmbientEventContext(ship, hexContents);
 		bool hasAdjacentOutpost = HasAdjacentOutpost(ship, hexContents);
 
 		return new ShipMenuState
@@ -76,7 +87,35 @@ public class ShipContextService
 			SalvageText = adjacentPlanetData != null && adjacentPlanetData.HasBeenSalvaged ? "SALVAGED" : "SALVAGE",
 			ShowMission = isPlayer && !inCombat && missionContext != null,
 			MissionText = missionContext?.Definition != null ? missionContext.Definition.Title.ToUpper() : "MISSION",
-			MissionInteractionKey = missionContext?.InteractionKey ?? string.Empty
+			MissionInteractionKey = missionContext?.InteractionKey ?? string.Empty,
+			ShowAmbientEvent = isPlayer && !inCombat && ambientEventContext != null,
+			AmbientEventText = ambientEventContext?.Definition != null
+				? $"ANSWER {ambientEventContext.Definition.MapDisplayName.ToUpper()}"
+				: "ANSWER SIGNAL"
+		};
+	}
+
+	public AmbientEventInteractionContext GetAdjacentAmbientEventContext(MapEntity ship, Dictionary<Vector2I, MapEntity> hexContents)
+	{
+		MapEntity entity = GetAdjacentEntityOfType(ship, hexContents, GameConstants.EntityTypes.AmbientEvent);
+		if (entity == null || string.IsNullOrWhiteSpace(entity.AmbientEventInstanceId))
+		{
+			return null;
+		}
+
+		AmbientEventInstanceData instance = GetAmbientEventInstance(entity.AmbientEventInstanceId);
+		AmbientEventDefinition definition = AmbientEventRegistry.GetEvent(entity.AmbientEventId);
+		if (instance == null || instance.IsResolved || definition == null)
+		{
+			return null;
+		}
+
+		return new AmbientEventInteractionContext
+		{
+			InstanceId = instance.InstanceId,
+			Definition = definition,
+			Instance = instance,
+			SourceEntity = entity
 		};
 	}
 
@@ -170,6 +209,33 @@ public class ShipContextService
 		}
 
 		return null;
+	}
+
+	private MapEntity GetAdjacentEntityOfType(MapEntity ship, Dictionary<Vector2I, MapEntity> hexContents, string entityType)
+	{
+		Vector2I shipHex = GetShipHex(ship, hexContents);
+		foreach (Vector2I dir in HexMath.Directions)
+		{
+			Vector2I neighbor = shipHex + dir;
+			if (hexContents.TryGetValue(neighbor, out MapEntity entity) && entity?.Type == entityType)
+			{
+				return entity;
+			}
+		}
+
+		return null;
+	}
+
+	private AmbientEventInstanceData GetAmbientEventInstance(string instanceId)
+	{
+		if (_globalData == null
+			|| string.IsNullOrWhiteSpace(_globalData.SavedSystem)
+			|| !_globalData.ExploredSystems.TryGetValue(_globalData.SavedSystem, out SystemData currentSystem))
+		{
+			return null;
+		}
+
+		return currentSystem.AmbientEvents?.Find(instance => instance != null && instance.InstanceId == instanceId);
 	}
 
 	private PlanetData GetPlanetData(string planetName)

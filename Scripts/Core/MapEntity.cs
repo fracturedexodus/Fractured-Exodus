@@ -21,6 +21,8 @@ public class MapEntity
 	public int CurrentInitiativeRoll;
 	public bool IsDead = false;
 	public string MissionInteractionKey = string.Empty;
+	public string AmbientEventId = string.Empty;
+	public string AmbientEventInstanceId = string.Empty;
 
 	public Sprite2D VisualSprite; 
 	public float BaseRotationOffset; 

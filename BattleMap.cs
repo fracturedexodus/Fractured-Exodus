@@ -90,6 +90,7 @@ public partial class BattleMap : Node2D
 	private VBoxContainer _equipMissileStack;
 	private VBoxContainer _equipItemList;
 	private Button _btnMission;
+	private Button _btnAmbientEvent;
 	private Button _btnOfficerSwap;
 	private CenterContainer _savePromptWrapper;
 	private LineEdit _saveNameLineEdit;
@@ -151,6 +152,9 @@ public partial class BattleMap : Node2D
 	private MovementExecutionService _movementExecutionService;
 	private OfficerPanelPresenterService _officerPanelPresenterService;
 	private MissionService _missionService;
+	private AmbientEventService _ambientEventService;
+	private AmbientEventPanel _ambientEventPanel;
+	private AmbientEventInteractionContext _activeAmbientEventContext;
 	private PanelContainer _officerMenuPanel;
 	private Label _officerMenuTitle;
 	private TextureRect _officerPortraitDisplay;
@@ -183,6 +187,7 @@ public partial class BattleMap : Node2D
 		if (_globalData != null) _jumpService = new JumpService(_globalData);
 		if (_globalData != null) _longRangeScanService = new LongRangeScanService(_globalData);
 		if (_globalData != null) _missionService = new MissionService(_globalData);
+		if (_globalData != null) _ambientEventService = new AmbientEventService(_globalData);
 		_explorationTurnService = new ExplorationTurnService();
 		_shipMenuPresenterService = new ShipMenuPresenterService();
 		_terminalMenuPresenterService = new TerminalMenuPresenterService();
@@ -272,6 +277,7 @@ public partial class BattleMap : Node2D
 		BuildPauseMenuUI();
 		BuildLoadGameMenuUI();
 		BuildMissionPromptUI();
+		BuildAmbientEventUI();
 		BuildOfficerReplacementPromptUI();
 		BuildOfficerSwapMenuUI();
 		BuildOfficerPanel();
@@ -327,6 +333,24 @@ public partial class BattleMap : Node2D
 		else
 		{
 			AddChild(_btnMission);
+		}
+
+		_btnAmbientEvent = new Button
+		{
+			Text = "ANSWER SIGNAL",
+			Visible = false,
+			CustomMinimumSize = new Vector2(0, 40),
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+		};
+		_btnAmbientEvent.AddThemeColorOverride("font_color", new Color(0.78f, 0.5f, 1f));
+		_btnAmbientEvent.Pressed += OnAmbientEventPressed;
+		if (UI != null && UI.BtnSalvage != null)
+		{
+			UI.BtnSalvage.GetParent().AddChild(_btnAmbientEvent);
+		}
+		else
+		{
+			AddChild(_btnAmbientEvent);
 		}
 
 		_btnOfficerSwap = new Button();
@@ -450,7 +474,8 @@ public partial class BattleMap : Node2D
 				type == GameConstants.EntityTypes.PlayerFleet ||
 				type == GameConstants.EntityTypes.EnemyFleet ||
 				type == GameConstants.EntityTypes.StarGate ||
-				type == GameConstants.EntityTypes.Outpost)
+				type == GameConstants.EntityTypes.Outpost ||
+				type == GameConstants.EntityTypes.AmbientEvent)
 			{
 				return false; 
 			}
@@ -2367,6 +2392,16 @@ public partial class BattleMap : Node2D
 
 	public override void _Input(InputEvent @event)
 	{
+		if (_ambientEventPanel?.IsOpen == true)
+		{
+			if (@event is InputEventKey ambientEscape && ambientEscape.Pressed && !ambientEscape.Echo && ambientEscape.Keycode == Key.Escape)
+			{
+				CloseAmbientEventPanel();
+				GetViewport().SetInputAsHandled();
+			}
+			return;
+		}
+
 		if (_replacementPromptWrapper != null && _replacementPromptWrapper.Visible)
 		{
 			if (@event is InputEventKey blockedKey && blockedKey.Pressed && !blockedKey.Echo && blockedKey.Keycode == Key.Escape)
@@ -2419,6 +2454,7 @@ public partial class BattleMap : Node2D
 		if (_deleteSaveConfirmWrapper != null && _deleteSaveConfirmWrapper.Visible) return;
 		if (_savePromptWrapper != null && _savePromptWrapper.Visible) return;
 		if (_missionPromptWrapper != null && _missionPromptWrapper.Visible) return;
+		if (_ambientEventPanel?.IsOpen == true) return;
 		if (_replacementPromptWrapper != null && _replacementPromptWrapper.Visible) return;
 		if (_officerInventoryOverlay != null && _officerInventoryOverlay.Visible) return;
 		if (_officerSwapMenuWrapper != null && _officerSwapMenuWrapper.Visible) return;
@@ -2895,6 +2931,7 @@ public partial class BattleMap : Node2D
 		if (_btnTrade != null) _btnTrade.Visible = false;
 		if (_btnEquip != null) _btnEquip.Visible = false; // --- NEW: Hide equip by default ---
 		if (_btnMission != null) _btnMission.Visible = false;
+		if (_btnAmbientEvent != null) _btnAmbientEvent.Visible = false;
 		if (_btnOfficerSwap != null) _btnOfficerSwap.Visible = false;
 
 		if (expand && ship != null)
@@ -2923,6 +2960,12 @@ public partial class BattleMap : Node2D
 			{
 				_btnMission.Text = string.IsNullOrEmpty(menuState.MissionText) ? "BLACK SITE MISSION" : menuState.MissionText;
 				_btnMission.Visible = true;
+			}
+
+			if (menuState.ShowAmbientEvent && _btnAmbientEvent != null)
+			{
+				_btnAmbientEvent.Text = string.IsNullOrWhiteSpace(menuState.AmbientEventText) ? "ANSWER SIGNAL" : menuState.AmbientEventText;
+				_btnAmbientEvent.Visible = true;
 			}
 
 			if (ship.Type == GameConstants.EntityTypes.PlayerFleet && _btnOfficerSwap != null)
@@ -4575,6 +4618,113 @@ public partial class BattleMap : Node2D
 		}
 
 		ShowMissionPrompt(CurrentlyViewedShip, missionContext, false);
+	}
+
+	private void BuildAmbientEventUI()
+	{
+		_ambientEventPanel = new AmbientEventPanel();
+		_ambientEventPanel.ChoiceSelected += ResolveAmbientEventChoice;
+		_ambientEventPanel.CloseRequested += CloseAmbientEventPanel;
+		AddChild(_ambientEventPanel);
+	}
+
+	private void OnAmbientEventPressed()
+	{
+		if (IsFleetMoving || Combat.InCombat || CurrentlyViewedShip == null || _shipContextService == null || _ambientEventService == null)
+		{
+			return;
+		}
+
+		AmbientEventInteractionContext context = _shipContextService.GetAdjacentAmbientEventContext(CurrentlyViewedShip, HexContents);
+		if (context?.Definition == null || context.Instance == null)
+		{
+			return;
+		}
+
+		_activeAmbientEventContext = context;
+		_ambientEventPanel.Open(context.Definition, context.Instance, _ambientEventService, CurrentlyViewedShip);
+	}
+
+	private void ResolveAmbientEventChoice(AmbientEventChoice choice)
+	{
+		if (_activeAmbientEventContext?.Instance == null || CurrentlyViewedShip == null || _ambientEventService == null)
+		{
+			return;
+		}
+
+		AmbientEventResolution resolution = _ambientEventService.ApplyChoice(_activeAmbientEventContext.Instance, choice, CurrentlyViewedShip);
+		if (!resolution.Applied)
+		{
+			_ambientEventPanel.ShowChoiceFailure(resolution.FailureReason);
+			return;
+		}
+
+		if (!string.IsNullOrWhiteSpace(resolution.OfficerDecisionTag))
+		{
+			ApplyOfficerApprovalEvent(
+				OfficerApprovalEventType.AmbientDecision,
+				new OfficerApprovalContext
+				{
+					ActingShipName = CurrentlyViewedShip.Name,
+					DecisionTag = resolution.OfficerDecisionTag
+				});
+		}
+
+		UpdateResourceUI();
+		UI.CombatLogPanel.Visible = true;
+		LogCombatMessage($"\n[color=#c58aff]--- {_activeAmbientEventContext.Definition.Title.ToUpperInvariant()} ---[/color]");
+		if (!string.IsNullOrWhiteSpace(resolution.ResultText))
+		{
+			LogCombatMessage(resolution.ResultText);
+		}
+
+		if (resolution.EventCompleted)
+		{
+			RemoveResolvedAmbientEventEntity(_activeAmbientEventContext.SourceEntity);
+			_ambientEventPanel.ShowCompletedResult(resolution.ResultText);
+			ToggleShipMenu(true, CurrentlyViewedShip);
+		}
+		else
+		{
+			_ambientEventPanel.ShowBranchResult(resolution.ResultText);
+			ToggleShipMenu(true, CurrentlyViewedShip);
+		}
+
+		SaveCampaign(true);
+	}
+
+	private void RemoveResolvedAmbientEventEntity(MapEntity eventEntity)
+	{
+		if (eventEntity == null)
+		{
+			return;
+		}
+
+		Vector2I? eventHex = null;
+		foreach (KeyValuePair<Vector2I, MapEntity> entry in HexContents)
+		{
+			if (entry.Value == eventEntity)
+			{
+				eventHex = entry.Key;
+				break;
+			}
+		}
+
+		if (eventHex.HasValue)
+		{
+			HexContents.Remove(eventHex.Value);
+		}
+
+		if (GodotObject.IsInstanceValid(eventEntity.VisualSprite))
+		{
+			eventEntity.VisualSprite.QueueFree();
+		}
+	}
+
+	private void CloseAmbientEventPanel()
+	{
+		_ambientEventPanel?.Close();
+		_activeAmbientEventContext = null;
 	}
 
 	private void ShowMissionPrompt(MapEntity ship, MissionInteractionContext missionContext, bool reopenShipMenu)

@@ -689,7 +689,7 @@ public class CombatManager
 				{
 					string type = _map.HexContents[neighbor].Type;
 					// --- THE FIX: AI CAN NO LONGER PATHFIND OVER OUTPOSTS! ---
-					if (type == GameConstants.EntityTypes.Planet || type == GameConstants.EntityTypes.BasePlanetPlayerStart || type == GameConstants.EntityTypes.CelestialBody || type == GameConstants.EntityTypes.PlayerFleet || type == GameConstants.EntityTypes.EnemyFleet || type == GameConstants.EntityTypes.StarGate || type == GameConstants.EntityTypes.Outpost) isBlocked = true;
+					if (type == GameConstants.EntityTypes.Planet || type == GameConstants.EntityTypes.BasePlanetPlayerStart || type == GameConstants.EntityTypes.CelestialBody || type == GameConstants.EntityTypes.PlayerFleet || type == GameConstants.EntityTypes.EnemyFleet || type == GameConstants.EntityTypes.StarGate || type == GameConstants.EntityTypes.Outpost || type == GameConstants.EntityTypes.AmbientEvent) isBlocked = true;
 				}
 
 				if (!isBlocked)

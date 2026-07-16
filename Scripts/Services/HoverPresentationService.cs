@@ -54,9 +54,20 @@ public class HoverPresentationService
 		MapEntity hoveredEntity = hexContents[hoveredHex];
 		bool isEnemy = hoveredEntity.Type == GameConstants.EntityTypes.EnemyFleet;
 		bool isPlayer = hoveredEntity.Type == GameConstants.EntityTypes.PlayerFleet;
-		if (!(isEnemy || isPlayer) || !GodotObject.IsInstanceValid(hoveredEntity.VisualSprite) || !hoveredEntity.VisualSprite.Visible)
+		bool isAmbientEvent = hoveredEntity.Type == GameConstants.EntityTypes.AmbientEvent;
+		if (!(isEnemy || isPlayer || isAmbientEvent) || !GodotObject.IsInstanceValid(hoveredEntity.VisualSprite) || !hoveredEntity.VisualSprite.Visible)
 		{
 			state.TooltipVisible = false;
+			return state;
+		}
+
+		if (isAmbientEvent)
+		{
+			state.HoverColor = new Color(0.7f, 0.3f, 1f, 0.5f);
+			state.TooltipVisible = true;
+			state.TooltipText = $"=== {hoveredEntity.Name.ToUpper()} ===\n{hoveredEntity.Details}";
+			Vector2 eventScreenPosition = hoveredEntity.VisualSprite.GetGlobalTransformWithCanvas().Origin;
+			state.TooltipPosition = eventScreenPosition + new Vector2((hexSize * 0.9f) + 18f, -54f);
 			return state;
 		}
 

@@ -14,7 +14,8 @@ public enum OfficerApprovalEventType
 	DistressSignalAmbush,
 	PurchaseEquipment,
 	EquipItem,
-	SellAncientTech
+	SellAncientTech,
+	AmbientDecision
 }
 
 public class OfficerApprovalContext
@@ -22,6 +23,7 @@ public class OfficerApprovalContext
 	public string ActingShipName { get; set; } = string.Empty;
 	public string ItemName { get; set; } = string.Empty;
 	public string ItemCategory { get; set; } = string.Empty;
+	public string DecisionTag { get; set; } = string.Empty;
 }
 
 public class OfficerApprovalChange
@@ -373,6 +375,7 @@ public class OfficerService
 			OfficerApprovalEventType.PurchaseEquipment => CalculatePurchaseDelta(officer, context),
 			OfficerApprovalEventType.EquipItem => CalculateEquipDelta(officer, context),
 			OfficerApprovalEventType.SellAncientTech => CalculateSellAncientTechDelta(officer),
+			OfficerApprovalEventType.AmbientDecision => CalculateAmbientDecisionDelta(officer, context?.DecisionTag),
 			_ => 0
 		};
 
@@ -485,6 +488,37 @@ public class OfficerService
 		return delta;
 	}
 
+	private int CalculateAmbientDecisionDelta(OfficerState officer, string decisionTag)
+	{
+		return decisionTag switch
+		{
+			"aid" => (officer.Ideology == "Humanitarian" ? 2 : 0)
+				+ (officer.Archetype == "Idealist" ? 1 : 0)
+				- (officer.Ideology == "Isolationist" ? 1 : 0),
+			"cautious" => (officer.Archetype == "Scholar" ? 1 : 0)
+				+ (officer.Archetype == "Pragmatist" ? 1 : 0)
+				- (officer.Flaw == "Reckless" ? 1 : 0),
+			"extort" => (officer.Archetype == "Pragmatist" ? 1 : 0)
+				+ (officer.Archetype == "Survivor" ? 1 : 0)
+				- (officer.Ideology == "Humanitarian" ? 2 : 0)
+				- (officer.Archetype == "Idealist" ? 1 : 0),
+			"refuse" => (officer.Ideology == "Isolationist" ? 1 : 0)
+				- (officer.Ideology == "Humanitarian" ? 1 : 0)
+				- (officer.Archetype == "Idealist" ? 1 : 0),
+			"faithful" => (officer.Archetype == "Zealot" ? 2 : 0)
+				+ (officer.Archetype == "Scholar" ? 1 : 0)
+				- (officer.Ideology == "AntiAI" ? 2 : 0)
+				- (officer.Flaw == "Fearful of AI" ? 1 : 0),
+			"confiscate" => (officer.Ideology == "AntiAI" ? 2 : 0)
+				+ (officer.Archetype == "Pragmatist" ? 1 : 0)
+				- (officer.Archetype == "Zealot" ? 1 : 0),
+			"report" => (officer.Archetype == "Scholar" ? 2 : 0)
+				+ (officer.Ideology == "TechnoReclamation" ? 1 : 0)
+				- (officer.Ideology == "Isolationist" ? 1 : 0),
+			_ => 0
+		};
+	}
+
 	private bool CategorySupportsProtection(string itemCategory)
 	{
 		return itemCategory == GameConstants.EquipmentCategories.Armor ||
@@ -518,7 +552,23 @@ public class OfficerService
 			OfficerApprovalEventType.PurchaseEquipment => $"purchasing {context?.ItemName ?? "new equipment"}",
 			OfficerApprovalEventType.EquipItem => $"upgrading {context?.ActingShipName ?? "the fleet"}",
 			OfficerApprovalEventType.SellAncientTech => "selling ancient tech",
+			OfficerApprovalEventType.AmbientDecision => GetAmbientDecisionReason(context?.DecisionTag),
 			_ => "recent command decisions"
+		};
+	}
+
+	private static string GetAmbientDecisionReason(string decisionTag)
+	{
+		return decisionTag switch
+		{
+			"aid" => "aiding the pilgrims",
+			"cautious" => "scanning the pilgrim vessels",
+			"extort" => "extorting the pilgrims",
+			"refuse" => "refusing the pilgrims passage",
+			"faithful" => "allowing the harmonic relic to pass",
+			"confiscate" => "confiscating the harmonic relic",
+			"report" => "reporting the relic to the Accord",
+			_ => "the decision at the pilgrim beacon"
 		};
 	}
 

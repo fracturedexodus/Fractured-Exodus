@@ -409,6 +409,14 @@ public class SaveGameService
 					saveDictionary["SaveSchemaVersion"] = 1;
 					version = 1;
 					break;
+				case 1:
+					if (!saveDictionary.ContainsKey("RegionalCounters"))
+					{
+						saveDictionary["RegionalCounters"] = new Godot.Collections.Dictionary<string, Variant>();
+					}
+					saveDictionary["SaveSchemaVersion"] = 2;
+					version = 2;
+					break;
 				default:
 					error = $"No migration exists from schema version {version}.";
 					return false;
