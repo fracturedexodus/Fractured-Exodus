@@ -152,6 +152,10 @@ The toolbar describes the next undo or redo operation. Saving does not erase the
 
 Save your v2 source before switching builders. The two tools use different authoring formats until v2 is compiled.
 
+## Overworld Content Registry
+
+Use **Overworld Registry** when you need to control where and when the mission appears on the system map. Mission Workbench owns the interior layout and mission logic; the Overworld Content Registry owns planet/outpost assignment, region eligibility, campaign flags, uniqueness, and spawn probability.
+
 ## Troubleshooting
 
 ### Compilation is blocked

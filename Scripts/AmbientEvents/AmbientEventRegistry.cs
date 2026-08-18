@@ -5,7 +5,7 @@ using System.Text.Json;
 
 public static class AmbientEventRegistry
 {
-	private const string EventDirectory = "res://Data/AmbientEvents/LuminousVerge";
+	private const string EventDirectory = "res://Data/AmbientEvents";
 	private static readonly Dictionary<string, AmbientEventDefinition> Events = new Dictionary<string, AmbientEventDefinition>(StringComparer.OrdinalIgnoreCase);
 	private static bool _loaded;
 
@@ -31,24 +31,34 @@ public static class AmbientEventRegistry
 		}
 
 		_loaded = true;
-		DirAccess directory = DirAccess.Open(EventDirectory);
-		if (directory == null)
+		List<string> paths = new List<string>();
+		CollectEventPaths(EventDirectory, paths);
+		if (paths.Count == 0)
 		{
-			GD.PushWarning($"Ambient event directory not found: {EventDirectory}");
+			GD.PushWarning($"No ambient event definitions found under: {EventDirectory}");
 			return;
 		}
 
-		directory.ListDirBegin();
-		for (string fileName = directory.GetNext(); !string.IsNullOrEmpty(fileName); fileName = directory.GetNext())
+		foreach (string path in paths)
 		{
-			if (directory.CurrentIsDir() || !fileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
-			{
-				continue;
-			}
+			LoadFile(path);
+		}
+	}
 
-			LoadFile($"{EventDirectory}/{fileName}");
+	private static void CollectEventPaths(string directoryPath, List<string> paths)
+	{
+		DirAccess directory = DirAccess.Open(directoryPath);
+		if (directory == null) return;
+		directory.ListDirBegin();
+		for (string entry = directory.GetNext(); !string.IsNullOrEmpty(entry); entry = directory.GetNext())
+		{
+			if (entry is "." or "..") continue;
+			string path = $"{directoryPath.TrimEnd('/')}/{entry}";
+			if (directory.CurrentIsDir()) CollectEventPaths(path, paths);
+			else if (entry.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) paths.Add(path);
 		}
 		directory.ListDirEnd();
+		paths.Sort(StringComparer.Ordinal);
 	}
 
 	private static void LoadFile(string path)

@@ -124,8 +124,7 @@ public static class MapSpawner
 		}
 
 		SystemData currentSystem = globalData.ExploredSystems[globalData.SavedSystem];
-		EnsureBlackSiteRelayAssigned(globalData, currentSystem);
-		EnsureSmugglerExchangeAssigned(globalData, currentSystem);
+		OverworldContentAssignmentService.AssignNodeContent(globalData, currentSystem, rng);
 		Vector2I basePlanetLocation = new Vector2I(2, -1); 
 		
 		int currentOrbitRing = 2; 
@@ -170,7 +169,7 @@ public static class MapSpawner
 			SpawnEntityAtHex(gateHex, "res://Assets/Backgrounds/StarGate.png", gateEntity, 0.4f, hexSize, hexGrid, hexContents, entityLayer);
 		}
 
-		EnsureAmbientEventAssigned(globalData, currentSystem, rng, maxRadius, hexGrid, hexContents);
+		OverworldContentAssignmentService.AssignFreeHexContent(globalData, currentSystem, rng, maxRadius, hexGrid, hexContents);
 		SpawnAmbientEvents(currentSystem, hexSize, hexGrid, hexContents, entityLayer);
 
 		// --- PERSISTENT ASTEROIDS ---
@@ -491,146 +490,6 @@ public static class MapSpawner
 		}
 	}
 
-	private static void EnsureBlackSiteRelayAssigned(GlobalData globalData, SystemData currentSystem)
-	{
-		if (globalData == null || currentSystem?.Planets == null || currentSystem.Planets.Count == 0)
-		{
-			return;
-		}
-
-		bool alreadyAssigned = globalData.ExploredSystems.Values.Any(system =>
-			system?.Planets != null && system.Planets.Any(planet => planet != null && planet.IsBlackSiteRelaySite));
-		if (alreadyAssigned)
-		{
-			foreach (SystemData system in globalData.ExploredSystems.Values)
-			{
-				if (system?.Planets == null)
-				{
-					continue;
-				}
-
-				foreach (PlanetData planet in system.Planets)
-				{
-					if (planet != null && planet.IsBlackSiteRelaySite && string.IsNullOrWhiteSpace(planet.MissionInteractionKey))
-					{
-						planet.MissionInteractionKey = "planet:black_site_relay";
-					}
-				}
-			}
-			return;
-		}
-
-		PlanetData targetPlanet = currentSystem.Planets.FirstOrDefault(planet => planet != null && planet.Name != globalData.SavedPlanet)
-			?? currentSystem.Planets.FirstOrDefault();
-		if (targetPlanet != null)
-		{
-			targetPlanet.IsBlackSiteRelaySite = true;
-			targetPlanet.MissionInteractionKey = "planet:black_site_relay";
-		}
-	}
-
-	private static void EnsureSmugglerExchangeAssigned(GlobalData globalData, SystemData currentSystem)
-	{
-		if (globalData == null || currentSystem?.Outposts == null || currentSystem.Outposts.Count == 0)
-		{
-			return;
-		}
-
-		bool alreadyAssigned = globalData.ExploredSystems.Values.Any(system =>
-			system?.Outposts != null && system.Outposts.Any(outpost =>
-				outpost != null && outpost.MissionInteractionKey == "outpost:smuggler_exchange"));
-		if (alreadyAssigned)
-		{
-			return;
-		}
-
-		OutpostData targetOutpost = currentSystem.Outposts.FirstOrDefault(outpost =>
-			outpost != null
-			&& !string.IsNullOrWhiteSpace(outpost.SpritePath)
-			&& outpost.SpritePath.Contains("BlackMarketAsteroidExchangeSprite"));
-		targetOutpost ??= currentSystem.Outposts.FirstOrDefault(outpost => outpost != null);
-		if (targetOutpost != null)
-		{
-			targetOutpost.MissionInteractionKey = "outpost:smuggler_exchange";
-		}
-	}
-
-	private static void EnsureAmbientEventAssigned(
-		GlobalData globalData,
-		SystemData currentSystem,
-		Random rng,
-		int maxRadius,
-		Dictionary<Vector2I, Node2D> hexGrid,
-		Dictionary<Vector2I, MapEntity> hexContents)
-	{
-		if (globalData == null || currentSystem == null || GetCurrentRegion(globalData) != "Luminous Verge")
-		{
-			return;
-		}
-
-		currentSystem.AmbientEvents ??= new List<AmbientEventInstanceData>();
-		if (currentSystem.AmbientEvents.Any(instance => instance != null && instance.EventId == "pilgrim_beacons"))
-		{
-			return;
-		}
-
-		AmbientEventDefinition definition = AmbientEventRegistry.GetEvent("pilgrim_beacons");
-		if (definition == null)
-		{
-			return;
-		}
-
-		bool hasPilgrimBeaconAnywhere = globalData.ExploredSystems.Values.Any(system =>
-			system?.AmbientEvents != null && system.AmbientEvents.Any(instance => instance != null && instance.EventId == definition.EventId));
-		if (hasPilgrimBeaconAnywhere && rng.NextDouble() > definition.SpawnChance)
-		{
-			return;
-		}
-
-		int minimumRadius = Math.Min(7, maxRadius);
-		int maximumRadius = Math.Max(minimumRadius + 1, Math.Min(14, maxRadius - 1));
-		Vector2I eventHex = FindAmbientEventHex(currentSystem, minimumRadius, maximumRadius, rng, hexGrid, hexContents);
-		currentSystem.AmbientEvents.Add(new AmbientEventInstanceData
-		{
-			InstanceId = $"{currentSystem.SystemName}:pilgrim_beacons",
-			EventId = definition.EventId,
-			HexPosition = eventHex,
-			CurrentNodeId = definition.StartNodeId
-		});
-	}
-
-	private static Vector2I FindAmbientEventHex(
-		SystemData currentSystem,
-		int minimumRadius,
-		int maximumRadius,
-		Random rng,
-		Dictionary<Vector2I, Node2D> hexGrid,
-		Dictionary<Vector2I, MapEntity> hexContents)
-	{
-		HashSet<Vector2I> reservedOutpostHexes = (currentSystem.Outposts ?? new List<OutpostData>())
-			.Where(outpost => outpost != null)
-			.Select(outpost => outpost.HexPosition)
-			.ToHashSet();
-
-		for (int attempt = 0; attempt < 24; attempt++)
-		{
-			Vector2I candidate = FindEmptyHexInRing(rng.Next(minimumRadius, maximumRadius + 1), rng, hexGrid, hexContents);
-			if (!reservedOutpostHexes.Contains(candidate))
-			{
-				return candidate;
-			}
-		}
-
-		List<Vector2I> fallbackHexes = hexGrid.Keys
-			.Where(hex => HexMath.HexDistance(Vector2I.Zero, hex) >= minimumRadius
-				&& HexMath.HexDistance(Vector2I.Zero, hex) <= maximumRadius
-				&& !hexContents.ContainsKey(hex)
-				&& !reservedOutpostHexes.Contains(hex))
-			.ToList();
-		ShuffleList(fallbackHexes, rng);
-		return fallbackHexes.Count > 0 ? fallbackHexes[0] : new Vector2I(maximumRadius, 0);
-	}
-
 	private static void SpawnAmbientEvents(
 		SystemData currentSystem,
 		float hexSize,
@@ -707,9 +566,4 @@ public static class MapSpawner
 			.SetTrans(Tween.TransitionType.Linear);
 	}
 
-	private static string GetCurrentRegion(GlobalData globalData)
-	{
-		return globalData?.CurrentSectorStars?
-			.FirstOrDefault(star => star != null && star.SystemName == globalData.SavedSystem)?.Region ?? string.Empty;
-	}
 }

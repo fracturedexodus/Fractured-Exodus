@@ -54,6 +54,7 @@ public partial class MissionWorkbenchV2
 		row.AddChild(BuildButton("Compile", CompileDocument));
 		row.AddChild(BuildButton("Playtest", PlaytestDocument));
 		row.AddChild(BuildButton("Legacy Builder", () => GetTree().ChangeSceneToFile(LegacyBuilderScenePath)));
+		row.AddChild(BuildButton("Overworld Registry", () => GetTree().ChangeSceneToFile(OverworldRegistryScenePath)));
 		row.AddChild(BuildButton("Manual", ShowUserManual));
 		row.AddChild(BuildButton("Exit", RequestExit));
 		RefreshToolbar();

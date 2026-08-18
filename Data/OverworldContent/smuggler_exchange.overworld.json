@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "content_id": "smuggler_exchange_placement",
+  "display_name": "Smuggler Exchange placement",
+  "content_type": "mission",
+  "content_reference": "outpost:smuggler_exchange",
+  "enabled": true,
+  "priority": 90,
+  "placement": {
+    "node_type": "outpost",
+    "unique_scope": "campaign",
+    "regions": [],
+    "spawn_chance": 1.0,
+    "guarantee_first_placement": true,
+    "avoid_starting_planet": false,
+    "preferred_sprite_contains": "BlackMarketAsteroidExchangeSprite",
+    "allow_fallback_target": true,
+    "minimum_radius": 7,
+    "maximum_radius": 14,
+    "required_flags": [],
+    "blocked_flags": []
+  }
+}

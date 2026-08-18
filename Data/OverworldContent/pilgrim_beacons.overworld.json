@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "content_id": "pilgrim_beacons_placement",
+  "display_name": "Pilgrim Beacons placement",
+  "content_type": "ambient_event",
+  "content_reference": "pilgrim_beacons",
+  "enabled": true,
+  "priority": 50,
+  "placement": {
+    "node_type": "free_hex",
+    "unique_scope": "system",
+    "regions": ["Luminous Verge"],
+    "spawn_chance": 0.35,
+    "guarantee_first_placement": true,
+    "avoid_starting_planet": false,
+    "preferred_sprite_contains": "",
+    "allow_fallback_target": true,
+    "minimum_radius": 7,
+    "maximum_radius": 14,
+    "required_flags": [],
+    "blocked_flags": []
+  }
+}

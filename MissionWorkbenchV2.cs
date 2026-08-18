@@ -7,6 +7,7 @@ public partial class MissionWorkbenchV2 : Node2D
 {
 	private const string LegacyBuilderScenePath = "res://mission_scene_builder.tscn";
 	private const string WorkbenchScenePath = "res://mission_workbench_v2.tscn";
+	private const string OverworldRegistryScenePath = "res://overworld_content_registry.tscn";
 	private const string UserManualPath = "res://Scripts/Missions/WorkbenchV2/USER_MANUAL.md";
 	private const float DefaultZoom = 0.62f;
 	private const float MinZoom = 0.25f;
