@@ -2,6 +2,8 @@
 
 Open `res://mission_workbench_v2.tscn` to author missions. The legacy builder remains at `res://mission_scene_builder.tscn` and links back to v2.
 
+The complete user guide is in `USER_MANUAL.md` and is also available from the Workbench's **Manual** button.
+
 ## Data flow
 
 1. Legacy layout JSON and `MissionTemplate` resources are imported once.

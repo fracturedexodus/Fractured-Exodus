@@ -20,6 +20,7 @@ public partial class MissionWorkbenchV2
 		BuildInspectorPanel();
 		BuildProblemsPanel();
 		BuildModeViews();
+		BuildDialogs();
 	}
 
 	private void BuildTopBar()
@@ -53,7 +54,68 @@ public partial class MissionWorkbenchV2
 		row.AddChild(BuildButton("Compile", CompileDocument));
 		row.AddChild(BuildButton("Playtest", PlaytestDocument));
 		row.AddChild(BuildButton("Legacy Builder", () => GetTree().ChangeSceneToFile(LegacyBuilderScenePath)));
+		row.AddChild(BuildButton("Manual", ShowUserManual));
+		row.AddChild(BuildButton("Exit", RequestExit));
 		RefreshToolbar();
+	}
+
+	private void BuildDialogs()
+	{
+		_manualDialog = new AcceptDialog
+		{
+			Title = "Mission Workbench v2 — User Manual",
+			OkButtonText = "Close",
+			MinSize = new Vector2I(920, 700)
+		};
+		_manualText = new TextEdit
+		{
+			Editable = false,
+			WrapMode = TextEdit.LineWrappingMode.Boundary,
+			CustomMinimumSize = new Vector2(880f, 620f)
+		};
+		_manualDialog.AddChild(_manualText);
+		AddChild(_manualDialog);
+
+		_exitConfirmation = new ConfirmationDialog
+		{
+			Title = "Exit Mission Workbench v2?",
+			DialogText = "This mission has unsaved source changes. Exit and discard them?",
+			OkButtonText = "Exit Without Saving",
+			CancelButtonText = "Keep Working"
+		};
+		_exitConfirmation.Confirmed += ExitWorkbench;
+		AddChild(_exitConfirmation);
+	}
+
+	private void ShowUserManual()
+	{
+		using FileAccess file = FileAccess.Open(UserManualPath, FileAccess.ModeFlags.Read);
+		_manualText.Text = file?.GetAsText()
+			?? "The user manual could not be loaded. See " + UserManualPath + ".";
+		_manualText.SetCaretLine(0);
+		_manualText.SetVScroll(0);
+		_manualDialog.PopupCentered(new Vector2I(1000, 780));
+	}
+
+	private void RequestExit()
+	{
+		if (_store.IsDirty || _dialogueHasUnsavedChanges)
+		{
+			_exitConfirmation.DialogText = _store.IsDirty && _dialogueHasUnsavedChanges
+				? "This mission has unsaved source and dialogue changes. Exit and discard them?"
+				: _dialogueHasUnsavedChanges
+					? "This mission has unsaved dialogue changes. Exit and discard them?"
+					: "This mission has unsaved source changes. Exit and discard them?";
+			_exitConfirmation.PopupCentered();
+			return;
+		}
+
+		ExitWorkbench();
+	}
+
+	private void ExitWorkbench()
+	{
+		GetTree().Quit();
 	}
 
 	private void BuildPalettePanel()
@@ -151,9 +213,11 @@ public partial class MissionWorkbenchV2
 		VBoxContainer dialogueEditor = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
 		dialogueEditor.AddChild(new Label { Text = "SPEAKER" });
 		_dialogueSpeakerEdit = new LineEdit();
+		_dialogueSpeakerEdit.TextChanged += _ => { if (_activeDialogueData != null) _dialogueHasUnsavedChanges = true; };
 		dialogueEditor.AddChild(_dialogueSpeakerEdit);
 		dialogueEditor.AddChild(new Label { Text = "DIALOGUE TEXT" });
 		_dialogueTextEdit = new TextEdit { SizeFlagsVertical = Control.SizeFlags.ExpandFill };
+		_dialogueTextEdit.TextChanged += () => { if (_activeDialogueData != null) _dialogueHasUnsavedChanges = true; };
 		dialogueEditor.AddChild(_dialogueTextEdit);
 		HBoxContainer dialogueButtons = new HBoxContainer();
 		dialogueButtons.AddChild(BuildButton("Add Node", AddDialogueNode));
@@ -265,6 +329,7 @@ public partial class MissionWorkbenchV2
 		_dialogueNodeList.Clear();
 		_activeDialogueData = null;
 		_activeDialogueNodeId = string.Empty;
+		_dialogueHasUnsavedChanges = false;
 		_dialogueSpeakerEdit.Text = string.Empty;
 		_dialogueTextEdit.Text = string.Empty;
 		foreach (string id in _store.Document?.DialogueConversationIds ?? new System.Collections.Generic.List<string>()) _dialogueConversationList.AddItem(id);
@@ -282,6 +347,7 @@ public partial class MissionWorkbenchV2
 			int item = _dialogueNodeList.AddItem($"{node.Id} — {node.SpeakerName}");
 			_dialogueNodeList.SetItemMetadata(item, node.Id);
 		}
+		_dialogueHasUnsavedChanges = false;
 	}
 
 	private void OnDialogueNodeSelected(long index)
@@ -294,6 +360,7 @@ public partial class MissionWorkbenchV2
 		_activeDialogueNodeId = node.Id;
 		_dialogueSpeakerEdit.Text = node.SpeakerName;
 		_dialogueTextEdit.Text = node.Text;
+		_dialogueHasUnsavedChanges = false;
 	}
 
 	private void AddDialogueNode()
@@ -306,6 +373,7 @@ public partial class MissionWorkbenchV2
 		_activeDialogueData.Nodes.Add(node);
 		_activeDialogueNodeId = node.Id;
 		ReloadActiveDialogueNodeList();
+		_dialogueHasUnsavedChanges = true;
 	}
 
 	private void DeleteDialogueNode()
@@ -315,6 +383,7 @@ public partial class MissionWorkbenchV2
 		_activeDialogueData.Nodes.Remove(node);
 		_activeDialogueNodeId = _activeDialogueData.Nodes[0].Id;
 		ReloadActiveDialogueNodeList();
+		_dialogueHasUnsavedChanges = true;
 	}
 
 	private void SaveDialogueNode()
@@ -323,7 +392,11 @@ public partial class MissionWorkbenchV2
 		if (node == null) return;
 		node.SpeakerName = _dialogueSpeakerEdit.Text.Trim();
 		node.Text = _dialogueTextEdit.Text;
-		if (DialogueRegistry.SaveConversationData(_activeDialogueData)) SetStatus($"Saved dialogue {_activeDialogueData.ConversationId}.");
+		if (DialogueRegistry.SaveConversationData(_activeDialogueData))
+		{
+			_dialogueHasUnsavedChanges = false;
+			SetStatus($"Saved dialogue {_activeDialogueData.ConversationId}.");
+		}
 		else SetStatus("Dialogue save failed.", true);
 	}
 

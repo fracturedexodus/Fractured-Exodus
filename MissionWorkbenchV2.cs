@@ -7,6 +7,7 @@ public partial class MissionWorkbenchV2 : Node2D
 {
 	private const string LegacyBuilderScenePath = "res://mission_scene_builder.tscn";
 	private const string WorkbenchScenePath = "res://mission_workbench_v2.tscn";
+	private const string UserManualPath = "res://Scripts/Missions/WorkbenchV2/USER_MANUAL.md";
 	private const float DefaultZoom = 0.62f;
 	private const float MinZoom = 0.25f;
 	private const float MaxZoom = 1.6f;
@@ -38,8 +39,12 @@ public partial class MissionWorkbenchV2 : Node2D
 	private ItemList _dialogueNodeList;
 	private LineEdit _dialogueSpeakerEdit;
 	private TextEdit _dialogueTextEdit;
+	private AcceptDialog _manualDialog;
+	private TextEdit _manualText;
+	private ConfirmationDialog _exitConfirmation;
 	private DialogueConversationData _activeDialogueData;
 	private string _activeDialogueNodeId = string.Empty;
+	private bool _dialogueHasUnsavedChanges;
 	private MissionTemplate _activeTemplate;
 	private WorkbenchMode _mode;
 	private string _placementAsset = string.Empty;

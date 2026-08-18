@@ -17,6 +17,7 @@ public partial class MissionWorkbenchV2
 	{
 		if (@event is InputEventKey key && key.Pressed && !key.Echo)
 		{
+			if (key.CtrlPressed && key.Keycode == Key.Q) { RequestExit(); HandleInput(); return; }
 			if (key.CtrlPressed && key.Keycode == Key.S) { SaveDocument(); HandleInput(); return; }
 			if (key.CtrlPressed && key.Keycode == Key.Z) { _store.Undo(); HandleInput(); return; }
 			if (key.CtrlPressed && (key.Keycode == Key.Y || (key.ShiftPressed && key.Keycode == Key.Z))) { _store.Redo(); HandleInput(); return; }
