@@ -100,6 +100,8 @@ public partial class MissionMap : Node2D
 	private AudioStream _missionEnemyLaserFireSound;
 	private Node2D _isoWorld;
 	private Node2D _characterLayer;
+	private Node2D _wallLayer;
+	private Node2D _staticPropLayer;
 	private Camera2D _camera;
 	private MissionRoomBuilder _roomBuilder;
 	private TextureRect _backgroundBackdrop;
@@ -129,6 +131,7 @@ public partial class MissionMap : Node2D
 	private readonly HashSet<Vector2I> _visibleCells = new HashSet<Vector2I>();
 	private readonly HashSet<Vector2I> _exploredBuildCells = new HashSet<Vector2I>();
 	private readonly HashSet<Vector2I> _visibleBuildCells = new HashSet<Vector2I>();
+	private readonly HashSet<Vector2I> _visibleOccludableBuildCells = new HashSet<Vector2I>();
 	private readonly List<Node2D> _evacZoneVisualRoots = new List<Node2D>();
 	private readonly List<Polygon2D> _evacZoneHighlightPolygons = new List<Polygon2D>();
 	private readonly List<Line2D> _evacZoneHighlightOutlines = new List<Line2D>();
@@ -184,6 +187,8 @@ public partial class MissionMap : Node2D
 	private MissionInteractionMenuTarget _activeInteractionMenuTarget;
 	private string _activeInteractionMenuOfficerId = string.Empty;
 	private MissionPlayerCombatActionMode _selectedCombatActionMode = MissionPlayerCombatActionMode.Attack;
+	private bool _missionDepthSortingDirty = true;
+	private bool _missionDepthSortingRefreshQueued;
 
 	private int CombatAttackActionCost => MissionGridRules.StandardActionCost;
 	private int CombatInteractionActionCost => MissionGridRules.StandardActionCost;
@@ -197,6 +202,8 @@ public partial class MissionMap : Node2D
 		_missionState = _missionService.GetCurrentMissionState();
 		_isoWorld = GetNode<Node2D>("IsoWorld");
 		_characterLayer = GetNode<Node2D>("IsoWorld/CharacterLayer");
+		_wallLayer = GetNodeOrNull<Node2D>("IsoWorld/WallLayer");
+		_staticPropLayer = GetNodeOrNull<Node2D>("IsoWorld/PropLayer");
 		_camera = GetNode<Camera2D>("Camera2D");
 		_roomBuilder = GetNode<MissionRoomBuilder>("IsoWorld/RoomBuilder");
 		_missionUi = GetNode<MissionUI>("MissionUI");
@@ -233,6 +240,7 @@ public partial class MissionMap : Node2D
 		WireDialogue();
 		UpdateSelectedOfficerDisplay();
 		RefreshCombatHud();
+		RefreshMissionDepthSortingIfDirty();
 	}
 
 	public override void _ExitTree()
@@ -282,7 +290,6 @@ public partial class MissionMap : Node2D
 		UpdateEscortSurvivorBehavior((float)delta);
 		UpdateCombatHoverSummary();
 		UpdateMissionInteractionMenu();
-		UpdateMissionDepthSorting();
 	}
 
 	private void SetupMissionAudio()
@@ -1407,6 +1414,7 @@ public partial class MissionMap : Node2D
 		npc.Died += OnMissionNpcDied;
 		_missionNpcs.Add(npc);
 		ReindexMissionNpcCells();
+		MarkMissionDepthSortingDirty();
 		return npc;
 	}
 
@@ -1520,7 +1528,7 @@ public partial class MissionMap : Node2D
 		ApplyFogToLayer(GetNodeOrNull<Node2D>("IsoWorld/PropLayer"));
 		ApplyFogToMissionProps();
 		ApplyFogToMissionNpcs();
-		UpdateMissionDepthSorting();
+		MarkMissionDepthSortingDirty();
 		if (!IsAnyCombatActorMoving())
 		{
 			EvaluateCombatState();
@@ -1736,6 +1744,30 @@ public partial class MissionMap : Node2D
 		}
 	}
 
+	private void MarkMissionDepthSortingDirty()
+	{
+		_missionDepthSortingDirty = true;
+		if (_missionDepthSortingRefreshQueued || !IsInsideTree())
+		{
+			return;
+		}
+
+		_missionDepthSortingRefreshQueued = true;
+		CallDeferred(nameof(RefreshMissionDepthSortingIfDirty));
+	}
+
+	private void RefreshMissionDepthSortingIfDirty()
+	{
+		_missionDepthSortingRefreshQueued = false;
+		if (!_missionDepthSortingDirty)
+		{
+			return;
+		}
+
+		_missionDepthSortingDirty = false;
+		UpdateMissionDepthSorting();
+	}
+
 	private void UpdateMissionDepthSorting()
 	{
 		if (_roomBuilder == null)
@@ -1743,18 +1775,29 @@ public partial class MissionMap : Node2D
 			return;
 		}
 
+		_visibleOccludableBuildCells.Clear();
 		foreach (OfficerPawn officer in _officerPawns.Where(officer => officer != null && !officer.IsDead))
 		{
+			Vector2I buildCell = GetBuildCell(officer.CurrentCell);
 			officer.ZAsRelative = false;
-			officer.ZIndex = _roomBuilder.GetCanvasSortOrderForBuildCell(GetBuildCell(officer.CurrentCell), ActorSortBias);
+			officer.ZIndex = _roomBuilder.GetCanvasSortOrderForBuildCell(buildCell, ActorSortBias);
 			officer.SetCoverOccluded(false, CoverGhostZIndex);
+			if (officer.Visible)
+			{
+				_visibleOccludableBuildCells.Add(buildCell);
+			}
 		}
 
 		foreach (MissionNpcPawn npc in _missionNpcs.Where(npc => npc != null && !npc.IsDead && !npc.IsExtracted))
 		{
+			Vector2I buildCell = GetBuildCell(npc.CurrentCell);
 			npc.ZAsRelative = false;
-			npc.ZIndex = _roomBuilder.GetCanvasSortOrderForBuildCell(GetBuildCell(npc.CurrentCell), ActorSortBias);
+			npc.ZIndex = _roomBuilder.GetCanvasSortOrderForBuildCell(buildCell, ActorSortBias);
 			npc.SetCoverOccluded(false, CoverGhostZIndex);
+			if (npc.Visible)
+			{
+				_visibleOccludableBuildCells.Add(buildCell);
+			}
 		}
 
 		foreach ((Vector2I cell, MissionProp prop) in _missionPropsByCell)
@@ -1767,10 +1810,14 @@ public partial class MissionMap : Node2D
 			prop.ZAsRelative = false;
 			prop.ZIndex = _roomBuilder.GetCanvasSortOrderForBuildCell(cell, RuntimePropSortBias);
 			prop.SetCoverOccluded(false);
+			if (!prop.IsConsumed && prop.Visible)
+			{
+				_visibleOccludableBuildCells.Add(cell);
+			}
 		}
 
-		ApplyWallDepthSorting(GetNodeOrNull<Node2D>("IsoWorld/WallLayer"));
-		ApplyDoorAndStaticPropDepthSorting(GetNodeOrNull<Node2D>("IsoWorld/PropLayer"));
+		ApplyWallDepthSorting(_wallLayer);
+		ApplyDoorAndStaticPropDepthSorting(_staticPropLayer);
 	}
 
 	private void ApplyWallDepthSorting(Node2D wallLayer)
@@ -1897,14 +1944,12 @@ public partial class MissionMap : Node2D
 
 	private bool IsAnyVisibleOccludableEntityInBuildCell(Vector2I buildCell)
 	{
-		return _officerPawns.Any(officer => officer != null && !officer.IsDead && officer.Visible && GetBuildCell(officer.CurrentCell) == buildCell)
-			|| _missionNpcs.Any(npc => npc != null && !npc.IsDead && npc.Visible && GetBuildCell(npc.CurrentCell) == buildCell)
-			|| _missionPropsByCell.Any(entry => entry.Value != null && !entry.Value.IsConsumed && entry.Value.Visible && entry.Key == buildCell);
+		return _visibleOccludableBuildCells.Contains(buildCell);
 	}
 
 	private void SetPropsInBuildCellOccluded(Vector2I buildCell)
 	{
-		foreach ((Vector2I cell, MissionProp prop) in _missionPropsByCell.Where(entry => entry.Value != null && entry.Key == buildCell))
+		if (_missionPropsByCell.TryGetValue(buildCell, out MissionProp prop) && prop != null)
 		{
 			prop.SetCoverOccluded(true);
 		}
@@ -5048,7 +5093,10 @@ public partial class MissionMap : Node2D
 			return;
 		}
 
-		_roomBuilder.TrySetDoorOpen(interaction.TargetId, nextOpenState, true);
+		if (_roomBuilder.TrySetDoorOpen(interaction.TargetId, nextOpenState, true))
+		{
+			MarkMissionDepthSortingDirty();
+		}
 	}
 
 	private Vector2 GetCellGlobalPosition(Vector2I cell)
@@ -5207,6 +5255,7 @@ public partial class MissionMap : Node2D
 		prop.Position = _roomBuilder.GetCellWorldPosition(buildCell.X, buildCell.Y);
 		runtimePropLayer.AddChild(prop);
 		_missionPropsByCell[buildCell] = prop;
+		MarkMissionDepthSortingDirty();
 		return prop;
 	}
 
@@ -5360,6 +5409,7 @@ public partial class MissionMap : Node2D
 		if (itemIds.Count == 0)
 		{
 			prop.ApplySavedConsumptionState(true);
+			MarkMissionDepthSortingDirty();
 			return false;
 		}
 
@@ -5369,6 +5419,7 @@ public partial class MissionMap : Node2D
 		{
 			_missionPropsByCell.Remove(buildCell);
 		}
+		MarkMissionDepthSortingDirty();
 
 		AppendLootCollectionLog(collectorName, itemIds);
 		UpdateSelectedOfficerDisplay();
@@ -8438,6 +8489,7 @@ public partial class MissionMap : Node2D
 	private void OnMissionNpcEnteredCell(MissionNpcPawn pawn, Vector2I cell)
 	{
 		ReindexMissionNpcCells();
+		MarkMissionDepthSortingDirty();
 		TryCollectLootAtCurrentCell(pawn);
 	}
 
@@ -9663,6 +9715,7 @@ public partial class MissionMap : Node2D
 		}
 
 		RefreshBlockedPropCells();
+		MarkMissionDepthSortingDirty();
 	}
 
 	private void RefreshBlockedPropCells()
@@ -9829,6 +9882,7 @@ public partial class MissionMap : Node2D
 			if (_missionPropsByCell.ContainsKey(propCell) && _missionPropsByCell[propCell] == prop)
 			{
 				_missionPropsByCell.Remove(propCell);
+				MarkMissionDepthSortingDirty();
 			}
 		}
 
@@ -9921,6 +9975,7 @@ public partial class MissionMap : Node2D
 		}
 
 		npc.CommitInteractionResult(result, context);
+		MarkMissionDepthSortingDirty();
 		AppendActionLog(BuildActionResultMessage(
 			context?.Officer?.OfficerName,
 			result.StatusMessage,
