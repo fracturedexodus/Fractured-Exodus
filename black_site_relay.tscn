@@ -46,9 +46,6 @@ origin = Vector2(0, -20)
 tile_step = Vector2(226, 133)
 layout_resource_path = "res://Data/MissionLayouts/black_site_relay_builder.json"
 build_in_editor = true
-floor_rows = PackedStringArray("...fgf...", "..ffhff..", ".fffffff.", ".ffvtvff.", ".fffffff.", "..ffhff..", "...fgf...")
-wall_rows = PackedStringArray("..lwxyr..", ".........", ".........", ".........", ".........", ".........", ".........")
-prop_rows = PackedStringArray(".........", "..d...D..", ".s.....a.", ".c.m.o.C.", "..jiPk...", ".........", ".........")
 
 [node name="MissionUI" parent="." instance=ExtResource("2_mission_ui")]
 

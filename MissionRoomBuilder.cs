@@ -5,7 +5,6 @@ using System.Linq;
 [Tool]
 public partial class MissionRoomBuilder : Node
 {
-	private const string DefaultLayoutPath = "res://Data/MissionLayouts/black_site_relay_builder.json";
 	private const string DefaultTilesetTexturePath = "res://Assets/Missions/BlackSiteRelay/black_site_relay_tileset.png";
 	private const int MovementSubdivisionsPerTile = 8;
 	private const int MovementCellMinOffset = 3;
@@ -83,13 +82,9 @@ public partial class MissionRoomBuilder : Node
 		}
 	}
 
-	[Export] public string[] FloorRows { get; set; } = System.Array.Empty<string>();
-	[Export] public string[] WallRows { get; set; } = System.Array.Empty<string>();
-	[Export] public string[] PropRows { get; set; } = System.Array.Empty<string>();
-
 	public override void _Ready()
 	{
-		if (Engine.IsEditorHint() && !BuildInEditor)
+		if (!Engine.IsEditorHint() || !BuildInEditor)
 		{
 			return;
 		}
@@ -543,16 +538,39 @@ public partial class MissionRoomBuilder : Node
 		return reachable;
 	}
 
-	public void BuildRoom()
+	public bool BuildRoom()
 	{
 		Node2D floorLayer = GetNodeOrNull<Node2D>(FloorLayerPath);
 		Node2D wallLayer = GetNodeOrNull<Node2D>(WallLayerPath);
 		Node2D propLayer = GetNodeOrNull<Node2D>(PropLayerPath);
 		if (floorLayer == null || wallLayer == null || propLayer == null)
 		{
-			return;
+			GD.PushError($"Mission layout '{LayoutResourcePath}' cannot be built because one or more target layers are missing.");
+			return false;
 		}
 
+		if (!TryLoadSavedLayout(out Godot.Collections.Array tiles, out string errorMessage))
+		{
+			tiles.Dispose();
+			ClearBuiltRoom(floorLayer, wallLayer, propLayer);
+			GD.PushError(errorMessage);
+			return false;
+		}
+
+		ClearBuiltRoom(floorLayer, wallLayer, propLayer);
+		try
+		{
+			BuildSavedLayout(tiles, floorLayer, wallLayer, propLayer);
+		}
+		finally
+		{
+			tiles.Dispose();
+		}
+		return true;
+	}
+
+	private void ClearBuiltRoom(Node2D floorLayer, Node2D wallLayer, Node2D propLayer)
+	{
 		ClearLayer(floorLayer);
 		ClearLayer(wallLayer);
 		ClearLayer(propLayer);
@@ -571,46 +589,270 @@ public partial class MissionRoomBuilder : Node
 		_doorTransitionKeysById.Clear();
 		_doorMovementTransitionKeysById.Clear();
 		_selectedBackgroundId = MissionBackgroundCatalog.DefaultId;
-
-		if (!BuildFromSavedLayout(floorLayer, wallLayer, propLayer))
-		{
-			BuildLayer(FloorRows, MissionTileCatalog.FloorTiles.ToDictionary(def => def.Symbol), floorLayer, "Floor");
-			BuildLayer(WallRows, MissionTileCatalog.WallTiles.ToDictionary(def => def.Symbol), wallLayer, "Wall");
-			BuildLayer(PropRows, MissionTileCatalog.PropTiles.ToDictionary(def => def.Symbol), propLayer, "Prop");
-		}
 	}
 
-	private bool BuildFromSavedLayout(Node2D floorLayer, Node2D wallLayer, Node2D propLayer)
+	private bool TryLoadSavedLayout(out Godot.Collections.Array tiles, out string errorMessage)
 	{
-		string resourcePath = GetEffectiveLayoutResourcePath();
-		if (string.IsNullOrEmpty(resourcePath))
+		tiles = new Godot.Collections.Array();
+		errorMessage = string.Empty;
+		string resourcePath = LayoutResourcePath?.Trim() ?? string.Empty;
+		if (string.IsNullOrWhiteSpace(resourcePath))
 		{
+			errorMessage = "Mission layout path is required; no default layout will be substituted.";
 			return false;
 		}
 
 		string absolutePath = ProjectSettings.GlobalizePath(resourcePath);
 		if (!FileAccess.FileExists(absolutePath))
 		{
+			errorMessage = $"Mission layout file does not exist: {resourcePath}";
 			return false;
 		}
 
 		using FileAccess file = FileAccess.Open(absolutePath, FileAccess.ModeFlags.Read);
 		if (file == null)
 		{
+			errorMessage = $"Mission layout file could not be opened: {resourcePath}";
 			return false;
 		}
 
-		Variant parsed = Json.ParseString(file.GetAsText());
-		if (parsed.VariantType != Variant.Type.Array)
+		using Json json = new Json();
+		if (json.Parse(file.GetAsText()) != Error.Ok)
+		{
+			errorMessage = $"Mission layout JSON is invalid at {resourcePath}: {json.GetErrorMessage()}";
+			return false;
+		}
+
+		if (json.Data.VariantType != Variant.Type.Array)
+		{
+			errorMessage = $"Mission layout root must be an array: {resourcePath}";
+			return false;
+		}
+
+		tiles = json.Data.AsGodotArray();
+		if (!ValidateSavedLayout(tiles, resourcePath, out errorMessage))
+		{
+			tiles.Dispose();
+			tiles = new Godot.Collections.Array();
+			return false;
+		}
+
+		return true;
+	}
+
+	private static bool ValidateSavedLayout(Godot.Collections.Array tiles, string resourcePath, out string errorMessage)
+	{
+		errorMessage = string.Empty;
+		if (tiles.Count == 0)
+		{
+			errorMessage = $"Mission layout contains no entries: {resourcePath}";
+			return false;
+		}
+
+		int backgroundCount = 0;
+		int floorTileCount = 0;
+		for (int index = 0; index < tiles.Count; index++)
+		{
+			Variant entryVariant = tiles[index];
+			if (entryVariant.VariantType != Variant.Type.Dictionary)
+			{
+				errorMessage = $"Mission layout entry {index} must be an object: {resourcePath}";
+				return false;
+			}
+
+			using Godot.Collections.Dictionary entry = entryVariant.AsGodotDictionary();
+			if (!TryGetRequiredString(entry, "item_type", out string itemType))
+			{
+				errorMessage = $"Mission layout entry {index} is missing a non-empty string 'item_type': {resourcePath}";
+				return false;
+			}
+			if (!ValidateOptionalFields(entry, index, resourcePath, out errorMessage))
+			{
+				return false;
+			}
+
+			if (itemType == "background")
+			{
+				backgroundCount++;
+				if (!TryGetRequiredString(entry, "background_id", out string backgroundId)
+					|| !MissionBackgroundCatalog.All.Any(definition => definition.Id == backgroundId))
+				{
+					errorMessage = $"Mission layout entry {index} has an unknown or missing 'background_id': {resourcePath}";
+					return false;
+				}
+				continue;
+			}
+
+			if (!TryGetRequiredInteger(entry, "column", out _)
+				|| !TryGetRequiredInteger(entry, "row", out _))
+			{
+				errorMessage = $"Mission layout entry {index} requires integer 'column' and 'row' values: {resourcePath}";
+				return false;
+			}
+			if (!ValidateOptionalResource(entry, "prop_definition_path", "PropDefinition", index, resourcePath, out errorMessage)
+				|| !ValidateOptionalResource(entry, "npc_definition_path", "MissionNpcDefinition", index, resourcePath, out errorMessage))
+			{
+				return false;
+			}
+
+			switch (itemType)
+			{
+				case "tile":
+					if (!TryGetRequiredString(entry, "tile_id", out string tileId)
+						|| !MissionTileCatalog.TryGetById(tileId, out MissionTileDefinition tileDefinition))
+					{
+						errorMessage = $"Mission layout entry {index} has an unknown or missing 'tile_id': {resourcePath}";
+						return false;
+					}
+					if (tileDefinition.Category == MissionTileCategory.Floor)
+					{
+						floorTileCount++;
+					}
+					break;
+				case "marker":
+					if (!TryGetRequiredString(entry, "marker_id", out string markerId)
+						|| !MissionMarkerCatalog.TryGetById(markerId, out _))
+					{
+						errorMessage = $"Mission layout entry {index} has an unknown or missing 'marker_id': {resourcePath}";
+						return false;
+					}
+					break;
+				case "placed_prop":
+					if (!TryGetRequiredString(entry, "prop_definition_path", out string propDefinitionPath)
+						|| !ResourceLoader.Exists(propDefinitionPath, "PropDefinition"))
+					{
+						errorMessage = $"Mission layout entry {index} has a missing or invalid 'prop_definition_path': {resourcePath}";
+						return false;
+					}
+					break;
+				default:
+					errorMessage = $"Mission layout entry {index} has unsupported item type '{itemType}': {resourcePath}";
+					return false;
+			}
+		}
+
+		if (backgroundCount != 1)
+		{
+			errorMessage = $"Mission layout must contain exactly one background entry, but found {backgroundCount}: {resourcePath}";
+			return false;
+		}
+
+		if (floorTileCount == 0)
+		{
+			errorMessage = $"Mission layout must contain at least one floor tile: {resourcePath}";
+			return false;
+		}
+
+		return true;
+	}
+
+	private static bool ValidateOptionalFields(
+		Godot.Collections.Dictionary entry,
+		int entryIndex,
+		string resourcePath,
+		out string errorMessage)
+	{
+		errorMessage = string.Empty;
+		string[] stringFields =
+		{
+			"background_id", "tile_id", "marker_id", "logic_role", "logic_label", "logic_target_id",
+			"logic_npc_portrait", "logic_required_flag", "logic_set_flag", "logic_trigger_mode", "logic_notes",
+			"prop_definition_path", "npc_definition_path"
+		};
+		foreach (string field in stringFields)
+		{
+			if (entry.TryGetValue(field, out Variant value) && value.VariantType != Variant.Type.String)
+			{
+				errorMessage = $"Mission layout entry {entryIndex} field '{field}' must be a string: {resourcePath}";
+				return false;
+			}
+		}
+
+		string[] numericFields = { "offset_x", "offset_y", "rotation_degrees" };
+		foreach (string field in numericFields)
+		{
+			if (entry.TryGetValue(field, out Variant value)
+				&& value.VariantType != Variant.Type.Int
+				&& value.VariantType != Variant.Type.Float)
+			{
+				errorMessage = $"Mission layout entry {entryIndex} field '{field}' must be numeric: {resourcePath}";
+				return false;
+			}
+		}
+
+		string[] booleanFields = { "flip_h", "flip_v", "logic_once" };
+		foreach (string field in booleanFields)
+		{
+			if (entry.TryGetValue(field, out Variant value) && value.VariantType != Variant.Type.Bool)
+			{
+				errorMessage = $"Mission layout entry {entryIndex} field '{field}' must be a boolean: {resourcePath}";
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	private static bool ValidateOptionalResource(
+		Godot.Collections.Dictionary entry,
+		string field,
+		string typeHint,
+		int entryIndex,
+		string resourcePath,
+		out string errorMessage)
+	{
+		errorMessage = string.Empty;
+		if (!entry.TryGetValue(field, out Variant value) || string.IsNullOrWhiteSpace(value.AsString()))
+		{
+			return true;
+		}
+
+		string referencedPath = value.AsString().Trim();
+		if (ResourceLoader.Exists(referencedPath, typeHint))
+		{
+			return true;
+		}
+
+		errorMessage = $"Mission layout entry {entryIndex} field '{field}' references a missing or invalid {typeHint}: {referencedPath} ({resourcePath})";
+		return false;
+	}
+
+	private static bool TryGetRequiredString(Godot.Collections.Dictionary entry, string key, out string value)
+	{
+		value = string.Empty;
+		if (!entry.TryGetValue(key, out Variant variant) || variant.VariantType != Variant.Type.String)
 		{
 			return false;
 		}
 
-		Godot.Collections.Array tiles = parsed.AsGodotArray();
-		bool placedAnyTile = false;
+		value = variant.AsString().Trim();
+		return !string.IsNullOrEmpty(value);
+	}
+
+	private static bool TryGetRequiredInteger(Godot.Collections.Dictionary entry, string key, out int value)
+	{
+		value = 0;
+		if (!entry.TryGetValue(key, out Variant variant)
+			|| (variant.VariantType != Variant.Type.Int && variant.VariantType != Variant.Type.Float))
+		{
+			return false;
+		}
+
+		double numericValue = variant.AsDouble();
+		if (numericValue < int.MinValue || numericValue > int.MaxValue || numericValue != System.Math.Truncate(numericValue))
+		{
+			return false;
+		}
+
+		value = (int)numericValue;
+		return true;
+	}
+
+	private void BuildSavedLayout(Godot.Collections.Array tiles, Node2D floorLayer, Node2D wallLayer, Node2D propLayer)
+	{
 		foreach (Variant tileVariant in tiles)
 		{
-			Godot.Collections.Dictionary tileDict = tileVariant.AsGodotDictionary();
+			using Godot.Collections.Dictionary tileDict = tileVariant.AsGodotDictionary();
 			string itemType = tileDict.TryGetValue("item_type", out Variant itemTypeVariant) ? itemTypeVariant.AsString() : "tile";
 			string markerId = tileDict.TryGetValue("marker_id", out Variant markerIdVariant) ? markerIdVariant.AsString() : "";
 			string tileId = tileDict.TryGetValue("tile_id", out Variant tileIdVariant) ? tileIdVariant.AsString() : "";
@@ -692,14 +934,10 @@ public partial class MissionRoomBuilder : Node
 					FlipV = flipV,
 					Cell = new Vector2I(column, row)
 				});
-				placedAnyTile = true;
 				continue;
 			}
 
-			if (!MissionTileCatalog.TryGetById(tileId, out MissionTileDefinition definition))
-			{
-				continue;
-			}
+			MissionTileCatalog.TryGetById(tileId, out MissionTileDefinition definition);
 
 			Node2D targetLayer = definition.Category switch
 			{
@@ -760,21 +998,7 @@ public partial class MissionRoomBuilder : Node
 					Cell = cell
 				});
 			}
-			placedAnyTile = true;
 		}
-
-		return placedAnyTile;
-	}
-
-	private string GetEffectiveLayoutResourcePath()
-	{
-		string resourcePath = LayoutResourcePath?.Trim();
-		if (!string.IsNullOrEmpty(resourcePath))
-		{
-			return resourcePath;
-		}
-
-		return DefaultLayoutPath;
 	}
 
 	private static void ClearLayer(Node layer)
@@ -783,30 +1007,6 @@ public partial class MissionRoomBuilder : Node
 		{
 			layer.RemoveChild(child);
 			child.QueueFree();
-		}
-	}
-
-	private void BuildLayer(string[] rows, Dictionary<char, MissionTileDefinition> definitions, Node2D targetLayer, string prefix)
-	{
-		if (rows == null)
-		{
-			return;
-		}
-
-		for (int row = 0; row < rows.Length; row++)
-		{
-			string rowText = rows[row] ?? string.Empty;
-			for (int column = 0; column < rowText.Length; column++)
-			{
-				char symbol = rowText[column];
-				if (!definitions.TryGetValue(symbol, out MissionTileDefinition definition))
-				{
-					continue;
-				}
-
-				RegisterTileCell(definition, column, row);
-				targetLayer.AddChild(CreateSprite(definition, column, row, $"{prefix}_{column}_{row}_{symbol}", Vector2.Zero, 0f));
-			}
 		}
 	}
 
