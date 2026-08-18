@@ -430,6 +430,9 @@ public partial class MissionSceneBuilder : Node2D
 		Button frameMapButton = new Button { Text = "Frame Map" };
 		frameMapButton.Pressed += FramePlacedMap;
 		topRow.AddChild(frameMapButton);
+		Button openV2Button = new Button { Text = "Open Workbench v2" };
+		openV2Button.Pressed += OpenWorkbenchV2;
+		topRow.AddChild(openV2Button);
 		GetNode<Button>("UILayer/TopBar/Margin/TopRow/ClearButton").Pressed += ClearLayout;
 		GetNode<Button>("UILayer/TopBar/Margin/TopRow/ExitButton").Pressed += ExitBuilder;
 	}
@@ -4695,6 +4698,11 @@ public partial class MissionSceneBuilder : Node2D
 	private void ExitBuilder()
 	{
 		GetTree().Quit();
+	}
+
+	private void OpenWorkbenchV2()
+	{
+		GetTree().ChangeSceneToFile("res://mission_workbench_v2.tscn");
 	}
 
 	private void AdjustZoom(float delta)

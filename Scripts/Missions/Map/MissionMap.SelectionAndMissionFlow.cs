@@ -684,6 +684,12 @@ public partial class MissionMap
 			return;
 		}
 
+		if (MissionWorkbenchPlaytestSession.TryConsumeLayoutOverride(GetActiveMissionId(), out string playtestLayoutPath))
+		{
+			_roomBuilder.LayoutResourcePath = playtestLayoutPath;
+			return;
+		}
+
 		_roomBuilder.LayoutResourcePath = _missionTemplate?.LayoutResourcePath?.Trim() ?? string.Empty;
 	}
 
@@ -809,4 +815,3 @@ public partial class MissionMap
 		_missionService?.ReturnToMissionSource(this);
 	}
 }
-

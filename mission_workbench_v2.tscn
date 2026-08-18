@@ -1,0 +1,18 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://MissionWorkbenchV2.cs" id="1_workbench"]
+
+[node name="MissionWorkbenchV2" type="Node2D"]
+script = ExtResource("1_workbench")
+
+[node name="Camera2D" type="Camera2D" parent="."]
+
+[node name="World" type="Node2D" parent="."]
+
+[node name="FloorLayer" type="Node2D" parent="World"]
+[node name="WallLayer" type="Node2D" parent="World"]
+y_sort_enabled = true
+[node name="PropLayer" type="Node2D" parent="World"]
+y_sort_enabled = true
+[node name="MarkerLayer" type="Node2D" parent="World"]
+y_sort_enabled = true
