@@ -8391,6 +8391,33 @@
         "oneShot": false,
         "notes": "A fast-moving scavenger armed with a stripped-down sidearm and a talent for ambushes."
       }
+    },
+    {
+      "id": "map_da0069d401734e8fb6bb363f9138bf1e",
+      "sourceOrder": 311,
+      "kind": "marker",
+      "tileId": "",
+      "markerId": "hostile_spawn",
+      "column": 7,
+      "row": 14,
+      "offsetX": 0,
+      "offsetY": 0,
+      "rotationDegrees": 0,
+      "flipH": false,
+      "flipV": false,
+      "propDefinitionPath": "",
+      "npcDefinitionPath": "",
+      "logic": {
+        "role": "marker",
+        "label": "Hostile Spawn",
+        "targetId": "hostile_spawn_7_14",
+        "npcPortraitPath": "",
+        "requiredFlag": "",
+        "setFlag": "",
+        "triggerMode": "none",
+        "oneShot": false,
+        "notes": ""
+      }
     }
   ],
   "flowNodes": [
@@ -8627,6 +8654,19 @@
       "targetId": "custodian_sentry_9_0",
       "canvasX": 560,
       "canvasY": 760
+    },
+    {
+      "id": "flow_map_da0069d401734e8fb6bb363f9138bf1e",
+      "kind": "spawn",
+      "mapElementId": "map_da0069d401734e8fb6bb363f9138bf1e",
+      "label": "Hostile Spawn",
+      "triggerMode": "none",
+      "requiredFlags": [],
+      "blockedFlags": [],
+      "setFlags": [],
+      "targetId": "hostile_spawn_7_14",
+      "canvasX": 0,
+      "canvasY": 950
     },
     {
       "id": "flow_map_def51b77cd12",
