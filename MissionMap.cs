@@ -7612,7 +7612,7 @@ public partial class MissionMap : Node2D
 					continue;
 				}
 
-				if (!_roomBuilder.TryGetMovementPath(current, next, out List<Vector2I> localStepPath) || localStepPath.Count <= 1)
+				if (!_roomBuilder.CanTraverseMovementTransition(current, next))
 				{
 					continue;
 				}

@@ -258,7 +258,6 @@ public sealed class MissionSpawnResolver
 
 	private static Vector2I ResolveSpawnCell(MissionRoomBuilder roomBuilder, string markerId, Vector2I fallbackCell, HashSet<Vector2I> reservedCells, ref bool usedFallbackCell)
 	{
-		Vector2I spawnCell = fallbackCell;
 		if (!string.IsNullOrWhiteSpace(markerId)
 			&& roomBuilder.TryGetSpawnCell(markerId, out Vector2I markerCell)
 			&& roomBuilder.IsWalkableCell(markerCell)
@@ -275,18 +274,7 @@ public sealed class MissionSpawnResolver
 
 		Vector2I fallbackSearchOrigin = fallbackCell != Vector2I.Zero ? fallbackCell : Vector2I.Zero;
 		Vector2I? nearbyAvailable = FindNearestAvailableCell(roomBuilder, fallbackSearchOrigin, reservedCells);
-		if (nearbyAvailable.HasValue)
-		{
-			return nearbyAvailable.Value;
-		}
-
-		Vector2I? firstAvailable = roomBuilder.GetFloorCells()
-			.Where(cell => roomBuilder.IsWalkableCell(cell) && !reservedCells.Contains(cell))
-			.OrderBy(cell => cell.Y)
-			.ThenBy(cell => cell.X)
-			.Cast<Vector2I?>()
-			.FirstOrDefault();
-		return firstAvailable ?? fallbackCell;
+		return nearbyAvailable ?? fallbackCell;
 	}
 
 	private static Vector2I? FindNearestAvailableCell(MissionRoomBuilder roomBuilder, Vector2I origin, HashSet<Vector2I> reservedCells)
@@ -296,40 +284,12 @@ public sealed class MissionSpawnResolver
 			return null;
 		}
 
-		Queue<Vector2I> frontier = new Queue<Vector2I>();
-		HashSet<Vector2I> visited = new HashSet<Vector2I>();
-		frontier.Enqueue(origin);
-		visited.Add(origin);
-
-		Vector2I[] directions =
-		{
-			new Vector2I(1, 0),
-			new Vector2I(-1, 0),
-			new Vector2I(0, 1),
-			new Vector2I(0, -1)
-		};
-
-		while (frontier.Count > 0)
-		{
-			Vector2I current = frontier.Dequeue();
-			if (roomBuilder.IsWalkableCell(current) && !reservedCells.Contains(current))
-			{
-				return current;
-			}
-
-			foreach (Vector2I direction in directions)
-			{
-				Vector2I next = current + direction;
-				if (visited.Contains(next))
-				{
-					continue;
-				}
-
-				visited.Add(next);
-				frontier.Enqueue(next);
-			}
-		}
-
-		return null;
+		return roomBuilder.GetFloorCells()
+			.Where(cell => roomBuilder.IsWalkableCell(cell) && !reservedCells.Contains(cell))
+			.OrderBy(cell => Mathf.Abs(cell.X - origin.X) + Mathf.Abs(cell.Y - origin.Y))
+			.ThenBy(cell => cell.Y)
+			.ThenBy(cell => cell.X)
+			.Cast<Vector2I?>()
+			.FirstOrDefault();
 	}
 }

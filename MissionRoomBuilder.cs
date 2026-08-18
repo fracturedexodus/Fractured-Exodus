@@ -219,6 +219,15 @@ public partial class MissionRoomBuilder : Node
 		return _movementCells.Contains(cell);
 	}
 
+	public bool CanTraverseMovementTransition(Vector2I fromCell, Vector2I toCell)
+	{
+		int distance = Mathf.Abs(toCell.X - fromCell.X) + Mathf.Abs(toCell.Y - fromCell.Y);
+		return distance == 1
+			&& IsWalkableMovementCell(fromCell)
+			&& IsWalkableMovementCell(toCell)
+			&& !IsMovementTransitionBlocked(fromCell, toCell);
+	}
+
 	public bool IsDoorCell(Vector2I cell)
 	{
 		return _doorIdsByCell.ContainsKey(cell);
