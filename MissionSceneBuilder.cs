@@ -430,7 +430,7 @@ public partial class MissionSceneBuilder : Node2D
 		Button frameMapButton = new Button { Text = "Frame Map" };
 		frameMapButton.Pressed += FramePlacedMap;
 		topRow.AddChild(frameMapButton);
-		Button openV2Button = new Button { Text = "Open Workbench v2" };
+		Button openV2Button = new Button { Text = "Open Workbench v3" };
 		openV2Button.Pressed += OpenWorkbenchV2;
 		topRow.AddChild(openV2Button);
 		GetNode<Button>("UILayer/TopBar/Margin/TopRow/ClearButton").Pressed += ClearLayout;
@@ -4702,7 +4702,7 @@ public partial class MissionSceneBuilder : Node2D
 
 	private void OpenWorkbenchV2()
 	{
-		GetTree().ChangeSceneToFile("res://mission_workbench_v2.tscn");
+		GetTree().ChangeSceneToFile("res://mission_workbench_v3.tscn");
 	}
 
 	private void AdjustZoom(float delta)

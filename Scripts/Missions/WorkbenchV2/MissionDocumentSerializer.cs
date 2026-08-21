@@ -112,6 +112,8 @@ public static class MissionDocumentSerializer
 		document.FlowNodes ??= new List<MissionFlowNodeData>();
 		document.DialogueConversationIds ??= new List<string>();
 		document.Outcomes ??= new List<MissionOutcomeData>();
+		document.Authoring ??= new MissionAuthoringData();
+		document.Authoring.Rules ??= new List<MissionRuleData>();
 		foreach (MissionMapElement element in document.Elements.Where(element => element != null))
 		{
 			element.Logic ??= new MissionElementLogic();

@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="MissionTemplate" format=3]
+
+[ext_resource type="Script" path="res://Scripts/Missions/Entities/MissionSpawnDefinition.cs" id="1_c8kfe"]
+[ext_resource type="Script" path="res://Scripts/Missions/Core/MissionTemplate.cs" id="2_7gm8r"]
+
+[resource]
+script = ExtResource("2_7gm8r")
+MissionId = "dark_order"
+Title = "Dark Order"
+Description = "Investigate the Dark Order"
+MissionScenePath = "res://black_site_relay.tscn"
+LayoutResourcePath = "res://Data/MissionLayouts/dark_order_builder.json"
+RecommendedOfficerCount = 1
+SourceNodeType = "Planet"
+ObjectiveText = "Find out all information you can about the Dark Order"
+PromptText = "Investigate the Dark Order"
+PrimaryActionText = "COMPLETE MISSION"
+PrimaryOutcomeId = "dark_order_complete"
+InteractionKeys = Array[String](["mission:dark_order"])

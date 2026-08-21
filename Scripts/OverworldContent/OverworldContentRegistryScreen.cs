@@ -15,6 +15,7 @@ public partial class OverworldContentRegistryScreen : Control
 	private LineEdit _displayName;
 	private OptionButton _contentType;
 	private LineEdit _contentReference;
+	private OptionButton _missionReferenceOption;
 	private CheckBox _enabled;
 	private LineEdit _priority;
 	private OptionButton _nodeType;
@@ -99,6 +100,11 @@ public partial class OverworldContentRegistryScreen : Control
 		_displayName = AddLine(form, "Display Name");
 		_contentType = AddEnum<OverworldContentType>(form, "Content Type");
 		_contentReference = AddLine(form, "Content Reference");
+		form.AddChild(new Label { Text = "Choose Registered Mission" });
+		_missionReferenceOption = new OptionButton { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+		form.AddChild(_missionReferenceOption);
+		PopulateMissionReferenceOptions();
+		_missionReferenceOption.ItemSelected += SelectMissionReference;
 		_enabled = AddCheck(form, "Enabled");
 		_priority = AddLine(form, "Priority");
 		_nodeType = AddEnum<OverworldPlacementNodeType>(form, "World Node Type");
@@ -144,6 +150,7 @@ public partial class OverworldContentRegistryScreen : Control
 	private void ReloadRegistry()
 	{
 		OverworldContentRegistry.Reload();
+		PopulateMissionReferenceOptions();
 		_definitions.Clear();
 		_definitions.AddRange(OverworldContentRegistry.GetDefinitions());
 		RefreshDefinitionList();
@@ -206,6 +213,7 @@ public partial class OverworldContentRegistryScreen : Control
 		_displayName.Text = definition?.DisplayName ?? string.Empty;
 		_contentType.Select((int)(definition?.ContentType ?? OverworldContentType.Mission));
 		_contentReference.Text = definition?.ContentReference ?? string.Empty;
+		RefreshMissionReferenceSelection();
 		_enabled.ButtonPressed = definition?.Enabled ?? true;
 		_priority.Text = (definition?.Priority ?? 0).ToString();
 		OverworldPlacementRule placement = definition?.Placement ?? new OverworldPlacementRule();
@@ -287,7 +295,7 @@ public partial class OverworldContentRegistryScreen : Control
 	private void OpenMissionWorkbench()
 	{
 		if (_dirty) { SetStatus("Save or Reload before leaving the registry.", true); return; }
-		GetTree().ChangeSceneToFile("res://mission_workbench_v2.tscn");
+		GetTree().ChangeSceneToFile("res://mission_workbench_v3.tscn");
 	}
 
 	private void ShowManual()
@@ -318,8 +326,55 @@ public partial class OverworldContentRegistryScreen : Control
 	private void ConnectDirtySignals()
 	{
 		foreach (LineEdit edit in new[] { _contentId, _displayName, _contentReference, _priority, _regions, _spawnChance, _preferredSprite, _minimumRadius, _maximumRadius, _requiredFlags, _blockedFlags }) edit.TextChanged += _ => MarkDirty();
-		foreach (OptionButton option in new[] { _contentType, _nodeType, _uniqueScope }) option.ItemSelected += _ => MarkDirty();
+		foreach (OptionButton option in new[] { _contentType, _nodeType, _uniqueScope }) option.ItemSelected += _ => { RefreshMissionReferenceAvailability(); MarkDirty(); };
 		foreach (CheckBox check in new[] { _enabled, _guaranteeFirst, _avoidStartingPlanet, _allowFallback }) check.Toggled += _ => MarkDirty();
+	}
+
+	private void PopulateMissionReferenceOptions()
+	{
+		if (_missionReferenceOption == null) return;
+		_missionReferenceOption.Clear();
+		_missionReferenceOption.AddItem("Choose a mission…");
+		_missionReferenceOption.SetItemMetadata(0, string.Empty);
+		foreach (MissionTemplate template in new MissionRegistry().LoadTemplates().Where(template => template != null && template.IsEnabled).OrderBy(template => template.Title))
+		{
+			foreach (string key in template.InteractionKeys ?? new Godot.Collections.Array<string>())
+			{
+				if (string.IsNullOrWhiteSpace(key)) continue;
+				int item = _missionReferenceOption.ItemCount;
+				_missionReferenceOption.AddItem($"{template.Title} — {key}");
+				_missionReferenceOption.SetItemMetadata(item, key.Trim());
+			}
+		}
+		RefreshMissionReferenceAvailability();
+	}
+
+	private void SelectMissionReference(long index)
+	{
+		if (_loadingForm || index <= 0 || index >= _missionReferenceOption.ItemCount) return;
+		_contentReference.Text = _missionReferenceOption.GetItemMetadata((int)index).AsString();
+		MarkDirty();
+	}
+
+	private void RefreshMissionReferenceSelection()
+	{
+		if (_missionReferenceOption == null) return;
+		int selected = 0;
+		for (int i = 1; i < _missionReferenceOption.ItemCount; i++)
+		{
+			if (string.Equals(_missionReferenceOption.GetItemMetadata(i).AsString(), _contentReference.Text.Trim(), StringComparison.OrdinalIgnoreCase))
+			{
+				selected = i;
+				break;
+			}
+		}
+		_missionReferenceOption.Select(selected);
+		RefreshMissionReferenceAvailability();
+	}
+
+	private void RefreshMissionReferenceAvailability()
+	{
+		if (_missionReferenceOption != null && _contentType != null) _missionReferenceOption.Disabled = (OverworldContentType)_contentType.Selected != OverworldContentType.Mission;
 	}
 
 	private void MarkDirty()

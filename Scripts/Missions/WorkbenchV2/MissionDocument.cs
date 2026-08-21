@@ -13,6 +13,28 @@ public sealed class MissionDocument
 	public List<MissionFlowNodeData> FlowNodes { get; set; } = new List<MissionFlowNodeData>();
 	public List<string> DialogueConversationIds { get; set; } = new List<string>();
 	public List<MissionOutcomeData> Outcomes { get; set; } = new List<MissionOutcomeData>();
+	public MissionAuthoringData Authoring { get; set; } = new MissionAuthoringData();
+}
+
+// Author-friendly information used by Workbench v3. The runtime compiler continues
+// to consume the established element logic fields, which v3 derives from these rules.
+public sealed class MissionAuthoringData
+{
+	public bool WelcomeCompleted { get; set; }
+	public string TemplateKind { get; set; } = "Existing mission";
+	public List<MissionRuleData> Rules { get; set; } = new List<MissionRuleData>();
+}
+
+public sealed class MissionRuleData
+{
+	public string Id { get; set; } = string.Empty;
+	public string Label { get; set; } = string.Empty;
+	public string WhenType { get; set; } = "Player uses";
+	public string SourceElementId { get; set; } = string.Empty;
+	public string ActionType { get; set; } = "Open door";
+	public string TargetElementId { get; set; } = string.Empty;
+	public string Value { get; set; } = string.Empty;
+	public bool Enabled { get; set; } = true;
 }
 
 public sealed class MissionDocumentMetadata

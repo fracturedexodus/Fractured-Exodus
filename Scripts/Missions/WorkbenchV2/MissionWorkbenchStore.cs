@@ -92,6 +92,20 @@ public sealed class MissionWorkbenchStore
 		DocumentChanged?.Invoke();
 	}
 
+	public void NotifyExternalChange()
+	{
+		if (Document == null) return;
+		SynchronizeFlowNodes();
+		MarkChanged();
+	}
+
+	public void RefreshDerivedData()
+	{
+		if (Document == null) return;
+		MissionDocumentReferenceResolver.RefreshDialogueIds(Document);
+		SynchronizeFlowNodes();
+	}
+
 	private void MarkChanged()
 	{
 		IsDirty = true;
