@@ -20,3 +20,16 @@ mono_crash.*.json
 
 # Local exported builds
 exports/
+
+# Local visual QA captures
+/tmp/cybercity_prototype.png*
+
+# Purchased source-art libraries stay local. Curated runtime copies live under
+# Assets/Missions so Godot and Git do not ingest the complete multi-gigabyte pack.
+/Assets/cybercitycoretiles/*
+!/Assets/cybercitycoretiles/.gdignore
+
+# Complete purchased character-frame libraries stay local; prototype-ready
+# animation subsets are curated under Assets/Missions.
+/Assets/SampleMale/*
+!/Assets/SampleMale/.gdignore

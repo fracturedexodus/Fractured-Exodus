@@ -1,0 +1,2 @@
+# The complete purchased source library is intentionally excluded from Godot's
+# import scan. Runtime selections are copied to Assets/Missions/CyberCityPrototype.

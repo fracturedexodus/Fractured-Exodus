@@ -1,0 +1,2 @@
+# The full 2,512-frame source library is excluded from Godot's import scan.
+# Runtime animation selections live under Assets/Missions/CyberCityPrototype.
